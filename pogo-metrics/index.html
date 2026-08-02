@@ -1,0 +1,159 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>POGO Metrics — visualize your Pokémon GO journey</title>
+  <meta name="description" content="Turn your official Niantic Pokémon GO data export into a beautiful, private, digestible story of your trainer journey. Everything runs in your browser — nothing is uploaded." />
+  <meta name="theme-color" content="#0a0d1c">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>&#128506;</text></svg>">
+  <link rel="stylesheet" href="vendor/fonts/fonts.css" />
+  <link rel="stylesheet" href="css/style.css?v=20260619d" />
+</head>
+<body>
+  <nav id="topnav" data-active="home"></nav>
+
+  <!-- ───────────────────────── hero ───────────────────────── -->
+  <header id="hero">
+    <div class="hero-inner">
+      <a class="deck-kicker" href="https://observation-deck.netlify.app/">Observation Deck / POGO Metrics</a>
+      <div class="eyebrow">Your data · your story</div>
+      <h1>Your <span class="yellow">Pokémon&nbsp;GO</span> journey, visualized.</h1>
+      <p class="hero-sub">
+        Niantic keeps years of your trainer life — every catch, raid, friendship, step and
+        purchase. Request your free data export, drop the files here, and watch them turn into a
+        digestible story of your whole adventure.
+      </p>
+      <div class="hero-cta">
+        <a class="btn btn-ghost" href="#datasets">What's in my data?</a>
+        <a class="btn btn-teal" href="demo.html">See a live example</a>
+        <a class="btn btn-primary" href="metrics.html">Visualize my journey</a>
+      </div>
+      <div class="privacy-ribbon">
+        🔒 <span><b>100% private.</b> Your files never leave your device — there is no server, no upload, no account.</span>
+      </div>
+    </div>
+  </header>
+
+  <main>
+    <!-- ───────────────────────── how it works ───────────────────────── -->
+    <section class="section" id="how">
+      <h2><span class="num">01</span>How it works</h2>
+      <p class="section-desc">
+        Three steps, about ten minutes of your time, and one ~7-day wait on Niantic. No coding,
+        no spreadsheets — and you can stop at any single file.
+      </p>
+      <div class="steps">
+        <div class="step">
+          <span class="n">STEP 1</span>
+          <h3>Ask Niantic for your data</h3>
+          <p>Every player has the right to a full copy of their account data. You request it once and it arrives as a download link, usually within a week.</p>
+        </div>
+        <div class="step">
+          <span class="n">STEP 2</span>
+          <h3>Drop in your files</h3>
+          <p>Unzip the export and drag in the whole folder — or just the one file you're curious about, like <code>FriendList.tsv</code>. Upload one, some, or all of them.</p>
+        </div>
+        <div class="step">
+          <span class="n">STEP 3</span>
+          <h3>Meet your metrics</h3>
+          <p>Each file you add lights up a new chapter of the story — your activity rhythm, your map, your friendships, your spending. Screenshot it, share it, flex it.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- ───────────────────────── request your data ───────────────────────── -->
+    <section class="section" id="request">
+      <h2><span class="num">02</span>Get your export from Niantic</h2>
+      <p class="section-desc">
+        This is a free, official right you have under privacy laws like GDPR and CCPA — not a
+        hack or a third-party tool. Here's the quickest path.
+      </p>
+      <ol class="req-list">
+        <li><b>Open Pokémon GO and tap the Poké Ball.</b> <span>That opens the main menu. Tap the <b>Settings</b> gear in the top-right.</span></li>
+        <li><b>Tap <b>Help</b> (top-right), then “Chat with us.”</b> <span>Start a <b>New Conversation</b> with the support assistant.</span></li>
+        <li><b>Choose “My account,” then “Request my data.”</b> <span>It will ask whether your account is a kids login (answer yes/no).</span></li>
+        <li><b>Confirm the request.</b> <span>An automated message asks you to confirm — tap <b>Continue</b> to submit your data request.</span></li>
+        <li><b>Wait up to 7 days for their reply.</b> <span>Niantic responds with a download link (valid for 7 days) and a <b>password</b> to open the file.</span></li>
+        <li><b>Unzip it and come back.</b> <span>Inside you'll find <code>.tsv</code>, <code>.csv</code>, <code>.txt</code> and <code>.json</code> files — exactly what this site reads. Then hit <a href="metrics.html">Visualize my journey</a>.</span></li>
+      </ol>
+      <div class="notice" style="margin-top:18px">
+        <b>Tip:</b> the export is a snapshot in time. Some files (like your GPS trail or fitness data)
+        only cover a short recent window, so the sooner you request after a big trip or event, the
+        richer that part of your story will be. Not ready? <a href="demo.html">See a live example first →</a>
+      </div>
+    </section>
+
+    <!-- ───────────────────────── privacy principles ───────────────────────── -->
+    <section class="section" id="privacy">
+      <h2><span class="num">03</span>Privacy, by design</h2>
+      <p class="section-desc">
+        Your export is intimate — it can describe where you live, who you know, and what you
+        spend. By design, this was built so you never have to upload or share any of it.
+      </p>
+      <div class="priv-grid">
+        <div class="priv-card">
+          <div class="pi">🖥️</div>
+          <h3>It all runs locally</h3>
+          <p>Parsing and charts happen entirely in your browser with JavaScript. There is no backend to send your files to — close the tab and it's gone.</p>
+        </div>
+        <div class="priv-card">
+          <div class="pi">🙈</div>
+          <h3>We ignore the scary bits</h3>
+          <p>Even when a file contains your email, IP address, advertising IDs or precise home coordinates, the visualisations only read the parts that tell a fun story.</p>
+        </div>
+        <div class="priv-card">
+          <div class="pi">📤</div>
+          <h3>You choose what to share</h3>
+          <p>Nothing is published anywhere. What you screenshot and post is 100% your call — and the guide below flags how sensitive each file is before you ever open it.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- ───────────────────────── dataset catalog ───────────────────────── -->
+    <section class="section" id="datasets">
+      <h2><span class="num">04</span>What Niantic keeps — file by file</h2>
+      <p class="section-desc">
+        Your export is a stack of plainly-named files. Here's what each one actually contains,
+        how revealing it is, and the story this site can build from it. Upload only the ones you're
+        comfortable with.
+      </p>
+      <div id="catalog" class="deck" data-density="cards"></div>
+    </section>
+
+    <!-- ───────────────────────── final CTA ───────────────────────── -->
+    <section class="section" id="ready">
+      <h2><span class="num">05</span>Ready when you are</h2>
+      <p class="section-desc">
+        Upload as little as a single file or your whole export — it all stays on your device.
+        Curious first? Take the live demo for a spin.
+      </p>
+      <div class="hero-cta">
+        <a class="btn btn-teal" href="demo.html">See a live example</a>
+        <a class="btn btn-primary" href="metrics.html">Visualize my journey</a>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    <p>
+      <b>POGO Metrics</b> is an independent fan project and is not affiliated with, endorsed by, or
+      sponsored by Niantic, Scopely, or The Pokémon Company. Pokémon and Pokémon GO are trademarks of
+      their respective owners.
+    </p>
+    <p>Built from your own official data export — and processed entirely on your device.</p>
+    <p style="margin-top:14px"><a href="metrics.html">Visualize my journey →</a></p>
+    <p class="deck-line">
+      <a href="https://observation-deck.netlify.app/">Observation Deck</a>
+      <span class="sep" aria-hidden="true">·</span>
+      <span>JS</span>
+      <span class="sep" aria-hidden="true">·</span>
+      <a href="https://github.com/00xJS/POGO-Metrics">GitHub</a>
+    </p>
+  </footer>
+
+  <script src="js/nav.js?v=20260619d"></script>
+  <script src="js/catalog.js?v=20260619d"></script>
+  <script src="js/catalog-ui.js?v=20260802"></script>
+</body>
+</html>

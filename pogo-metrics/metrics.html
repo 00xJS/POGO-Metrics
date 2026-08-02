@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Visualize my journey — POGO Metrics</title>
+  <meta name="description" content="Drop your Niantic Pokémon GO data export and watch it become a private, visual story — all in your browser." />
+  <meta name="theme-color" content="#0a0d1c">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>&#128506;</text></svg>">
+  <link rel="stylesheet" href="vendor/fonts/fonts.css" />
+  <link rel="stylesheet" href="vendor/leaflet.css" />
+  <link rel="stylesheet" href="css/style.css?v=20260619d" />
+</head>
+<body>
+  <nav id="topnav" data-active="app"></nav>
+
+  <main>
+    <!-- ───────────────────────── upload ───────────────────────── -->
+    <section class="section" id="upload-section" style="border-top:none;padding-top:120px">
+      <div class="center">
+        <a class="deck-kicker" href="https://observation-deck.netlify.app/">Observation Deck / POGO Metrics</a>
+        <div class="eyebrow">Step 3 · build your story</div>
+        <h1 style="margin-top:8px">Drop in your export</h1>
+        <p class="section-desc" style="margin:10px auto 28px">
+          Add the unzipped Niantic folder, or just the individual files you care about. Each one
+          you add unlocks another chapter below. Don't have your data yet?
+          <a href="index.html#request">Request it from Niantic →</a>
+        </p>
+      </div>
+
+      <div id="dropzone">
+        <input id="file-input" type="file" multiple
+               accept=".tsv,.csv,.txt,.json,text/plain,text/csv,text/tab-separated-values,application/json" />
+        <input id="folder-input" type="file" webkitdirectory directory multiple hidden />
+        <div class="dz-emoji">📦</div>
+        <h3>Drop your files or folder here</h3>
+        <p>Drag the whole unzipped export, or pick out one file like <code>FriendList.tsv</code></p>
+        <div class="dz-or">— or —</div>
+        <div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap">
+          <button class="btn btn-teal" id="browse-btn" type="button">Choose files</button>
+          <button class="btn btn-ghost" id="folder-btn" type="button">Choose a folder</button>
+        </div>
+        <div class="dz-hint">.tsv · .csv · .txt · .json — read locally, never uploaded</div>
+      </div>
+
+      <div class="upload-privacy">🔒 Everything is processed in your browser. No file ever leaves this device.</div>
+
+      <div class="center" style="margin-top:18px">
+        <div class="dz-or" style="margin-bottom:10px">— not ready to upload yet? —</div>
+        <a class="btn btn-ghost" href="demo.html">🎬 See the live example</a>
+        <div class="dz-hint" style="margin-top:8px">Opens a permanent reference build from a fully anonymized sample export — on its own page.</div>
+      </div>
+
+      <div id="detected"></div>
+
+      <div id="build-row" style="display:none;text-align:center;margin-top:26px">
+        <button class="btn btn-primary" id="build-btn" type="button">Build my Dashboard</button>
+        <button class="btn btn-ghost" id="clear-btn" type="button">Clear</button>
+      </div>
+
+      <div id="upload-error" class="notice warn" style="display:none;margin-top:20px"></div>
+    </section>
+
+    <!-- ───────────────────────── results (filled by app.js) ───────────────────────── -->
+    <section id="results" class="results-hidden"></section>
+  </main>
+
+  <footer>
+    <p>
+      <b>POGO Metrics</b> is an independent fan project, not affiliated with Niantic, Scopely, or
+      The Pokémon Company. Your data is parsed entirely on your device.
+    </p>
+    <p><a href="index.html#datasets">← What's in each file?</a></p>
+    <p class="deck-line">
+      <a href="https://observation-deck.netlify.app/">Observation Deck</a>
+      <span class="sep" aria-hidden="true">·</span>
+      <span>JS</span>
+      <span class="sep" aria-hidden="true">·</span>
+      <a href="https://github.com/00xJS/POGO-Metrics">GitHub</a>
+    </p>
+  </footer>
+
+  <script src="vendor/chart.umd.min.js"></script>
+  <script src="vendor/leaflet.js"></script>
+  <script src="vendor/leaflet-heat.js"></script>
+  <script src="vendor/globe.gl.min.js"></script>
+  <script src="js/nav.js?v=20260619d"></script>
+  <script src="js/catalog.js?v=20260619d"></script>
+  <script src="js/pokedex.js?v=20260619d"></script>
+  <script src="js/app.js?v=20260619d"></script>
+</body>
+</html>

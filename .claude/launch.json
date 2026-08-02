@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "pogo-metrics",
+      "runtimeExecutable": "node",
+      "runtimeArgs": ["pogo-metrics/static-server.mjs", "pogo-metrics", "8770"],
+      "port": 8770
+    }
+  ]
+}

@@ -1,0 +1,19 @@
+# ── never publish real personal data ──────────────────────────────────
+# The original personal dashboard and, critically, the raw Niantic export it
+# was built from (GPS history, friends, purchases). This is exactly the kind
+# of data this project exists to keep private — it must never leave the machine.
+original-personal-build/
+
+# Internal design notes for the Observation Deck fleet — local only by design.
+THEME-HANDOFF.md
+
+# ── OS / editor cruft ─────────────────────────────────────────────────
+.DS_Store
+**/.DS_Store
+Thumbs.db
+*.swp
+*~
+
+# ── node ──────────────────────────────────────────────────────────────
+node_modules/
+npm-debug.log*
