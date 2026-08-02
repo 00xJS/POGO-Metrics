@@ -1,0 +1,10 @@
+[build]
+  # 100% static — all parsing happens client-side in the browser,
+  # so there is no build step and no server.
+  publish = "pogo-metrics"
+  command = ""
+
+[[headers]]
+  for = "/demo/*"
+  [headers.values]
+    Cache-Control = "public, max-age=3600"
