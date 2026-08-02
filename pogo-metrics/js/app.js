@@ -1220,14 +1220,17 @@ function renderFlatMap() {
   const hasTrail = STATE.trail.length > 0;
   if (!hasGeo && !hasTrail) return;
   const id = uid();
-  const inner = `<div id="${id}" style="height:380px;border-radius:14px;overflow:hidden;border:1px solid var(--line)"></div>`;
+  // background stands in for the ocean now that there is no tile layer beneath
+  const inner = `<div id="${id}" style="height:380px;border-radius:14px;overflow:hidden;border:1px solid var(--line);background:var(--card-chrome)"></div>`;
 
   later(() => {
-    const map = L.map(id, { worldCopyJump: true, maxZoom: 18, scrollWheelZoom: false }).setView([20, 0], 2);
+    const map = L.map(id, { worldCopyJump: true, maxZoom: 18, scrollWheelZoom: false, attributionControl: false }).setView([20, 0], 2);
     MAP = map;
-    L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png", {
-      subdomains: "abcd", maxZoom: 19, attribution: "© OpenStreetMap · © CARTO",
-    }).addTo(map);
+    // Deliberately NO tile layer. A remote basemap would send this user's IP plus
+    // tile coordinates — centred on their own hotspots by the fitBounds below — to
+    // a third party, which is exactly what this site promises never to do. The
+    // vendored country outlines drawn next give a perfectly readable dark map and
+    // keep every request same-origin.
     fetch("vendor/geo/countries.geo.json").then((r) => r.json()).then((geo) => {
       L.geoJSON(geo, { style: { color: "#3a4790", weight: .6, fillColor: "#141d3c", fillOpacity: .5 }, interactive: false }).addTo(map);
     }).catch(() => {});
@@ -1261,7 +1264,7 @@ function renderFlatMap() {
   const bits = [];
   if (hasGeo) bits.push(`${fmt(e.geo.size)} activity hotspots`);
   if (hasTrail) bits.push(`a ${fmt(STATE.trail.length)}-point GPS trail`);
-  return moduleHTML("📍", "Where you played", `Your world map, built from ${bits.join(" and ")}. Coordinates stay on your device.`, inner);
+  return moduleHTML("📍", "Where you played", `Your world map, built from ${bits.join(" and ")}. Drawn entirely on your device — no map tiles are fetched from anyone else.`, inner);
 }
 
 /* ── 3D globe: activity columns + remote-raid arcs + GPS trail ── */

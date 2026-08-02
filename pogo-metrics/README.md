@@ -54,7 +54,10 @@ falls back to a flat Leaflet heatmap with the same data.
 
 Chart.js, Leaflet + leaflet-heat, globe.gl, the Outfit/JetBrains Mono fonts, the globe
 textures and `countries.geo.json`/`us-states.geo.json` are all vendored under `vendor/`.
-The only runtime network call is the optional CARTO dark basemap tiles behind the flat map.
+There are **no runtime network calls at all** — every request the site makes is same-origin.
+The flat-map fallback deliberately ships without a remote tile layer: a third-party basemap
+would leak the viewer's IP plus tile coordinates centred on their own hotspots, so the map is
+drawn from the vendored country outlines instead.
 
 ## Local preview
 
