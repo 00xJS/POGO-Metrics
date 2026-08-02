@@ -1181,10 +1181,13 @@ async function downloadYearCard(o, btn) {
   });
   ctx.textAlign = "center";
 
-  // footer
-  ctx.fillStyle = "#6b76a8"; ctx.font = "600 18px 'JetBrains Mono', monospace";
+  // footer — wordmark plus the site URL, so a card shared anywhere points home
+  ctx.fillStyle = "#848ab0"; ctx.font = "600 18px 'JetBrains Mono', monospace";
   ctx.letterSpacing = "3px";
-  ctx.fillText(("POGO METRICS · " + o.year).toUpperCase(), W / 2, H - 46);
+  ctx.fillText(("POGO METRICS · " + o.year).toUpperCase(), W / 2, H - 62);
+  ctx.fillStyle = "#6b76a8"; ctx.font = "500 15px 'JetBrains Mono', monospace";
+  ctx.letterSpacing = "2px";
+  ctx.fillText("POGO-METRICS.NETLIFY.APP", W / 2, H - 34);
   ctx.letterSpacing = "0px";
 
   cv.toBlob((blob) => {
