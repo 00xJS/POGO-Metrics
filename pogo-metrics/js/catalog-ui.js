@@ -283,6 +283,10 @@
     if (state.q) p.push("q=" + encodeURIComponent(state.q));
     if (state.sort !== "default") p.push("sort=" + state.sort);
     if (state.density !== "cards") p.push("d=" + state.density);
+    // Never turn a clean landing-page URL into a deep link. Without this guard the
+    // very first apply() rewrites "/" to "/#datasets", so anyone who copies or
+    // reloads the address lands in section 04 and skips the hero entirely.
+    if (!p.length && !location.hash.startsWith("#datasets&")) return;
     history.replaceState(null, "", "#datasets" + (p.length ? "&" + p.join("&") : ""));
   }
   function readHash() {
