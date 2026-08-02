@@ -421,7 +421,15 @@ main { max-width: 1100px; margin: 0 auto; padding: 0 24px; }
 
 /* map */
 #story-map { height: 380px; border-radius: 14px; overflow: hidden; border: 1px solid var(--line); }
-.leaflet-container { background: #0a0f1e; }
+.leaflet-container { background: var(--card-chrome); }
+/* Leaflet's zoom control ships white — jarring on the dark map, and very visible
+   now that there is no tile layer behind it. */
+.leaflet-bar, .leaflet-bar a { border-color: var(--line) !important; }
+.leaflet-bar a, .leaflet-bar a:hover {
+  background: var(--panel); color: var(--ink);
+}
+.leaflet-bar a:hover { background: var(--bg-raised); color: var(--accent); }
+.leaflet-bar a.leaflet-disabled { background: var(--card-chrome); color: var(--ink-faint); }
 
 /* empty / placeholder */
 .empty-state { text-align: center; padding: 60px 20px; color: var(--ink-dim); }

@@ -54,10 +54,11 @@ This is the whole point, so it should be checkable rather than promised:
 - **100% client-side.** Files are read with `FileReader`/`.text()` and parsed in the browser.
   There is no server to upload to. Close the tab and it's gone.
 - **No account, no tracking, no analytics, no cookies.**
-- **No external requests** beyond the map basemap tiles. Chart.js, Leaflet, globe.gl, the fonts,
+- **No external requests at all.** Chart.js, Leaflet, globe.gl, the fonts,
   the globe textures and the country borders are all vendored into `vendor/`.
-- **The scary fields are ignored on purpose.** Even when a file contains your email, IP address,
-  advertising IDs or precise home coordinates, the visualizations only read the parts that tell
+- **Your locations are mapped, and nothing else sensitive is.** The globe and the map are the
+  point, so they do plot where you played — on your device, published nowhere. Your email, IP
+  addresses and advertising IDs are never read at all. The visualizations only touch the parts that tell
   a story. The catalog on the landing page rates how sensitive each file is *before* you open it.
 - **You can audit all of it** — it's ~2,700 lines of vanilla JavaScript in this repo, no build step.
 
