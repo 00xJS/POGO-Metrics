@@ -61,9 +61,12 @@ The only runtime network call is the optional CARTO dark basemap tiles behind th
 Asset loading needs a real HTTP server (not `file://`):
 
 ```sh
-node static-server.mjs . 8770
+node static-server.mjs "$PWD" 8770
 # then open http://127.0.0.1:8770/index.html
 ```
+
+(The server resolves its root against the process working directory, so pass an
+absolute path — a bare `.` makes every request fall outside the root and 403.)
 
 Or open `demo.html` to load the bundled, fully anonymized `demo/` dataset and preview
 every chart.

@@ -686,6 +686,9 @@ footer .deck-line .sep { margin: 0 9px; opacity: .55; }
 .deck[data-density="full"] .fc-showcols { display: none; }
 
 .fc-echo { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 12px; padding-top: 10px; border-top: 1px dashed var(--line); }
+/* an author `display` beats the UA's [hidden] rule — without this every card shows
+   an empty dashed divider whenever there is no search match to echo */
+.fc-echo[hidden] { display: none; }
 .echo-chip {
   font-family: var(--mono); font-size: 10.5px; color: var(--ink-dim);
   background: var(--card-chrome); border: 1px solid var(--line);
@@ -721,6 +724,9 @@ footer .deck-line .sep { margin: 0 9px; opacity: .55; }
   .chip { scroll-snap-align: start; padding: 8px 12px; }
   .deck-list thead { display: none; }
   .deck-list, .deck-list tbody, .deck-list tr, .deck-list td { display: block; width: 100%; }
+  /* ...but filtered-out rows must stay gone: the display:block above would otherwise
+     override [hidden], leaving the table showing 21 rows while the count says 8 */
+  .deck-list tr[hidden], .deck-list td[hidden] { display: none; }
   .deck-list tr { border-bottom: 1px solid var(--line); padding: 10px 0; }
   .deck-list td { border: 0; padding: 2px 0; }
   .deck-list .lt-story { display: none; }
