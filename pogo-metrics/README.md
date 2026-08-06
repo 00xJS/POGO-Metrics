@@ -3,14 +3,16 @@
 A privacy-first, **bring-your-own-data** web app: drop your official Niantic Pokémon GO
 data export into the browser and get a beautiful, digestible summary & dashboard
 of your trainer journey. Nothing is uploaded — every file is parsed locally with JavaScript,
-and the site ships **no data at all**.
+and the site ships **none of your data**. (The only dataset in the repo is `demo/`, a fully
+anonymized sample used by the Live Example page.)
 
 ## Pages
 
 - **`index.html`** — Landing + guide. Hero, "how it works", how to request your export from
   Niantic (the in-app Poké Ball → Settings → Help flow), privacy principles, and a full
-  **dataset catalog** (rendered from `js/catalog.js`) that teaches what every file in a
-  Niantic export contains, how sensitive it is, and what story this site can build from it.
+  **dataset catalog** (data from `js/catalog.js`, rendered by `js/catalog-ui.js`) that teaches
+  what every file in a Niantic export contains, how sensitive it is, and what story this site
+  can build from it.
 - **`metrics.html`** — The app. Drag-and-drop (files *or* a whole folder), client-side parse,
   and a per-file story. Each recognised file lights up its own chapter, so uploading only
   `FriendList.tsv` yields just the social chapter, while a full export yields everything.
@@ -36,6 +38,13 @@ and the site ships **no data at all**.
   - **FitnessData.tsv** → Adventure Sync steps + real-world equivalents
   - **App_Sessions / App_Installs** → sessions, devices, login cities
   - **LiveEventRegistrationHistory** → ticketed events; **wayfarer_player_data.json** → contributions
+- **`js/catalog-ui.js`** — The "Filter Deck" that renders the catalog on the landing page.
+  All 21 files are on screen with **nothing nested** — no `<details>` anywhere. Four stat tiles
+  double as filters, three chip rails slice by sensitivity / what-we-do / group, a
+  LIST · CARDS · FULL density switch controls how much of each entry shows, and the search box
+  indexes the raw Niantic column names and echoes the matching fragment back (typing `latitude`
+  surfaces the two files that carry it, quoting `Player_Latitude`). Filter state round-trips
+  through the URL hash — no storage, no requests.
 - **`js/pokedex.js`** — Name → National Dex map for gens 1–3, recovering region-of-origin
   info for older Pokémon that exports list by plain display name.
 - **`js/nav.js`** — Shared top nav (`data-active="home|guide|demo|app"`).
@@ -46,9 +55,13 @@ falls back to a flat Leaflet heatmap with the same data.
 ## Privacy
 
 - 100% client-side. There is no backend, no upload, no account.
-- Even when a raw file contains emails, IPs, ad-IDs, order numbers, or precise home coordinates,
-  the visualisations only read the non-identifying parts. The sensitivity ratings in the catalog
-  warn the user *before* they open anything.
+- Emails, IP addresses, advertising IDs and order numbers are never read at all, even when the
+  raw file contains them.
+- Locations **are** read — the globe and map are the point. They are drawn on-device and
+  published nowhere, but they do plot where the user played, and `renderGlobe()` derives a
+  `home` point from the densest activity bin and centres the camera on it. The UI says so
+  rather than claiming otherwise.
+- The sensitivity ratings in the catalog warn the user *before* they open anything.
 
 ## Vendored, offline-friendly
 
