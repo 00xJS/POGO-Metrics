@@ -29,6 +29,10 @@ you staring at a "come back later" page, the site spends that gap teaching you e
 Niantic holds on you, file by file, and how revealing each one is — so when the zip arrives you
 already know what you're looking at and can upload only what you're comfortable with.
 
+That catalog is searchable down to Niantic's own column names: type `latitude` and it shows you
+the two files that carry your coordinates, quoting the real `Player_Latitude` header back at you.
+Filter by sensitivity, or by the six files this site deliberately never reads.
+
 ## What you get
 
 Each file you drop in lights up its own chapter. Upload one file or the whole export:
@@ -92,9 +96,14 @@ pogo-metrics/          the deployed site (netlify.toml publishes this folder as-
 │   ├── app.js         the engine — parsers + every chapter
 │   ├── catalog.js     knowledge base: one entry per file in a Niantic export
 │   ├── catalog-ui.js  the filterable catalog on the landing page
+│   ├── nav.js         shared top navigation
 │   └── pokedex.js     name → National Dex map (gens 1–3)
+├── css/style.css      the whole stylesheet — one file, no preprocessor
 ├── demo/              anonymized sample export
 ├── tools/scrub-demo.mjs   regenerates demo/ from a real export
+├── og-card.html       source for the share image; render it to regenerate og-image.png
+├── og-image.png       1200×630 Open Graph / Twitter card
+├── static-server.mjs  tiny dependency-free static server for local preview
 └── vendor/            Chart.js, Leaflet, globe.gl, fonts, geo — all vendored
 ```
 
