@@ -222,7 +222,7 @@ window.CATALOG = [
     columns: ["Image reference", "Timestamp"],
     sensitivity: "low",
     sensitivityNote: "References and dates only.",
-    story: "When you took in-game photos, charted over time.",
+    story: null, // no parser for this yet — don't promise a chapter we can't build
     retention: "Rolling window.",
   },
   {
@@ -264,7 +264,7 @@ window.CATALOG = [
     columns: ["Date and time", "Ticket number and title", "Message content", "Custom Fields", "Meta data"],
     sensitivity: "medium",
     sensitivityNote: "Message bodies can contain anything you wrote to support. This site reads only the ticket count and topics, never the text.",
-    story: "How many times you contacted support, and the broad topics.",
+    story: null, // no parser for this yet — don't promise a chapter we can't build
     retention: "Support history.",
   },
   {

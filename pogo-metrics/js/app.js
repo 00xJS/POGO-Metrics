@@ -151,6 +151,7 @@ function freshState() {
     ev: {
       totals: {}, byMonth: {}, hourweek: Array.from({ length: 7 }, () => Array(24).fill(0)),
       days: new Set(), dayCounts: {}, geo: new Map(), geoKind: new Map(), first: null, last: null,
+      stamps: [], forts: new Map(), gyms: new Map(),
       raidTotal: 0, raidRemote: 0, raidMaxKm: 0, raidKmSum: 0, raidWithDist: 0,
       raidArcs: new Map(), raidGymBins: new Map(), remoteRaidsByYear: {},
     },
@@ -244,7 +245,11 @@ async function ingest(files) {
   if (!list.length) {
     // The single most common first attempt: dropping the ZIP Niantic sent, unopened.
     if (all.some((f) => /\.zip$/i.test(f.name)))
-      showError('That looks like the ZIP file Niantic sent you. Unzip it first — using the password from their message — then drop the unzipped folder here. Stuck? <a href="index.html#request">See the request guide →</a>', true);
+      showError('That looks like the ZIP file Niantic sent you — it needs unzipping first, with the password from their message. '
+        + (/iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1)
+          ? 'Heads up: the iPhone Files app <b>cannot</b> open a password-protected ZIP — email or AirDrop it to a computer, unzip it there, then come back. '
+          : 'Double-click it, type the password, then drop the unzipped folder here. ')
+        + '<a href="index.html#request">Full instructions →</a>', true);
     else showError("No .tsv / .csv / .txt / .json files found in what you dropped.");
     return;
   }
@@ -269,6 +274,12 @@ async function ingest(files) {
   }
   if (!added) showError("Couldn't read those files. Try choosing them again, or pick the folder.");
   renderDetected();
+  // On a phone the Build button lands below the fold, so picking files looked
+  // like nothing happened. Bring the next step into view and focus it.
+  if (RAW.length && $("build-row")) {
+    $("build-row").scrollIntoView({ behavior: scrollBehavior(), block: "center" });
+    try { $("build-btn").focus({ preventScroll: true }); } catch (e) {}
+  }
 }
 
 /* Load the bundled, fully-scrubbed demo export so people can see the output
@@ -322,7 +333,10 @@ function renderDetected() {
     if (r.entry) {
       name = r.entry.name; icon = r.entry.icon; note = r.entry.summary;
       if (r.entry.story) { cls = "ok"; status = "Ready"; }
-      else { cls = "skip"; status = "Skipped (privacy)"; }
+      // "skipped for privacy" and "we have no chapter for this yet" are very
+      // different promises — don't tell someone we ignored a harmless file.
+      else if (r.entry.sensitivity === "high") { cls = "skip"; status = "Skipped (privacy)"; }
+      else { cls = "skip"; status = "No chapter yet"; }
     }
     if (r.oversize) { cls = "skip"; status = `Too large (${r.oversize} MB) — skipped`; }
     return `<div class="file-chip ${cls}">
@@ -387,16 +401,28 @@ function parseGameplay(text) {
   if (p.startDate) { const m = p.startDate.match(/(\d{1,2})\/(\d{1,2})\/(\d{4})/); if (m) p.startYear = m[3]; }
   STATE.profile = p;
 
-  // medals: "\tBadge: ... where X is : 4" OR "\tBADGE_NAME: 4"  (tier 1-4)
+  /* Medals. Gameplay.txt writes them three different ways:
+   *   "\tBadge: Hatch X Eggs. where X is : 4"   → tier
+   *   "\tBADGE_NAME: 4"                         → tier
+   *   "\tBadge: hours defended: : 4"            → tier (name carries a colon)
+   * The third shape was previously unmatched, which dropped five medals — four
+   * of them Platinum, so a level-80 trainer showed 46 Platinum when 50 are
+   * required to reach 80 at all.
+   * A handful of event/collection badges (BADGE_MINI_COLLECTION, BADGE_SMORES_01)
+   * store a PROGRESS COUNT rather than a 1-4 tier, so they are kept and counted
+   * but deliberately left untiered instead of being charted as "tier 162". */
   const medals = [];
-  const re = /^[ \t]*Badge: (.+?)\.? where X is : (\d+)\s*$|^[ \t]*(BADGE_\w+): (\d+)\s*$/gm;
+  const re = /^[ \t]*Badge: (.+?)\.? where X is : (\d+)[ \t]*$|^[ \t]*(BADGE_\w+): (\d+)[ \t]*$|^[ \t]*Badge: ([^:\n]+): : (\d+)[ \t]*$/gm;
   let m;
   while ((m = re.exec(text))) {
-    const name = (m[1] || titleCase((m[3] || "").replace(/^BADGE_/, ""))).replace(/\bX\b/g, "…").trim();
-    const tier = +(m[2] || m[4]);
-    if (name && tier) medals.push({ name, tier });
+    const raw = m[1] || m[5] || titleCase((m[3] || "").replace(/^BADGE_/, ""));
+    const name = String(raw || "").replace(/\bX\b/g, "…").trim();
+    const value = +(m[2] || m[4] || m[6]);
+    if (!name || !value) continue;
+    const tiered = value >= 1 && value <= 4;
+    medals.push({ name, tier: tiered ? value : null, progress: tiered ? null : value });
   }
-  STATE.medals = medals.sort((a, b) => b.tier - a.tier);
+  STATE.medals = medals.sort((a, b) => (b.tier || 0) - (a.tier || 0));
 
   // collection
   const cm = text.match(/Pokemon in your collection:\n((?:[ \t].+\n?)+)/);
@@ -449,6 +475,7 @@ function parsePlayerJourney(label, text) {
     const iso = ts.toISOString().slice(0, 10);
     e.days.add(iso);
     e.dayCounts[iso] = (e.dayCounts[iso] || 0) + 1;
+    e.stamps.push(ts.getTime()); // kept for session reconstruction (8 bytes/row)
     const lat = parseFloat(row.Player_Latitude), lon = parseFloat(row.Player_Longitude);
     let hasLoc = false;
     if (!isNaN(lat) && !isNaN(lon) && (lat || lon)) {
@@ -459,9 +486,25 @@ function parsePlayerJourney(label, text) {
       if (!kc) { kc = {}; e.geoKind.set(key, kc); }
       kc[label] = (kc[label] || 0) + 1;
     }
+    /* Fort_/Gym_ coordinates identify the actual PokéStop or gym — the export
+     * has carried them all along and nothing ever read them. Binned to ~11 m so
+     * GPS scatter around one real stop collapses to a single place. */
+    const flat = parseFloat(row.Fort_Latitude), flon = parseFloat(row.Fort_Longitude);
+    if (!isNaN(flat) && !isNaN(flon) && (flat || flon)) {
+      const fk = flat.toFixed(4) + "," + flon.toFixed(4);
+      const f = e.forts.get(fk);
+      if (f) { f.n++; if (ts < f.first) f.first = ts; if (ts > f.last) f.last = ts; }
+      else e.forts.set(fk, { n: 1, first: ts, last: ts, lat: flat, lon: flon });
+    }
     if (label === "Raids") {
       e.raidTotal++;
       const glat = parseFloat(row.Gym_Latitude), glon = parseFloat(row.Gym_Longitude);
+      if (!isNaN(glat) && !isNaN(glon) && (glat || glon)) {
+        const gk = glat.toFixed(4) + "," + glon.toFixed(4);
+        const g = e.gyms.get(gk);
+        if (g) { g.n++; if (ts < g.first) g.first = ts; if (ts > g.last) g.last = ts; }
+        else e.gyms.set(gk, { n: 1, first: ts, last: ts, lat: glat, lon: glon });
+      }
       if (hasLoc && !isNaN(glat) && !isNaN(glon) && (glat || glon)) {
         const d = haversine(lat, lon, glat, glon);
         e.raidKmSum += d; e.raidWithDist++;
@@ -575,20 +618,29 @@ function parsePurchases(text) {
   if (S.purchases || S.spendEvents || Object.keys(S.items).length) markLoaded("In-App Purchases");
 }
 
+/* Read fitness columns BY HEADER, like every other parser. Reading c[1]/c[2]/c[3]
+ * positionally meant a single inserted Niantic column would silently report
+ * distance as steps — confidently wrong numbers rather than an obvious blank. */
 function parseFitness(text) {
-  const lines = text.replace(/\r/g, "").split("\n").filter((l) => l.trim());
+  const { header, rows } = parseRows(text, "x.tsv");
   const D = STATE.fitness.daily;
+  const col = (re, fallback) => {
+    const h = header.find((x) => re.test(x));
+    return h !== undefined ? h : fallback;
+  };
+  const kTs = col(/date|time/i, header[0]);
+  const kSteps = col(/step/i, header[1]);
+  const kMeters = col(/meter|distance|km/i, header[2]);
+  const kCal = col(/calor|energy/i, header[3]);
   let any = false;
-  for (let i = 1; i < lines.length; i++) { // skip header
-    const c = lines[i].split("\t");
-    if (c.length < 4) continue;
-    const ts = parseTS(c[0]);
+  for (const row of rows) {
+    const ts = parseTS(row[kTs] || row.__cells[0]);
     if (!ts) continue;
     const d = ts.toISOString().slice(0, 10);
     const rec = (D[d] = D[d] || { steps: 0, meters: 0, cal: 0 });
-    rec.steps += parseInt(c[1] || 0, 10) || 0;
-    rec.meters += parseFloat(c[2] || 0) || 0;
-    rec.cal += parseInt(c[3] || 0, 10) || 0;
+    rec.steps += parseInt(row[kSteps] || 0, 10) || 0;
+    rec.meters += parseFloat(row[kMeters] || 0) || 0;
+    rec.cal += parseInt(row[kCal] || 0, 10) || 0;
     any = true;
   }
   if (any) markLoaded("Adventure Sync Fitness");
@@ -705,6 +757,20 @@ function newChart(id, cfg) {
     || (cfg.data && cfg.data.datasets && cfg.data.datasets[0] && cfg.data.datasets[0].label) || "Data chart";
   ctx.setAttribute("role", "img");
   ctx.setAttribute("aria-label", label);
+  /* The label names the chart but carries none of its data. Put the actual
+   * numbers in the canvas fallback slot, which assistive tech reads and sighted
+   * users never see — the chart stops being a wall of silent pixels. */
+  try {
+    const labels = cfg.data && cfg.data.labels;
+    const sets = (cfg.data && cfg.data.datasets) || [];
+    if (Array.isArray(labels) && labels.length && labels.length <= 60 && sets.length) {
+      const lines = sets.map((ds) => {
+        const pairs = labels.map((l, i) => `${l}: ${fmt(ds.data[i] ?? 0)}`).join(", ");
+        return `${ds.label ? ds.label + " — " : ""}${pairs}`;
+      }).join(". ");
+      ctx.textContent = `${label}. ${lines}.`;
+    }
+  } catch (e) { /* a chart without simple labels just keeps its aria-label */ }
   const ch = new Chart(ctx, cfg);
   CHARTS.push(ch);
   return ch;
@@ -779,6 +845,7 @@ async function build() {
     // lead with the trainer card → adventure log → year-over-year → world → social → money → body → tech
     safe(renderTrainer);
     safe(renderActivity);
+    safe(renderRhythm);
     safe(renderRecords);
     safe(renderYearOverYear);
     safe(renderWorld);
@@ -811,6 +878,10 @@ async function build() {
 
     wireToolbar();
     wireCountUps(res);
+    // The demo page's hero CTA can only work once STATE is populated — enabling
+    // it here avoids opening a one-slide story over an empty build.
+    const demoCta = $("demo-story-cta");
+    if (demoCta) { demoCta.disabled = false; demoCta.onclick = () => storyMode(); }
     // move focus to the story so keyboard/screen-reader users land where the action is
     const hero = res.querySelector(".res-hero h2");
     if (hero) { hero.setAttribute("tabindex", "-1"); try { hero.focus({ preventScroll: true }); } catch (e) {} }
@@ -954,13 +1025,23 @@ function storyMode() {
     [C.teal, C.purple], [C.yellow, C.green], [C.blue, C.pink], [C.teal, C.yellow]];
   const ov = document.createElement("div");
   ov.className = "story-ov";
+  ov.setAttribute("role", "dialog");
+  ov.setAttribute("aria-modal", "true");
+  ov.setAttribute("aria-label", "Your story, chapter by chapter");
   ov.innerHTML = `
     <div class="story-prog" aria-hidden="true">${slides.map(() => "<i></i>").join("")}</div>
     <button class="story-x" type="button" aria-label="Close story">×</button>
-    <div class="story-stage" role="dialog" aria-label="Your story, chapter by chapter"></div>
-    <div class="story-hint">tap right for next · left for back · Esc to close</div>`;
+    <div class="story-stage"></div>
+    <div class="story-live sr-only" role="status" aria-live="polite"></div>
+    <div class="story-hint">${window.matchMedia && window.matchMedia("(pointer: coarse)").matches
+      ? "tap the right side for next · left side to go back"
+      : "tap right for next · left for back · Esc to close"}</div>`;
   document.body.appendChild(ov);
   document.body.style.overflow = "hidden";
+  // A fixed opaque overlay isn't a modal on its own — without this, Tab walks
+  // straight out to the nav and footer behind the story.
+  const inerted = [...document.body.children].filter((el) => el !== ov && !el.inert);
+  inerted.forEach((el) => (el.inert = true));
   const stage = ov.querySelector(".story-stage");
   let idx = -1, closed = false, raf = null;
   const close = () => {
@@ -969,6 +1050,7 @@ function storyMode() {
     if (raf) cancelAnimationFrame(raf);
     document.body.style.overflow = "";
     document.removeEventListener("keydown", onKey);
+    inerted.forEach((el) => (el.inert = false));
     ov.remove();
     if (opener && opener.isConnected) try { opener.focus(); } catch (e) {}
   };
@@ -1001,6 +1083,9 @@ function storyMode() {
       setTimeout(() => { if (!closed && bigEl.isConnected) bigEl.textContent = fmt(n); }, dur + 250); // rAF doesn't fire in hidden tabs
     }
     [...ov.querySelectorAll(".story-prog i")].forEach((el, j) => (el.className = j < idx ? "done" : j === idx ? "cur" : ""));
+    // announce each slide — otherwise the whole story is silent to screen readers
+    const live = ov.querySelector(".story-live");
+    if (live) live.textContent = `Slide ${idx + 1} of ${slides.length}. ${sl.kicker}. ${sl.num != null ? fmt(sl.num) : sl.big}. ${sl.label}`;
     const jb = stage.querySelector("#story-journey");
     if (jb) jb.onclick = () => downloadJourneyCard(jb);
     const bb = stage.querySelector("#story-back");
@@ -1123,14 +1208,23 @@ function renderTrainer() {
 
   if (STATE.medals.length) {
     const tiers = { 4: 0, 3: 0, 2: 0, 1: 0 };
-    STATE.medals.forEach((m) => tiers[m.tier]++);
+    STATE.medals.forEach((m) => { if (m.tier) tiers[m.tier]++; });
+    const untiered = STATE.medals.filter((m) => !m.tier).length;
     const cards = [
       [4, "Platinum"], [3, "Gold"], [2, "Silver"], [1, "Bronze"],
     ].map(([t, label]) =>
       `<div class="medal-card t${t}"><div class="mc-v">${fmt(tiers[t])}</div><div class="mc-l">${label}</div></div>`).join("");
+    // The tiers must visibly reconcile with the "Medals earned" card above.
+    const tiered = tiers[4] + tiers[3] + tiers[2] + tiers[1];
+    const reconcile = `${fmt(tiered)} medal${tiered === 1 ? "" : "s"} at a tier` +
+      (untiered ? ` · ${fmt(untiered)} event badge${untiered === 1 ? "" : "s"} tracked by progress, not tier` : "") +
+      ` — ${fmt(tiered + untiered)} in total.`;
     inner += `<div style="margin-top:20px;font-weight:700">Medal cabinet</div>
-      <div class="mod-sub">How your medals break down by tier.</div>
+      <div class="mod-sub">${reconcile}</div>
       <div class="medal-cards">${cards}</div>`;
+    if (tiers[4] >= 50) {
+      inner += `<div class="hw-caption">🏆 <b>${fmt(tiers[4])} Platinum</b> — level 80 requires 50 Platinum medals, so you've cleared that bar.</div>`;
+    }
   }
 
   const subtitle = `Your lifetime trainer card${p.startYear ? `, playing since ${p.startYear}` : ""}${p.buddy ? ` · buddy ${esc(p.buddy)}` : ""}.`;
@@ -1309,6 +1403,98 @@ function renderRecords() {
   return moduleHTML("🏅", "Your record book",
     `Your personal bests. An <b>action</b> is any single thing Niantic logged — a spin, a catch, a raid, a berry, a gym battle — so ${fmt(total)} actions is the sum of everything you did.`,
     inner);
+}
+
+/* ── play sessions: reconstruct bouts from the raw timestamps ──
+ * Two logged actions more than GAP apart start a new bout. A bout of one
+ * action has no measurable length, so it counts but adds no time. */
+function buildBouts(stamps, gapMs = 20 * 60 * 1000) {
+  if (!stamps || stamps.length < 2) return null;
+  const s = Int32Array.from ? stamps.slice().sort((a, b) => a - b) : stamps.sort();
+  const bouts = [];
+  let start = s[0], prev = s[0], count = 1;
+  for (let i = 1; i < s.length; i++) {
+    if (s[i] - prev > gapMs) { bouts.push({ start, end: prev, count }); start = s[i]; count = 0; }
+    prev = s[i]; count++;
+  }
+  bouts.push({ start, end: prev, count });
+  const durations = bouts.map((b) => b.end - b.start);
+  const totalMs = durations.reduce((a, b) => a + b, 0);
+  // A one-action session has no measurable length. Including those zeros drags
+  // the median to 0 whenever singletons are the majority (which is exactly what
+  // happens on a downsampled export), so measure across real sessions only.
+  const measurable = durations.filter((d) => d > 0).sort((a, b) => a - b);
+  const median = measurable.length ? measurable[Math.floor(measurable.length / 2)] : 0;
+  const singles = durations.length - measurable.length;
+  let longest = bouts[0];
+  for (const b of bouts) if (b.end - b.start > longest.end - longest.start) longest = b;
+  return { bouts, count: bouts.length, totalMs, median, longest, singles };
+}
+function humanDur(ms) {
+  const mins = Math.round(ms / 60000);
+  if (mins < 60) return mins + " min";
+  const h = Math.floor(mins / 60), m = mins % 60;
+  if (h < 24) return h + "h" + (m ? " " + m + "m" : "");
+  const d = Math.floor(h / 24);
+  return d + " day" + (d === 1 ? "" : "s") + (h % 24 ? " " + (h % 24) + "h" : "");
+}
+
+/* ── "your rhythm": how you actually played, not just how much ── */
+function renderRhythm() {
+  const e = STATE.ev;
+  const b = buildBouts(e.stamps);
+  const topFort = [...e.forts.values()].sort((x, y) => y.n - x.n)[0];
+  if (!b && !topFort) return;
+
+  let inner = "";
+  if (b) {
+    const totalActions = e.stamps.length;
+    const perBout = b.count ? Math.round(totalActions / b.count) : 0;
+    const stats = [
+      [fmt(b.count), "Play sessions", "runs of activity, split after a 20-min gap"],
+      [humanDur(b.totalMs), "Time in the game", "measured between first and last action of each session"],
+      [b.median ? humanDur(b.median) : "—", "Typical session", b.median ? "median, across sessions with more than one action" : "not enough closely-spaced actions to measure"],
+      [humanDur(b.longest.end - b.longest.start), "Longest session ever", fmtDate(new Date(b.longest.start)) + " · " + fmt(b.longest.count) + " actions"],
+      [fmt(perBout), "Actions per session", "on an average outing"],
+    ];
+    inner += statGrid(stats);
+    inner += `<div class="hw-caption">Sessions are reconstructed from the timestamps in your Player_Journey files, so they only cover
+      logged actions — idle time with the app open isn't counted.${window.DEMO_PAGE
+        ? " <b>Note:</b> this sample export is downsampled, so its sessions look shorter and more scattered than a real one would."
+        : ""}</div>`;
+
+    // session-length distribution
+    const buckets = [[0, 5, "< 5 min"], [5, 15, "5–15"], [15, 30, "15–30"], [30, 60, "30–60"], [60, 120, "1–2 h"], [120, Infinity, "2 h+"]];
+    const counts = buckets.map(([lo, hi]) => b.bouts.filter((x) => { const m = (x.end - x.start) / 60000; return m >= lo && m < hi; }).length);
+    const cId = uid();
+    inner += `<div style="margin-top:16px">${chartWrap(cId)}</div>`;
+    later(() => newChart(cId, {
+      type: "bar",
+      data: { labels: buckets.map((x) => x[2]), datasets: [{ data: counts, label: "sessions", backgroundColor: C.teal, borderRadius: 6 }] },
+      options: { plugins: { legend: { display: false }, title: { display: true, text: "How long you play, per session" } },
+        scales: { y: { beginAtZero: true, title: { display: true, text: "sessions" } }, x: { grid: { display: false } } } },
+    }));
+  }
+
+  // regular haunts — the stop you keep coming back to
+  if (topFort && topFort.n > 1) {
+    const forts = [...e.forts.values()].sort((x, y) => y.n - x.n);
+    const totalSpins = forts.reduce((a, f) => a + f.n, 0);
+    const top5 = forts.slice(0, 5).reduce((a, f) => a + f.n, 0);
+    const years = (topFort.last - topFort.first) / 31557600000;
+    inner += `<hr class="mod-divider"><div style="font-weight:700;margin-bottom:2px">Your regular haunts</div>
+      <div class="mod-sub" style="margin-bottom:10px">
+        You've visited <b>${fmt(forts.length)}</b> distinct PokéStops. Your number one accounts for
+        <b>${fmt(topFort.n)}</b> visits${years >= 0.15 ? ` across <b>${years.toFixed(1)} years</b>` : ""} —
+        first on ${fmtDate(topFort.first)}, most recently ${fmtDate(topFort.last)}.
+        Your top five are <b>${Math.round(top5 / totalSpins * 100)}%</b> of everything you've spun.
+      </div>`;
+    inner += rankList(forts.slice(0, 8).map((f, i) => ["Stop #" + (i + 1) + " · " + f.lat.toFixed(3) + ", " + f.lon.toFixed(3), f.n]), (v) => fmt(v) + " visits");
+    inner += `<div class="hw-caption">Niantic's export gives coordinates but no stop names, so these are your places by location.
+      They're computed and displayed on your device only.</div>`;
+  }
+
+  return moduleHTML("⏱️", "Your rhythm", "How you actually play — in sessions, and in the places you keep returning to.", inner);
 }
 
 function isoShift(iso, delta) {
@@ -1781,7 +1967,23 @@ async function downloadYearCard(o, btn) {
   ctx.fillText("POGO-METRICS.NETLIFY.APP", W / 2, H - 34);
   ctx.letterSpacing = "0px";
 
-  cv.toBlob((blob) => {
+  cv.toBlob(async (blob) => {
+    // Prefer the native share sheet on phones — a download into Files is where
+    // sharing goes to die. Keep the anchor for desktop and for any failure.
+    if (blob && navigator.canShare) {
+      try {
+        const file = new File([blob], o.file || `pogo-metrics-${o.year}.png`, { type: "image/png" });
+        if (navigator.canShare({ files: [file] })) {
+          await navigator.share({ files: [file], title: "My Pokémon GO journey" });
+          if (btn) { btn.textContent = orig; btn.disabled = false; }
+          return;
+        }
+      } catch (err) {
+        // AbortError means the user closed the sheet on purpose — don't then
+        // shove a download at them. Anything else falls through to the anchor.
+        if (err && err.name === "AbortError") { if (btn) { btn.textContent = orig; btn.disabled = false; } return; }
+      }
+    }
     if (btn) { btn.textContent = orig; btn.disabled = false; }
     if (!blob) { alert("Could not generate image on this browser."); return; }
     const url = URL.createObjectURL(blob);
@@ -1945,6 +2147,8 @@ function renderGlobe() {
 }
 
 function initGlobe({ P, points, maxCount, arcs, home, paths }) {
+  // declared up here because the Globe() chain below reads it
+  const coarse = window.matchMedia && window.matchMedia("(pointer: coarse)").matches;
   const e = STATE.ev;
   const el = $(P + "canvas");
   if (!el || !window.Globe) return;
@@ -1964,7 +2168,10 @@ function initGlobe({ P, points, maxCount, arcs, home, paths }) {
     .pointRadius((p) => (p.count > 1000 ? 0.045 : 0.026))
     .pointColor((p) => KIND_COLORS[p.kind] || C.teal)
     .pointLabel((p) => `<b>${fmt(p.count)}</b> ${p.kind.toLowerCase()}`)
-    .pointsMerge(false)
+    // Merging collapses thousands of point meshes into one draw call. Phones
+    // need that far more than they need per-point hover labels (which touch
+    // screens can't show anyway); desktops keep the labels.
+    .pointsMerge(coarse)
     .arcsData(arcs).arcStartLat("slat").arcStartLng("slng").arcEndLat("elat").arcEndLng("elng")
     .arcColor((a) => { const t = Math.min(1, a.km / 9000); return ["rgba(65,216,198,.75)", t < 0.5 ? "rgba(255,203,5,.8)" : "rgba(255,83,80,.85)"]; })
     .arcStroke((a) => 0.18 + Math.log10(a.count + 1) * 0.28)
@@ -1982,7 +2189,7 @@ function initGlobe({ P, points, maxCount, arcs, home, paths }) {
     .ringsData(REDUCED_MOTION ? [] : [{ lat: home.lat, lng: home.lng }])
     .ringColor(() => (t) => `rgba(65,216,198,${1 - t})`)
     .ringMaxRadius(2.6).ringPropagationSpeed(1.1).ringRepeatPeriod(1400)
-    .onGlobeReady(() => { world.__ready = true; const l = $$("loading"); if (l) l.classList.add("done"); world.pointOfView({ lat: home.lat, lng: home.lng, altitude: 1.9 }, 1600); });
+    .onGlobeReady(() => { world.__ready = true; const l = $$("loading"); if (l) l.classList.add("done"); world.pointOfView({ lat: home.lat, lng: home.lng, altitude: 1.9 }, REDUCED_MOTION ? 0 : 1600); });
   GLOBE = world;
 
   // never leave an eternal "Spinning up the world…" — if WebGL or a texture
@@ -2010,7 +2217,6 @@ function initGlobe({ P, points, maxCount, arcs, home, paths }) {
 
   // On touch screens the globe would otherwise swallow every swipe — a scroll
   // trap on a long results page. Gate interaction behind one explicit tap.
-  const coarse = window.matchMedia && window.matchMedia("(pointer: coarse)").matches;
   const stage = el.closest(".globe-stage");
   let scrim = null;
   if (coarse && stage) {
@@ -2063,7 +2269,8 @@ function initGlobe({ P, points, maxCount, arcs, home, paths }) {
   // stats
   const geoEvents = [...e.geo.values()].reduce((a, b) => a + b, 0);
   const stats = [[fmt(geoEvents), "geotagged events"], [fmt(e.geo.size), "distinct spots"]];
-  if (e.raidRemote) { stats.push([fmt(e.raidRemote), "remote raids"], [fmt(round(e.raidMaxKm)) + " km", "farthest raid"], [(e.raidKmSum / 40075).toFixed(1) + "×", "around Earth raiding"]); }
+  // "raid reach", not distance travelled — nobody walked these kilometres.
+  if (e.raidRemote) { stats.push([fmt(e.raidRemote), "remote raids"], [fmt(round(e.raidMaxKm)) + " km", "farthest raid"], [(e.raidKmSum / 40075).toFixed(1) + "×", "Earth's circumference in raid reach"]); }
   if (paths.length) stats.push([fmt(paths.length), "days of trail"]);
   $$("stats").innerHTML = stats.map(([v, l]) => `<div class="gh-stat"><div class="v">${v}</div><div class="l">${esc(l)}</div></div>`).join("");
 
@@ -2307,23 +2514,30 @@ function renderSocial() {
   const F = STATE.friends;
   const hasFriends = F.rows.length > 0;
   const hasInvites = STATE.invites.sent + STATE.invites.accepted + STATE.invites.declined > 0;
-  if (!hasFriends && !STATE.unfriended && !hasInvites && !(STATE.party.sent + STATE.party.received)) return;
+  // F.unfriended, not STATE.unfriended — the latter has never existed, so an
+  // unfriended-only upload used to fall through and render nothing.
+  if (!hasFriends && !F.unfriended && !hasInvites && !(STATE.party.sent + STATE.party.received)) return;
 
+  // One reference clock for every duration in this module, so the headline stat
+  // and the tenure chart below can never disagree.
+  const ASOF = STATE.ev.last || new Date();
   let inner = "", sub = "";
   if (hasFriends) {
     const dated = F.rows.filter((r) => r.ts).sort((a, b) => a.ts - b.ts);
-    const now = STATE.ev.last || new Date();
+    const now = ASOF;
     const oldest = dated.slice(0, 8).map((r) => [r.name, Math.round((now - r.ts) / 864e5)]);
     const longest = dated[0] ? ((now - dated[0].ts) / (365.25 * 864e5)).toFixed(1) : 0;
     const topSrc = Object.entries(F.sources).sort((a, b) => b[1] - a[1])[0];
-    const added = Object.values(F.monthly).reduce((a, b) => a + b, 0);
     const removed = F.unfriended;
+    /* "Net friends" used to be (friends added − unfriended), which is nonsense:
+     * FriendList only lists people you are STILL friends with, so everyone in
+     * `removed` was already excluded from it. Report the churn on its own. */
     const stats = [
-      [fmt(F.rows.length), "Current friends"],
+      [fmt(F.rows.length), "Current friends", "everyone on your list today"],
       [longest + " yr", "Longest friendship", dated[0] ? esc(dated[0].name) : ""],
       [topSrc ? prettySource(topSrc[0]) : "—", "Top way you connect"],
-      [(added - removed >= 0 ? "+" : "") + fmt(added - removed), "Net friends (in log window)"],
     ];
+    if (removed) stats.push([fmt(removed), "Friendships ended", "in Niantic's recent window — already excluded above"]);
     inner += statGrid(stats);
 
     // growth chart
@@ -2357,10 +2571,37 @@ function renderSocial() {
     sub = `${fmt(F.rows.length)} friends in your roster, the oldest going back ${longest} years.`;
   }
 
+  /* Friend-making moments. F.initiated has been parsed since day one and shown
+   * nowhere, and friend bursts are almost always a real-world event. */
+  if (hasFriends) {
+    const byDay = {};
+    F.rows.forEach((r) => { if (r.ts) { const d = r.ts.toISOString().slice(0, 10); (byDay[d] = byDay[d] || []).push(r); } });
+    const bursts = Object.entries(byDay).filter(([, v]) => v.length >= 3)
+      .sort((a, b) => b[1].length - a[1].length).slice(0, 6);
+    const you = F.initiated["You"] || F.initiated["Me"] || 0;
+    const them = Object.entries(F.initiated).filter(([k]) => !/^(you|me)$/i.test(k)).reduce((a, [, v]) => a + v, 0);
+    if (bursts.length || you + them) {
+      inner += `<hr class="mod-divider"><div style="font-weight:700;margin-bottom:2px">How your circle grew</div>`;
+      if (you + them) {
+        const pct = Math.round(you / (you + them) * 100);
+        inner += `<div class="mod-sub" style="margin-bottom:10px">You sent the request
+          <b>${pct}%</b> of the time (${fmt(you)} of ${fmt(you + them)} friendships where the export says who reached out).
+          ${pct >= 60 ? "You're the one who reaches out." : pct <= 40 ? "People come to you." : "An even trade."}</div>`;
+      }
+      if (bursts.length) {
+        inner += rankList(bursts.map(([d, v]) => {
+          const ev = eventFor(d);
+          return [fmtDate(parseTS(d)) + (ev ? " · " + ev : ""), v.length];
+        }), (v) => fmt(v) + " friends");
+        inner += `<div class="hw-caption">Your biggest friend-making days — community days, raid hours and GO Fests usually show up here.</div>`;
+      }
+    }
+  }
+
   // friendship tenure — how long your bonds have lasted
   const dated = STATE.friends.rows.filter((r) => r.ts);
   if (dated.length) {
-    const now = Date.now();
+    const now = ASOF.getTime ? ASOF.getTime() : +ASOF;
     const yearsOf = (r) => (now - r.ts.getTime()) / 31557600000;
     const oldest = dated.slice().sort((a, b) => a.ts - b.ts)[0];
     const buckets = {};
