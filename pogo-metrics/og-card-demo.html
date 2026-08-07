@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>og-image render source (demo) — POGO Metrics (internal)</title>
+<meta name="robots" content="noindex, nofollow">
+<meta name="viewport" content="width=1200">
+<link rel="stylesheet" href="vendor/fonts/fonts.css">
+<link rel="stylesheet" href="css/style.css">
+<style>
+  /* Render source for og-image-demo.png. Shows the PRODUCT — real stat tiles
+     from the sample dashboard — instead of a text banner, so a shared demo link
+     previews as the thing the recipient would actually get. */
+  html, body { margin:0; padding:0; }
+  body {
+    width:1200px; height:630px; overflow:hidden; position:relative;
+    background:
+      radial-gradient(680px 460px at 12% -12%, rgba(65,216,198,.26), transparent 62%),
+      radial-gradient(700px 480px at 92% 4%, rgba(194,62,140,.20), transparent 62%),
+      var(--bg);
+    display:flex; flex-direction:column; justify-content:center;
+    padding:0 64px; box-sizing:border-box;
+  }
+  .wordmark { position:absolute; top:44px; left:64px; display:flex; align-items:center; gap:12px;
+    font-weight:800; font-size:27px; color:var(--ink); }
+  .eyebrow { position:absolute; top:50px; right:64px; font-family:var(--mono); font-size:16px;
+    letter-spacing:.2em; text-transform:uppercase; color:var(--accent); }
+  h1 { font-size:56px; font-weight:800; letter-spacing:-.025em; line-height:1.06; margin:26px 0 10px; }
+  h1 .t { background:linear-gradient(96deg,#fff 20%,var(--accent) 80%);
+          -webkit-background-clip:text; background-clip:text; color:transparent; }
+  p { font-size:22px; color:var(--ink-dim); margin:0 0 26px; max-width:900px; }
+  .tiles { display:grid; grid-template-columns:repeat(4,1fr); gap:16px; }
+  .tile { background:rgba(10,14,32,.62); border:1px solid rgba(255,255,255,.09);
+    border-radius:16px; padding:18px 20px; }
+  .tile .v { font-family:var(--mono); font-weight:700; font-size:34px; color:#fff; line-height:1.1; }
+  .tile .l { font-size:15px; color:var(--ink-dim); margin-top:6px; }
+  .foot { position:absolute; bottom:44px; left:64px; display:flex; align-items:center; gap:11px;
+    background:rgba(61,220,132,.10); border:1px solid rgba(61,220,132,.42);
+    color:var(--live); border-radius:999px; padding:11px 20px;
+    font-family:var(--mono); font-size:16px; font-weight:700; letter-spacing:.05em; }
+  .dot { width:8px; height:8px; border-radius:50%; background:var(--live); }
+  .url { position:absolute; bottom:48px; right:64px; font-family:var(--mono);
+    font-size:19px; font-weight:600; color:var(--ink-faint); }
+</style>
+</head>
+<body>
+  <div class="wordmark"><span class="pokeball-dot"></span> POGO Metrics</div>
+  <div class="eyebrow">Live example</div>
+  <h1><span class="t">See a real trainer's journey.</span></h1>
+  <p>A full dashboard built from an anonymized sample export — charts, a 3D globe, and a tappable Wrapped-style story.</p>
+  <div class="tiles">
+    <div class="tile"><div class="v">13,905</div><div class="l">logged actions</div></div>
+    <div class="tile"><div class="v">831</div><div class="l">days played</div></div>
+    <div class="tile"><div class="v">1,225</div><div class="l">PokéStops visited</div></div>
+    <div class="tile"><div class="v">50</div><div class="l">platinum medals</div></div>
+  </div>
+  <div class="foot"><span class="dot"></span>NO UPLOAD · RUNS IN YOUR BROWSER</div>
+  <div class="url">pogo-metrics.netlify.app</div>
+</body>
+</html>

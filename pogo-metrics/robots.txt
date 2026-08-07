@@ -2,5 +2,6 @@ User-agent: *
 Allow: /
 Disallow: /demo/
 Disallow: /og-card.html
+Disallow: /og-card-demo.html
 
 Sitemap: https://pogo-metrics.netlify.app/sitemap.xml
