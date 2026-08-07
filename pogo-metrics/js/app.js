@@ -1138,19 +1138,19 @@ function renderActivity() {
 
   // Aim for a tidy 8-card grid (2 rows of 4) to match the trainer card.
   const stats = [
-    [fmt(total), "Logged actions"],
-    [fmt(activeDays), "Active days"],
-    [busiestType ? fmt(e.totals[busiestType]) : "0", busiestType ? busiestType + " (top action)" : "—"],
-    [fmt(avgPerDay), "Avg / active day"],
-    [busiestDay ? fmt(busiestN) : "—", "Busiest day", busiestDay ? fmtDate(parseTS(busiestDay)) : ""],
-    [fmt(streak), "Longest day streak", streak ? "consecutive days" : ""],
+    [fmt(total), "Logged actions", "spins, catches, raids, berries, battles"],
+    [fmt(activeDays), "Active days", "days with at least one action"],
+    [busiestType ? fmt(e.totals[busiestType]) : "0", busiestType ? busiestType + " (top action)" : "—", "your most-repeated action"],
+    [fmt(avgPerDay), "Avg / active day", "actions on a day you played"],
+    [busiestDay ? fmt(busiestN) : "—", "Busiest day", busiestDay ? "actions on " + fmtDate(parseTS(busiestDay)) : ""],
+    [fmt(streak), "Longest day streak", streak ? "days played in a row" : ""],
   ];
   if (e.raidTotal) {
     stats.push([fmt(e.raidRemote), "Remote raids", e.raidTotal ? (e.raidRemote / e.raidTotal * 100).toFixed(0) + "% of raids" : ""]);
-    if (e.raidMaxKm) stats.push([fmt(round(e.raidMaxKm)) + " km", "Farthest raid reach"]);
+    if (e.raidMaxKm) stats.push([fmt(round(e.raidMaxKm)) + " km", "Farthest raid reach", "between you and the gym"]);
   }
-  if (stats.length < 8) stats.push([months.length ? fmtMonth(months[0]) + " – " + fmtMonth(months[months.length - 1]) : "—", "Event window"]);
-  if (stats.length < 8 && e.geo.size) stats.push([fmt(e.geo.size), "Map hotspots"]);
+  if (stats.length < 8) stats.push([months.length ? fmtMonth(months[0]) + " – " + fmtMonth(months[months.length - 1]) : "—", "Event window", "the span your logs cover"]);
+  if (stats.length < 8 && e.geo.size) stats.push([fmt(e.geo.size), "Map hotspots", "distinct places you played"]);
   const cards = stats.slice(0, 8);
 
   // Visualisations lead the chapter; the data cards sit below them, after a divider.
@@ -1272,18 +1272,26 @@ function renderRecords() {
   const fm = Object.entries(STATE.friends.monthly).sort((a, b) => b[1] - a[1])[0];
   if (fm) socialPeak = fm;
 
+  // Every sub-line leads with the UNIT the big number counts — a bare "599"
+  // under "Biggest day ever" doesn't say 599 of what.
   const stats = [
-    [fmt(bigN), "Biggest day ever", (bigDay ? fmtDate(parseTS(bigDay)) : "") + (bigDayEvent ? " · " + bigDayEvent : "")],
-    [bestMonth ? fmt(bestMonth[1]) : "—", "Best month", bestMonth ? fmtMonth(bestMonth[0]) : ""],
-    [fmt(streak.len), "Longest streak", streak.start ? fmtDate(parseTS(streak.start)) + " → " + fmtDate(parseTS(streak.end)) : ""],
-    [fmt(daysSince), "Days since day one", firstDay ? "first log " + fmtDate(parseTS(firstDay)) : ""],
+    [fmt(bigN), "Biggest day ever",
+      `actions on ${bigDay ? fmtDate(parseTS(bigDay)) : "—"}${bigDayEvent ? " · " + bigDayEvent : ""}`],
+    [bestMonth ? fmt(bestMonth[1]) : "—", "Best month",
+      bestMonth ? `actions in ${fmtMonth(bestMonth[0])} — your busiest` : ""],
+    [fmt(streak.len), "Longest streak",
+      streak.start ? `days played in a row · ${fmtDate(parseTS(streak.start))} → ${fmtDate(parseTS(streak.end))}` : "days played in a row"],
+    [fmt(daysSince), "Days since day one",
+      firstDay ? `since your first logged action, ${fmtDate(parseTS(firstDay))}` : ""],
   ];
-  if (e.raidMaxKm) stats.push([fmt(round(e.raidMaxKm)) + " km", "Farthest raid", "from where you stood"]);
-  if (socialPeak) stats.push([fmt(socialPeak[1]), "Most friends in a month", fmtMonth(socialPeak[0])]);
-  if (evDays.length) stats.push([fmt(evDays.length), "GO Fest days attended", fmt(evEvents) + " actions on those days"]);
+  if (e.raidMaxKm) stats.push([fmt(round(e.raidMaxKm)) + " km", "Farthest raid", "between you and the gym you raided"]);
+  if (socialPeak) stats.push([fmt(socialPeak[1]), "Most friends in a month", `friends added in ${fmtMonth(socialPeak[0])}`]);
+  if (evDays.length) stats.push([fmt(evDays.length), "GO Fest days attended", `${fmt(evEvents)} actions across those days`]);
 
   const inner = statGrid(stats.slice(0, 8));
-  return moduleHTML("🏅", "Your record book", "Personal bests, pulled from every day Niantic logged.", inner);
+  return moduleHTML("🏅", "Your record book",
+    `Your personal bests. An <b>action</b> is any single thing Niantic logged — a spin, a catch, a raid, a berry, a gym battle — so ${fmt(total)} actions is the sum of everything you did.`,
+    inner);
 }
 
 function isoShift(iso, delta) {
