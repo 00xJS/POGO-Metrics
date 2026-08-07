@@ -23,6 +23,14 @@
       </div>
     </div>`;
 
+  // Publish the nav's REAL height. It wraps to three rows on a phone (~143px),
+  // but scroll-padding and the sticky filter bar were hardcoded to a desktop
+  // 80px, so anchor jumps landed behind the nav.
+  const setNavH = () => document.documentElement.style.setProperty("--nav-h", nav.offsetHeight + "px");
+  setNavH();
+  addEventListener("resize", setNavH);
+  if (window.ResizeObserver) new ResizeObserver(setNavH).observe(nav);
+
   // Installable + offline-capable. Skipped on localhost so local dev never
   // fights a stale service-worker cache.
   if ("serviceWorker" in navigator && location.protocol === "https:" && location.hostname !== "localhost")
