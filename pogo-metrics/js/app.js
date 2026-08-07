@@ -39,6 +39,24 @@ const PJ_EVENTS = [
 ];
 const CUR_SYM = { USD: "$", EUR: "€", GBP: "£", INR: "₹", IDR: "Rp ", JPY: "¥", AUD: "A$", CAD: "C$", BRL: "R$" };
 
+/* Marquee event dates (UTC), used to turn anonymous activity spikes into
+ * memories ("your #1 day was GO Fest 2024"). Starter set: global GO Fests.
+ * Extend freely — one line per date. */
+const GO_EVENTS = {
+  "2017-07-22": "GO Fest 2017 (Chicago)",
+  "2018-07-14": "GO Fest 2018 (Chicago)", "2018-07-15": "GO Fest 2018 (Chicago)",
+  "2019-06-13": "GO Fest 2019 (Chicago)", "2019-06-14": "GO Fest 2019 (Chicago)",
+  "2019-06-15": "GO Fest 2019 (Chicago)", "2019-06-16": "GO Fest 2019 (Chicago)",
+  "2020-07-25": "GO Fest 2020 (Global)", "2020-07-26": "GO Fest 2020 (Global)",
+  "2021-07-17": "GO Fest 2021 (Global)", "2021-07-18": "GO Fest 2021 (Global)",
+  "2022-06-04": "GO Fest 2022 (Global)", "2022-06-05": "GO Fest 2022 (Global)",
+  "2022-08-27": "GO Fest 2022 Finale", "2022-08-28": "GO Fest 2022 Finale",
+  "2023-08-26": "GO Fest 2023 (Global)", "2023-08-27": "GO Fest 2023 (Global)",
+  "2024-07-13": "GO Fest 2024 (Global)", "2024-07-14": "GO Fest 2024 (Global)",
+  "2025-06-28": "GO Fest 2025 (Global)", "2025-06-29": "GO Fest 2025 (Global)",
+};
+const eventFor = (iso) => GO_EVENTS[iso] || null;
+
 /* ───────────────────────────── tiny helpers ───────────────────────────── */
 const fmt = (n) => Number(n).toLocaleString("en-US");
 const round = (n) => Math.round(n);
@@ -687,6 +705,7 @@ function teardown() {
   if (GLOBE) { try { GLOBE._destructor(); } catch (e) {} GLOBE = null; }
   GLOBE_CLEANUP.forEach((fn) => { try { fn(); } catch (e) {} });
   GLOBE_CLEANUP = [];
+  if (COUNT_IO) { COUNT_IO.disconnect(); COUNT_IO = null; }
 }
 
 async function build() {
@@ -743,6 +762,7 @@ async function build() {
     // lead with the trainer card → adventure log → year-over-year → world → social → money → body → tech
     safe(renderTrainer);
     safe(renderActivity);
+    safe(renderRecords);
     safe(renderYearOverYear);
     safe(renderWorld);
     safe(renderSocial);
@@ -773,6 +793,7 @@ async function build() {
     POST = [];
 
     wireToolbar();
+    wireCountUps(res);
     // move focus to the story so keyboard/screen-reader users land where the action is
     const hero = res.querySelector(".res-hero h2");
     if (hero) { hero.setAttribute("tabindex", "-1"); try { hero.focus({ preventScroll: true }); } catch (e) {} }
@@ -799,11 +820,16 @@ function resHero() {
   const intro = window.DEMO_PAGE
     ? `This is a live example built from a fully anonymized sample export — the exact same charts your own files would produce.`
     : `${range ? esc(range) + " · " : ""}${chapters} chapter${chapters > 1 ? "s" : ""} built from your export. Screenshot any card to share it.`;
-  // On the dedicated live-example page the page header already carries the CTAs,
-  // so the in-story hero stays clean — no toolbar.
+  // The demo page keeps its header CTAs, so its toolbar carries only the story
+  // button; the real app gets the full set.
   const toolbar = window.DEMO_PAGE
-    ? ""
+    ? `<div class="res-toolbar">
+       <button class="btn btn-primary" id="story-btn" type="button">▶ Play my story</button>
+     </div>`
     : `<div class="res-toolbar">
+       <button class="btn btn-primary" id="story-btn" type="button">▶ Play my story</button>
+       <button class="btn btn-teal" id="journey-btn" type="button">⬇ Journey card</button>
+       <button class="btn btn-ghost" id="json-btn" type="button">🧾 My numbers</button>
        <button class="btn btn-teal" id="addmore-btn" type="button">＋ Add more files</button>
        <button class="btn btn-ghost" id="restart-btn" type="button">↺ Start over</button>
      </div>`;
@@ -816,6 +842,13 @@ function resHero() {
 }
 function wireToolbar() {
   const a = $("addmore-btn"), r = $("restart-btn");
+  const st = $("story-btn"), jc = $("journey-btn"), js = $("json-btn");
+  if (st) st.onclick = () => storyMode();
+  if (jc) {
+    if (Object.keys(STATE.ev.dayCounts).length) jc.onclick = () => downloadJourneyCard(jc);
+    else jc.style.display = "none"; // needs Player_Journey data to mean anything
+  }
+  if (js) js.onclick = () => downloadStatsJSON();
   if (a) a.onclick = () => $("upload-section").scrollIntoView({ behavior: scrollBehavior() });
   if (r) r.onclick = () => {
     // two-tap confirm — a mis-tap here would throw away minutes of file-picking
@@ -853,15 +886,197 @@ function outro() {
     <b>That's your story — for now.</b> Add more files above to unlock new chapters of your journey.${more}</div>`;
 }
 
+/* ── story mode: a Wrapped-style, full-screen tappable recap built from STATE ── */
+function storySlides() {
+  const e = STATE.ev, s = [];
+  const total = Object.values(e.totals).reduce((a, b) => a + b, 0);
+  const who = (STATE.profile && STATE.profile.username) || (window.DEMO_PAGE ? "AshDemo" : "Trainer");
+  const dayKeys = Object.keys(e.dayCounts).sort();
+  s.push({ kicker: "POGO METRICS PRESENTS", big: esc(who), label: "this is your story", grad: 0 });
+  if (dayKeys.length) {
+    const daysSince = Math.round((Date.now() - new Date(dayKeys[0] + "T00:00:00Z")) / 86400000);
+    s.push({ kicker: "DAY ONE", big: fmtDate(parseTS(dayKeys[0])), label: `${fmt(daysSince)} days ago, your log begins`, grad: 1 });
+  }
+  if (total) s.push({ kicker: "SINCE THEN", num: total, label: "actions in the game's log — every spin, catch, raid and battle Niantic wrote down", grad: 2 });
+  const catches = catchesOf(e.totals);
+  if (catches) s.push({ kicker: "GOTTA CATCH 'EM ALL", num: catches, label: "Pokémon caught in the logs — map, incense, lure and GO Plus catches combined", grad: 3 });
+  let bigDay = null, bigN = 0;
+  for (const d of dayKeys) if (e.dayCounts[d] > bigN) { bigN = e.dayCounts[d]; bigDay = d; }
+  if (bigDay) s.push({ kicker: "YOUR BIGGEST DAY", num: bigN, label: `actions on ${fmtDate(parseTS(bigDay))}${eventFor(bigDay) ? " — " + eventFor(bigDay) : ""}`, grad: 4 });
+  // busiest slot in the VIEWER'S clock — "your hour" should feel like their life, not UTC
+  const local = gridShift(e.hourweek, -new Date().getTimezoneOffset() / 60);
+  let bd = 0, bh = 0, bn = 0;
+  for (let d = 0; d < 7; d++) for (let h = 0; h < 24; h++) if (local[d][h] > bn) { bn = local[d][h]; bd = d; bh = h; }
+  if (bn) s.push({ kicker: "YOUR HOUR", big: `${DAY_FULL[bd]}s, ${hourLabel(bh)}`, label: "when you play the most, in your local time", grad: 5 });
+  if (e.geo.size) s.push({ kicker: "YOUR WORLD", num: e.geo.size, label: "places you've played" + (e.raidMaxKm ? ` — raiding ${fmt(round(e.raidMaxKm))} km from home` : ""), grad: 6 });
+  const streak = longestStreak(dayKeys);
+  if (streak > 1) s.push({ kicker: "DEDICATION", num: streak, label: "days in a row, without missing one", grad: 7 });
+  if (STATE.friends.rows.length) s.push({ kicker: "NOT ALONE", num: STATE.friends.rows.length, label: "friends on the journey", grad: 8 });
+  if (STATE.spend.coinsBought) s.push({ kicker: "THE WAR CHEST", num: STATE.spend.coinsBought, label: "PokéCoins bought", grad: 9 });
+  const km = Object.values(STATE.fitness.daily).reduce((a, d) => a + (d.meters || 0), 0) / 1000;
+  if (km > 1) s.push({ kicker: "ON FOOT", num: Math.round(km), label: "kilometres walked with the game open", grad: 10 });
+  const years = [...new Set(Object.keys(e.byMonth).map((m) => m.slice(0, 4)))];
+  s.push({
+    kicker: "AND COUNTING",
+    big: years.length ? `${years.length} year${years.length > 1 ? "s" : ""} of adventure` : "Your adventure",
+    label: window.DEMO_PAGE ? "this was the sample trainer — imagine yours" : "grab the card, flex the journey",
+    grad: 11, finale: true,
+  });
+  return s;
+}
+
+function storyMode() {
+  const slides = storySlides();
+  if (!slides.length) return;
+  const GRADS = [[C.teal, C.yellow], [C.blue, C.teal], [C.yellow, C.orange], [C.red, C.pink],
+    [C.purple, C.blue], [C.pink, C.purple], [C.green, C.teal], [C.orange, C.red],
+    [C.teal, C.purple], [C.yellow, C.green], [C.blue, C.pink], [C.teal, C.yellow]];
+  const ov = document.createElement("div");
+  ov.className = "story-ov";
+  ov.innerHTML = `
+    <div class="story-prog" aria-hidden="true">${slides.map(() => "<i></i>").join("")}</div>
+    <button class="story-x" type="button" aria-label="Close story">×</button>
+    <div class="story-stage" role="dialog" aria-label="Your story, chapter by chapter"></div>
+    <div class="story-hint">tap right for next · left for back · Esc to close</div>`;
+  document.body.appendChild(ov);
+  document.body.style.overflow = "hidden";
+  const stage = ov.querySelector(".story-stage");
+  let idx = -1, closed = false, raf = null;
+  const close = () => {
+    if (closed) return;
+    closed = true;
+    if (raf) cancelAnimationFrame(raf);
+    document.body.style.overflow = "";
+    document.removeEventListener("keydown", onKey);
+    ov.remove();
+  };
+  const render = (i) => {
+    idx = Math.max(0, Math.min(slides.length - 1, i));
+    const sl = slides[idx];
+    const [g1, g2] = GRADS[sl.grad % GRADS.length];
+    ov.style.background = `radial-gradient(120% 90% at 18% 0%, ${g1}36, transparent 60%),` +
+      `radial-gradient(120% 90% at 85% 100%, ${g2}30, transparent 60%), #0a0d1c`;
+    const finale = !sl.finale ? "" : `<div class="story-cta">
+      ${window.DEMO_PAGE
+        ? `<a class="btn btn-primary" href="metrics.html">Build my own story</a>`
+        : (Object.keys(STATE.ev.dayCounts).length ? `<button class="btn btn-primary" id="story-journey" type="button">⬇ My journey card</button>` : "")}
+      <button class="btn btn-ghost" id="story-back" type="button">Back to my dashboard</button></div>`;
+    stage.innerHTML = `<div class="story-slide">
+      <div class="story-kicker">${sl.kicker}</div>
+      ${sl.num != null ? `<div class="story-big mono" data-n="${sl.num}">${REDUCED_MOTION ? fmt(sl.num) : "0"}</div>` : `<div class="story-big">${sl.big}</div>`}
+      <div class="story-label">${sl.label}</div>
+      ${finale}</div>`;
+    const bigEl = stage.querySelector("[data-n]");
+    if (bigEl && !REDUCED_MOTION) {
+      const n = +bigEl.dataset.n, t0 = performance.now(), dur = 900;
+      const tick = (t) => {
+        if (closed) return;
+        const p = Math.min(1, (t - t0) / dur), ease = 1 - Math.pow(1 - p, 3);
+        bigEl.textContent = fmt(Math.round(n * ease));
+        if (p < 1) raf = requestAnimationFrame(tick);
+      };
+      raf = requestAnimationFrame(tick);
+      setTimeout(() => { if (!closed && bigEl.isConnected) bigEl.textContent = fmt(n); }, dur + 250); // rAF doesn't fire in hidden tabs
+    }
+    [...ov.querySelectorAll(".story-prog i")].forEach((el, j) => (el.className = j < idx ? "done" : j === idx ? "cur" : ""));
+    const jb = stage.querySelector("#story-journey");
+    if (jb) jb.onclick = () => downloadJourneyCard(jb);
+    const bb = stage.querySelector("#story-back");
+    if (bb) bb.onclick = close;
+  };
+  ov.addEventListener("click", (ev2) => {
+    if (ev2.target.closest(".story-x")) return close();
+    if (ev2.target.closest("button, a")) return;
+    if (ev2.clientX < window.innerWidth * 0.3) render(idx - 1);
+    else if (idx >= slides.length - 1) close();
+    else render(idx + 1);
+  });
+  const onKey = (ev2) => {
+    if (ev2.key === "Escape") close();
+    else if (ev2.key === "ArrowLeft") render(idx - 1);
+    else if (ev2.key === "ArrowRight" || ev2.key === " ") { ev2.preventDefault(); idx >= slides.length - 1 ? close() : render(idx + 1); }
+  };
+  document.addEventListener("keydown", onKey);
+  render(0);
+}
+
+/* ── lifetime journey card: the year-card renderer fed with all-time data ── */
+function downloadJourneyCard(btn) {
+  const e = STATE.ev;
+  const dayKeys = Object.keys(e.dayCounts);
+  if (!dayKeys.length) return;
+  const total = Object.values(e.totals).reduce((a, b) => a + b, 0);
+  const months = monthSpan(Object.keys(e.byMonth));
+  const series = Object.keys(SERIES_COLORS).filter((k) => e.totals[k]);
+  const years = [...new Set(months.map((m) => m.slice(0, 4)))].sort();
+  const streak = longestStreak(dayKeys);
+  const evDays = dayKeys.filter((d) => eventFor(d)).length;
+  const monthTotals = Object.entries(e.byMonth).map(([m, kinds]) => [m, Object.values(kinds).reduce((a, b) => a + b, 0)]).sort((a, b) => b[1] - a[1]);
+  const badges = [];
+  if (years.length > 1) badges.push(`🎮 ${years.length} years of adventure`);
+  if (e.raidMaxKm) badges.push(`🌍 raided ${fmt(round(e.raidMaxKm))} km away`);
+  if (evDays) badges.push(`🎪 ${evDays} GO Fest day${evDays > 1 ? "s" : ""}`);
+  if (streak > 6) badges.push(`🔥 ${fmt(streak)}-day streak`);
+  downloadYearCard({
+    year: years.length > 1 ? `${years[0]} – ${years[years.length - 1]}` : years[0],
+    titleFont: years.length > 1 ? "800 96px 'Outfit', sans-serif" : null,
+    file: "pogo-metrics-journey.png",
+    partial: false, c1: C.teal, c2: C.yellow,
+    events: fmt(total), badges,
+    peakLabel: monthTotals[0] ? `${fmtMonth(monthTotals[0][0])} was the biggest month of all` : "",
+    stats: [
+      [fmt(catchesOf(e.totals)), "Pokémon caught"], [fmt(e.totals["Spins"] || 0), "PokéStop spins"],
+      [fmt(e.totals["Raids"] || 0), "raid lobbies"], [fmt(e.raidRemote), "remote raids"],
+      [fmt(e.days.size), "days played"], [fmt(streak), "longest streak"],
+      ...(STATE.friends.rows.length ? [[fmt(STATE.friends.rows.length), "friends made"]] : []),
+      ...(STATE.spend.coinsBought ? [[fmt(STATE.spend.coinsBought), "PokéCoins bought"]] : []),
+    ].slice(0, 8),
+    monthLabels: months.map((mk) => (mk.endsWith("-01") ? "’" + mk.slice(2, 4) : "")),
+    monthlyStacks: months.map((mk) => series.map((lab) => [SERIES_COLORS[lab], (e.byMonth[mk] || {})[lab] || 0])),
+  }, btn);
+}
+
+/* ── stats export: a curated JSON summary, with location data deliberately left out ── */
+function downloadStatsJSON() {
+  const e = STATE.ev;
+  const out = {
+    generated: new Date().toISOString(),
+    source: "POGO Metrics — parsed locally in your browser from your official Niantic export",
+    note: "Precise location data (GPS trail, activity coordinates) is deliberately NOT included in this export.",
+    profile: STATE.profile,
+    totalsByAction: e.totals,
+    monthly: e.byMonth,
+    dayCounts: e.dayCounts,
+    hourOfWeekUTC: e.hourweek,
+    raids: { total: e.raidTotal, remote: e.raidRemote, farthestKm: Math.round(e.raidMaxKm) },
+    friends: { total: STATE.friends.rows.length, monthly: STATE.friends.monthly, sources: STATE.friends.sources, unfriended: STATE.friends.unfriended },
+    spending: STATE.spend,
+    fitnessDaily: STATE.fitness.daily,
+    sessions: STATE.sessions,
+    installs: STATE.installs,
+    liveEvents: STATE.liveEvents.length,
+    wayfarer: STATE.wayfarer,
+  };
+  const url = URL.createObjectURL(new Blob([JSON.stringify(out, null, 2)], { type: "application/json" }));
+  const a = document.createElement("a");
+  a.href = url; a.download = "pogo-metrics-stats.json";
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 4000);
+}
+
 /* ── trainer card (Gameplay.txt) ── */
 function renderTrainer() {
   const p = STATE.profile, col = STATE.collection;
   if (!p) return;
   const km = p.distanceWalkedKm || 0;
+  const evT = STATE.ev.totals;
+  const caught = catchesOf(evT);
   const stats = [
     [esc(String(p.level || "—")), "Trainer level"],
     [fmt(p.totalXp || 0), "Total XP"],
     [fmt(round(km)) + " km", "Distance walked", "≈ " + (km / 40075 * 100).toFixed(0) + "% around Earth"],
+    ...(caught ? [[fmt(caught), "Pokémon caught", "map · incense · lure · GO Plus logs"]] : []),
+    ...(evT["Spins"] ? [[fmt(evT["Spins"]), "PokéStop spins"]] : []),
     [fmt(p.stardust || 0), "Stardust"],
     [fmt(p.eggsHatched || 0), "Eggs hatched"],
     [fmt(p.pokecoin || 0), "PokéCoins on hand"],
@@ -932,11 +1147,26 @@ function renderActivity() {
   const cards = stats.slice(0, 8);
 
   // Visualisations lead the chapter; the data cards sit below them, after a divider.
-  const cMonthly = uid(), cDonut = uid();
+  const cMonthly = uid(), cDonut = uid(), cClock = uid();
+  const tzOff = -new Date().getTimezoneOffset() / 60;
+  const tzLbl = "UTC" + (tzOff >= 0 ? "+" : "") + (Math.round(tzOff * 10) / 10);
   let inner = `<div>${chartWrap(cMonthly, "tall")}</div>`;
   inner += `<div class="split" style="margin-top:16px">
     <div>${chartWrap(cDonut)}</div>
-    <div><div style="font-weight:700;margin-bottom:10px">When you play — hour of week</div><div id="hw-${cMonthly}"></div></div>
+    <div>${chartWrap(cClock)}</div>
+  </div>`;
+  inner += `<div style="margin-top:22px">
+    <div style="font-weight:700;margin-bottom:6px">When you play — hour of week</div>
+    ${tzOff !== 0 ? `<div class="yoy-metrics" style="margin:0 0 10px" id="tz-${cMonthly}">
+      <button class="yoy-chip active" type="button" aria-pressed="true" data-off="${tzOff}">Your time (${tzLbl})</button>
+      <button class="yoy-chip" type="button" aria-pressed="false" data-off="0">Game time (UTC)</button>
+    </div>` : ""}
+    <div id="hw-${cMonthly}"></div>
+  </div>`;
+  inner += `<div style="margin-top:22px">
+    <div style="font-weight:700;margin-bottom:10px">Every day you played</div>
+    <div class="yoy-metrics" style="margin:0 0 10px" id="cy-${cMonthly}"></div>
+    <div id="cal-${cMonthly}"></div>
   </div>`;
   inner += `<hr class="mod-divider">`;
   inner += statGrid(cards);
@@ -965,11 +1195,88 @@ function renderActivity() {
       options: { cutout: "60%", plugins: { legend: { position: "right" }, title: { display: true, text: "What you did most" } } },
     });
 
-    // hour-of-week heat grid
-    renderHourWeek($("hw-" + cMonthly), e.hourweek);
+    // hour grid + 24h play clock, re-rendered together when the timezone chip flips
+    let clockChart = null;
+    const renderPlayTime = (off) => {
+      const grid = gridShift(e.hourweek, off);
+      renderHourWeek($("hw-" + cMonthly), grid);
+      const byHour = Array.from({ length: 24 }, (_, h) => grid.reduce((a, day) => a + day[h], 0));
+      if (clockChart) { const i = CHARTS.indexOf(clockChart); if (i >= 0) CHARTS.splice(i, 1); clockChart.destroy(); }
+      clockChart = newChart(cClock, {
+        type: "polarArea",
+        data: {
+          labels: byHour.map((_, h) => hourLabel(h)),
+          datasets: [{ data: byHour, backgroundColor: byHour.map((v) => `rgba(65,216,198,${(0.15 + 0.75 * v / Math.max(1, ...byHour)).toFixed(2)})`), borderWidth: 0 }],
+        },
+        options: {
+          plugins: { legend: { display: false }, title: { display: true, text: "Your play clock — events by hour" } },
+          scales: { r: { ticks: { display: false }, grid: { color: C.grid } } },
+        },
+      });
+    };
+    renderPlayTime(tzOff); // default to the viewer's clock — UTC is the expert option
+    const tzHost = $("tz-" + cMonthly);
+    if (tzHost) {
+      const tzChips = [...tzHost.querySelectorAll(".yoy-chip")];
+      tzChips.forEach((b) => b.addEventListener("click", () => {
+        tzChips.forEach((x) => { x.classList.toggle("active", x === b); x.setAttribute("aria-pressed", String(x === b)); });
+        renderPlayTime(+b.dataset.off);
+      }));
+    }
+
+    // GitHub-style calendar, one selectable year at a time
+    const calYears = [...new Set(dayKeys.map((d) => d.slice(0, 4)))].sort().reverse();
+    const yearsHost = $("cy-" + cMonthly);
+    if (calYears.length > 1) {
+      yearsHost.innerHTML = calYears.map((y, i) =>
+        `<button class="yoy-chip${i === 0 ? " active" : ""}" type="button" aria-pressed="${i === 0}" data-y="${y}">${y}</button>`).join("");
+      [...yearsHost.querySelectorAll(".yoy-chip")].forEach((b) => b.addEventListener("click", () => {
+        [...yearsHost.querySelectorAll(".yoy-chip")].forEach((x) => { x.classList.toggle("active", x === b); x.setAttribute("aria-pressed", String(x === b)); });
+        renderCalendar($("cal-" + cMonthly), b.dataset.y, e.dayCounts);
+      }));
+    }
+    renderCalendar($("cal-" + cMonthly), calYears[0], e.dayCounts);
   });
 
   return moduleHTML("🗺️", "Your adventure log", `Every spin, catch, raid and battle Niantic logged — ${fmt(total)} actions across ${fmt(e.days.size)} days.`, inner);
+}
+
+/* ── record book: lifetime superlatives, event days, and a playful benchmark ── */
+function renderRecords() {
+  const e = STATE.ev;
+  const dayKeys = Object.keys(e.dayCounts);
+  if (!dayKeys.length) return;
+  const total = Object.values(e.totals).reduce((a, b) => a + b, 0);
+
+  let bigDay = null, bigN = 0;
+  for (const d of dayKeys) if (e.dayCounts[d] > bigN) { bigN = e.dayCounts[d]; bigDay = d; }
+  const bigDayEvent = bigDay ? eventFor(bigDay) : null;
+
+  const monthTotals = Object.entries(e.byMonth).map(([m, kinds]) => [m, Object.values(kinds).reduce((a, b) => a + b, 0)]);
+  const bestMonth = monthTotals.sort((a, b) => b[1] - a[1])[0];
+
+  const streak = longestStreakRange(dayKeys);
+  const evDays = dayKeys.filter((d) => eventFor(d));
+  const evEvents = evDays.reduce((a, d) => a + e.dayCounts[d], 0);
+  const firstDay = dayKeys.slice().sort()[0];
+  const daysSince = firstDay ? Math.round((Date.now() - new Date(firstDay + "T00:00:00Z")) / 86400000) : 0;
+
+  let socialPeak = null;
+  const fm = Object.entries(STATE.friends.monthly).sort((a, b) => b[1] - a[1])[0];
+  if (fm) socialPeak = fm;
+
+  const stats = [
+    [fmt(bigN), "Biggest day ever", (bigDay ? fmtDate(parseTS(bigDay)) : "") + (bigDayEvent ? " · " + bigDayEvent : "")],
+    [bestMonth ? fmt(bestMonth[1]) : "—", "Best month", bestMonth ? fmtMonth(bestMonth[0]) : ""],
+    [fmt(streak.len), "Longest streak", streak.start ? fmtDate(parseTS(streak.start)) + " → " + fmtDate(parseTS(streak.end)) : ""],
+    [fmt(daysSince), "Days since day one", firstDay ? "first log " + fmtDate(parseTS(firstDay)) : ""],
+  ];
+  if (e.raidMaxKm) stats.push([fmt(round(e.raidMaxKm)) + " km", "Farthest raid", "from where you stood"]);
+  if (socialPeak) stats.push([fmt(socialPeak[1]), "Most friends in a month", fmtMonth(socialPeak[0])]);
+  if (evDays.length) stats.push([fmt(evDays.length), "GO Fest days attended", fmt(evEvents) + " actions on those days"]);
+
+  const inner = statGrid(stats.slice(0, 8));
+  return moduleHTML("🏅", "Your record book", "Personal bests, pulled from every day Niantic logged.", inner);
 }
 
 function isoShift(iso, delta) {
@@ -978,16 +1285,60 @@ function isoShift(iso, delta) {
   return d.toISOString().slice(0, 10);
 }
 function longestStreak(isoDays) {
-  if (!isoDays.length) return 0;
+  return longestStreakRange(isoDays).len;
+}
+/* like longestStreak, but keeps the dates so records can say WHEN */
+function longestStreakRange(isoDays) {
+  if (!isoDays.length) return { len: 0, start: null, end: null };
   const set = new Set(isoDays);
-  let best = 0;
+  let best = { len: 0, start: null, end: null };
   for (const d of set) {
     if (set.has(isoShift(d, -1))) continue; // only count from the start of a run
     let len = 1, cur = d;
     while (set.has(isoShift(cur, 1))) { cur = isoShift(cur, 1); len++; }
-    if (len > best) best = len;
+    if (len > best.len) best = { len, start: d, end: cur };
   }
   return best;
+}
+/* shift an hour-of-week grid by whole hours (UTC → viewer's clock) */
+function gridShift(grid, offsetHours) {
+  const off = ((Math.round(offsetHours) % 24) + 24) % 24;
+  if (!off) return grid;
+  const out = Array.from({ length: 7 }, () => Array(24).fill(0));
+  for (let d = 0; d < 7; d++) for (let h = 0; h < 24; h++) {
+    const nh = h + off;
+    out[(d + Math.floor(nh / 24)) % 7][nh % 24] += grid[d][h];
+  }
+  return out;
+}
+
+/* Count-up animation for stat values — the number is already in the DOM as
+ * text; this just plays it in when it scrolls into view. Purely decorative,
+ * so reduced-motion users simply see the final value. */
+let COUNT_IO = null;
+function wireCountUps(root) {
+  if (REDUCED_MOTION || !("IntersectionObserver" in window)) return;
+  if (COUNT_IO) COUNT_IO.disconnect();
+  COUNT_IO = new IntersectionObserver((entries) => {
+    entries.forEach((en) => {
+      if (!en.isIntersecting) return;
+      COUNT_IO.unobserve(en.target);
+      const el = en.target, final = el.textContent;
+      const n = parseInt(final.replace(/,/g, ""), 10);
+      if (!n || n < 10) return;
+      const t0 = performance.now(), dur = 650;
+      const tick = (t) => {
+        const p = Math.min(1, (t - t0) / dur), ease = 1 - Math.pow(1 - p, 3);
+        el.textContent = fmt(Math.round(n * ease));
+        if (p < 1) requestAnimationFrame(tick); else el.textContent = final;
+      };
+      requestAnimationFrame(tick);
+      setTimeout(() => { el.textContent = final; }, dur + 250); // rAF doesn't fire in hidden tabs
+    });
+  }, { threshold: 0.4 });
+  root.querySelectorAll(".stat-card .v, .wc-big").forEach((el) => {
+    if (/^[\d,]+$/.test(el.textContent.trim())) COUNT_IO.observe(el);
+  });
 }
 function hourLabel(h) {
   return h === 0 ? "12 AM" : h < 12 ? h + " AM" : h === 12 ? "12 PM" : (h - 12) + " PM";
@@ -1019,7 +1370,7 @@ function renderHourWeek(host, grid) {
 /* Immediate, cursor-following tooltip for the hour-of-week grid so the hovered
  * day + time is always clear (the native title tooltip is slow and easy to miss). */
 function attachHourWeekTip(host) {
-  const gridEl = host.querySelector(".hw-grid");
+  const gridEl = host.querySelector(".hw-grid, .cal-grid");
   if (!gridEl) return;
   let tip = document.querySelector(".hw-tip");
   if (!tip) {
@@ -1046,6 +1397,31 @@ function attachHourWeekTip(host) {
     tip.dataset.wired = "1";
     window.addEventListener("scroll", () => tip.classList.remove("on"), { passive: true });
   }
+}
+
+/* GitHub-style contribution calendar for one year of dayCounts (UTC days) */
+function renderCalendar(host, year, dayCounts) {
+  if (!host || !year) return;
+  const first = new Date(Date.UTC(+year, 0, 1));
+  const startDow = (first.getUTCDay() + 6) % 7; // Monday = 0
+  const yearMax = Math.max(1, ...Object.entries(dayCounts).filter(([d]) => d.startsWith(year)).map(([, n]) => n));
+  let cells = "";
+  // leading blanks so the first column starts on the right weekday
+  for (let i = 0; i < startDow; i++) cells += `<div class="cal-cell blank"></div>`;
+  const d = new Date(first);
+  while (d.getUTCFullYear() === +year) {
+    const iso = d.toISOString().slice(0, 10);
+    const n = dayCounts[iso] || 0;
+    const ev = eventFor(iso);
+    const bg = n === 0 ? "rgba(255,255,255,.045)" : `rgba(65,216,198,${(0.18 + 0.82 * n / yearMax).toFixed(2)})`;
+    cells += `<div class="cal-cell${ev && n ? " ev" : ""}" style="background:${bg}" data-info="${fmtDate(d)}${ev ? " · " + esc(ev) : ""}" data-sub="${n ? fmt(n) + " event" + (n > 1 ? "s" : "") : "no play logged"}"></div>`;
+    d.setUTCDate(d.getUTCDate() + 1);
+  }
+  const played = Object.keys(dayCounts).filter((k) => k.startsWith(year)).length;
+  const evDays = Object.keys(dayCounts).filter((k) => k.startsWith(year) && eventFor(k)).length;
+  host.innerHTML = `<div class="cal-grid">${cells}</div>
+    <div class="hw-caption">${fmt(played)} days played in ${year}${evDays ? ` — including <b>${evDays} GO Fest day${evDays > 1 ? "s" : ""}</b> (gold ring)` : ""}. Tap a day for details.</div>`;
+  attachHourWeekTip(host);
 }
 
 /* ── year over year (multi-year journeys) ── */
@@ -1272,7 +1648,7 @@ async function downloadYearCard(o, btn) {
   ctx.letterSpacing = "6px";
   ctx.fillText("POKÉMON GO · METRICS", W / 2, 86);
   ctx.letterSpacing = "0px";
-  ctx.font = "800 150px 'Outfit', sans-serif";
+  ctx.font = o.titleFont || "800 150px 'Outfit', sans-serif";
   const yg = ctx.createLinearGradient(W / 2 - 220, 0, W / 2 + 220, 0);
   yg.addColorStop(0, o.c1); yg.addColorStop(1, o.c2);
   ctx.fillStyle = yg; ctx.fillText(o.year, W / 2, 232);
@@ -1374,7 +1750,7 @@ async function downloadYearCard(o, btn) {
     if (!blob) { alert("Could not generate image on this browser."); return; }
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
-    a.href = url; a.download = `pogo-metrics-${o.year}.png`;
+    a.href = url; a.download = o.file || `pogo-metrics-${o.year}.png`;
     document.body.appendChild(a); a.click(); a.remove();
     setTimeout(() => URL.revokeObjectURL(url), 1000);
   }, "image/png");
@@ -1504,6 +1880,7 @@ function renderGlobe() {
   const html = `<div class="module globe-module">
     <div class="mod-head"><span class="mod-icon">🌍</span><h3>Your world in 3D</h3></div>
     <div class="mod-sub">${subBits.join(" · ")}. Drag to spin, scroll to zoom — every arc is a remote raid from where you stood to a gym somewhere on Earth.</div>
+    <div class="globe-wrap" id="${P}wrap">
     <div class="globe-stage">
       <div id="${P}canvas" class="globe-canvas"></div>
       <div id="${P}loading" class="globe-loading"><div class="gl-spin"></div>Spinning up the world…</div>
@@ -1521,6 +1898,8 @@ function renderGlobe() {
       </details>
       <div id="${P}legend" class="globe-hud globe-legend"></div>
       <div id="${P}country" class="globe-hud globe-country" hidden></div>
+      <button id="${P}fs" class="gh-btn globe-fs" type="button" aria-label="View the globe full screen">⛶ Full screen</button>
+    </div>
     </div>
     <div id="${P}below" class="globe-below"></div>
   </div>`;
@@ -1559,6 +1938,9 @@ function initGlobe({ P, points, maxCount, arcs, home, paths }) {
     .pathsData(paths).pathPoints("pts").pathPointLat((p) => p[0]).pathPointLng((p) => p[1]).pathPointAlt((p) => p[2])
     .pathColor(() => ["rgba(255,203,5,.9)", "rgba(255,157,66,.9)"])
     .pathStroke(1.6).pathDashLength(0.18).pathDashGap(0.035).pathDashAnimateTime(REDUCED_MOTION ? 0 : 14000)
+    // instant path updates — the default 1s enter-transition swallowed every
+    // frame of the time-lapse (each step restarted it before it finished)
+    .pathTransitionDuration(0)
     .pathLabel((p) => `GPS trail · ${p.date}`)
     // reduced-motion users asked the OS for stillness — no pulsing home ring
     .ringsData(REDUCED_MOTION ? [] : [{ lat: home.lat, lng: home.lng }])
@@ -1607,6 +1989,25 @@ function initGlobe({ P, points, maxCount, arcs, home, paths }) {
   // collapse the Layers panel by default where there's no room for it
   const layersEl = $$("layers");
   if (layersEl && window.innerWidth <= 860) layersEl.open = false;
+
+  // full-screen mode — the wrap keeps the time-lapse bar with the stage
+  const wrap = $$("wrap"), fsBtn = $$("fs");
+  if (fsBtn) {
+    if (!wrap || !wrap.requestFullscreen) fsBtn.style.display = "none"; // e.g. iPhone Safari
+    else {
+      fsBtn.onclick = () => {
+        if (document.fullscreenElement) document.exitFullscreen();
+        else wrap.requestFullscreen().catch(() => {});
+      };
+      const onFs = () => {
+        fsBtn.textContent = document.fullscreenElement ? "✕ Exit full screen" : "⛶ Full screen";
+        // let the fullscreen layout settle, then resize the WebGL canvas to it
+        setTimeout(() => { if (GLOBE === world && el.isConnected) world.width(el.clientWidth).height(el.clientHeight || 560); }, 80);
+      };
+      document.addEventListener("fullscreenchange", onFs);
+      GLOBE_CLEANUP.push(() => document.removeEventListener("fullscreenchange", onFs));
+    }
+  }
 
 
   // don't burn GPU on a globe nobody is looking at
@@ -1920,6 +2321,30 @@ function renderSocial() {
     sub = `${fmt(F.rows.length)} friends in your roster, the oldest going back ${longest} years.`;
   }
 
+  // friendship tenure — how long your bonds have lasted
+  const dated = STATE.friends.rows.filter((r) => r.ts);
+  if (dated.length) {
+    const now = Date.now();
+    const yearsOf = (r) => (now - r.ts.getTime()) / 31557600000;
+    const oldest = dated.slice().sort((a, b) => a.ts - b.ts)[0];
+    const buckets = {};
+    dated.forEach((r) => { const y = Math.floor(yearsOf(r)); buckets[y] = (buckets[y] || 0) + 1; });
+    const bLabels = Object.keys(buckets).map(Number).sort((a, b) => a - b);
+    const cTenure = uid();
+    inner += `<hr class="mod-divider"><div style="font-weight:700;margin-bottom:2px">Friendship tenure</div>
+      <div class="mod-sub" style="margin-bottom:10px">Your oldest friendship: <b>${esc(oldest.name)}</b>, going strong for
+      <b>${yearsOf(oldest).toFixed(1)} years</b> (since ${fmtDate(oldest.ts)}).</div>
+      <div>${chartWrap(cTenure)}</div>`;
+    later(() => newChart(cTenure, {
+      type: "bar",
+      data: {
+        labels: bLabels.map((y) => (y === 0 ? "< 1 yr" : y + "–" + (y + 1) + " yrs")),
+        datasets: [{ data: bLabels.map((y) => buckets[y]), backgroundColor: C.teal, borderRadius: 6, label: "friends" }],
+      },
+      options: { plugins: { legend: { display: false }, title: { display: true, text: "How long you've been friends" } }, scales: { y: { beginAtZero: true, title: { display: true, text: "friends" } }, x: { grid: { display: false } } } },
+    }));
+  }
+
   const funnel = [];
   if (STATE.invites.sent) funnel.push([fmt(STATE.invites.sent), "invites sent"]);
   if (STATE.invites.accepted) funnel.push([fmt(STATE.invites.accepted), "accepted"]);
@@ -1957,6 +2382,11 @@ function renderSpending() {
     [fmt(Object.values(S.items).reduce((a, b) => a + b, 0)), "Items bought in shop"],
   ];
   let inner = statGrid(stats);
+  if (S.coinsSpent) {
+    inner += `<div class="hw-caption" style="margin-top:6px">For scale: ${fmt(S.coinsSpent)} coins ≈
+      <b>${fmt(Math.floor(S.coinsSpent / 100))}</b> premium battle passes, or
+      <b>${fmt(Math.floor(S.coinsSpent / 200))}</b> super incubators (at classic shop prices).</div>`;
+  }
 
   // coin flow
   const months = monthSpan([...Object.keys(S.boughtMonthly), ...Object.keys(S.spentMonthly)]);
