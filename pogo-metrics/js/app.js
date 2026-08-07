@@ -928,6 +928,10 @@ function storySlides() {
 function storyMode() {
   const slides = storySlides();
   if (!slides.length) return;
+  // The overlay covers the trigger, but a keyboard user's focus stays on it —
+  // a second Enter would otherwise stack a second story on top of the first.
+  if (document.querySelector(".story-ov")) return;
+  const opener = document.activeElement;
   const GRADS = [[C.teal, C.yellow], [C.blue, C.teal], [C.yellow, C.orange], [C.red, C.pink],
     [C.purple, C.blue], [C.pink, C.purple], [C.green, C.teal], [C.orange, C.red],
     [C.teal, C.purple], [C.yellow, C.green], [C.blue, C.pink], [C.teal, C.yellow]];
@@ -949,6 +953,7 @@ function storyMode() {
     document.body.style.overflow = "";
     document.removeEventListener("keydown", onKey);
     ov.remove();
+    if (opener && opener.isConnected) try { opener.focus(); } catch (e) {}
   };
   const render = (i) => {
     idx = Math.max(0, Math.min(slides.length - 1, i));
@@ -998,6 +1003,8 @@ function storyMode() {
   };
   document.addEventListener("keydown", onKey);
   render(0);
+  // pull focus into the dialog so keyboard users are inside the story, not behind it
+  try { ov.querySelector(".story-x").focus(); } catch (e) {}
 }
 
 /* ── lifetime journey card: the year-card renderer fed with all-time data ── */
