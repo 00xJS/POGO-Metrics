@@ -4,6 +4,28 @@
   publish = "pogo-metrics"
   command = ""
 
+# ── security headers ────────────────────────────────────────────────────────
+# The CSP makes the privacy promise browser-enforced, not just true: with
+# connect-src 'self', no script — ours, a tampered vendored lib, or an
+# injected one — can send parsed export data anywhere off-origin.
+[[headers]]
+  for = "/*"
+  [headers.values]
+    Content-Security-Policy = "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self'; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'"
+    X-Content-Type-Options = "nosniff"
+    X-Frame-Options = "DENY"
+    Referrer-Policy = "no-referrer"
+
+# ── caching ────────────────────────────────────────────────────────────────
+# vendor/ holds pinned library builds and textures that never change in place
+# (any upgrade lands under a new filename), so repeat visitors skip ~3MB of
+# revalidation round-trips. HTML/js/css stay on Netlify's revalidating default
+# and use ?v= query busting.
+[[headers]]
+  for = "/vendor/*"
+  [headers.values]
+    Cache-Control = "public, max-age=31536000, immutable"
+
 [[headers]]
   for = "/demo/*"
   [headers.values]

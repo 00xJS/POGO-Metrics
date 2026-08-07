@@ -248,7 +248,7 @@ main { max-width: 1100px; margin: 0 auto; padding: 0 24px; }
 #dropzone:hover { border-color: var(--accent); }
 #dropzone.drag { border-color: var(--accent2); background: rgba(255, 203, 5, .07); transform: scale(1.01); }
 #dropzone .dz-emoji { font-size: 46px; }
-#dropzone h3 { font-size: 23px; margin: 14px 0 6px; }
+#dropzone h2, #dropzone h3 { font-size: 23px; margin: 14px 0 6px; }
 #dropzone p { color: var(--ink-dim); font-size: 15px; }
 #dropzone .dz-or { color: var(--ink-faint); font-size: 13px; margin: 16px 0 4px; }
 #dropzone .dz-hint { margin-top: 18px; font-size: 13px; color: var(--ink-faint); }
@@ -271,7 +271,7 @@ main { max-width: 1100px; margin: 0 auto; padding: 0 24px; }
 }
 .det-head::-webkit-details-marker { display: none; }
 .det-head:hover { background: rgba(255, 255, 255, .03); }
-.det-head h3 { font-size: 18px; }
+.det-head h2, .det-head h3 { font-size: 18px; }
 .det-toggle {
   font-family: var(--mono); font-size: 12.5px; color: var(--ink-dim);
   display: inline-flex; align-items: center; gap: 6px;
@@ -740,4 +740,43 @@ footer .deck-line .sep { margin: 0 9px; opacity: .55; }
   .deck-list .lt-story { display: none; }
   .deck-list .num::before { content: "Fields: "; color: var(--ink-faint); }
   .deck-list .num { text-align: left; }
+}
+
+/* ═══════════════ 2026-08 upgrade: chapter nav, globe touch gate, misc ═══════════════ */
+
+/* chapter navigation — anchor chips under the results hero */
+.chapter-nav { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; margin: 4px 0 14px; }
+.ch-chip {
+  font-size: 13px; font-weight: 600; color: var(--ink-dim);
+  background: var(--panel); border: 1px solid var(--line); border-radius: 999px;
+  padding: 7px 13px; text-decoration: none; transition: color .12s, border-color .12s;
+}
+.ch-chip:hover { color: var(--ink); border-color: var(--accent); text-decoration: none; }
+
+/* locked-chapter upsell chips in the outro */
+.locked-chip { display: inline-block; margin: 4px 10px 0 0; font-size: 13.5px; }
+
+/* hour-of-week caption — names the peak in plain text (touch + AT reachable) */
+.hw-caption { margin-top: 10px; font-size: 13px; color: var(--ink-dim); }
+
+/* touch gate over the globe — swiping the page must never trap on the canvas */
+.globe-scrim {
+  position: absolute; left: 50%; bottom: 18px; transform: translateX(-50%);
+  z-index: 6; border: 1px solid var(--line); border-radius: 999px;
+  background: rgba(10, 13, 28, .85); color: var(--ink); font-weight: 600;
+  font-size: 13.5px; padding: 10px 16px; cursor: pointer; backdrop-filter: blur(6px);
+}
+
+/* the Layers HUD is a <details> so small screens can collapse it to a pill */
+.globe-hud-tr > summary { cursor: pointer; list-style: none; }
+.globe-hud-tr > summary::-webkit-details-marker { display: none; }
+.globe-hud-tr > summary.gh-title::after { content: " ▾"; opacity: .7; }
+.globe-hud-tr[open] > summary.gh-title::after { content: " ▴"; }
+.globe-hud-tr:not([open]) { padding: 8px 12px; }
+.globe-hud-tr:not([open]) > summary.gh-title { margin-bottom: 0; }
+
+@media (max-width: 560px) {
+  .globe-hud-tl { max-width: 44%; gap: 6px; padding: 8px; }
+  .gh-stat { min-width: 52px; }
+  .gh-stat .v { font-size: 13px; }
 }
