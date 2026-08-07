@@ -886,3 +886,24 @@ footer .deck-line .sep { margin: 0 9px; opacity: .55; }
     margin-top: 10px; background: var(--panel); border: 1px solid var(--line);
   }
 }
+
+/* then vs now — a compact delta table */
+.tvn-head, .tvn-row {
+  display: grid; grid-template-columns: 1fr auto 24px auto 68px;
+  gap: 10px; align-items: center; padding: 7px 0;
+  border-bottom: 1px solid var(--line);
+}
+.tvn-head { color: var(--ink-faint); font-size: 11.5px; text-transform: uppercase; letter-spacing: .08em; border-bottom-color: transparent; }
+.tvn-l { color: var(--ink-dim); font-size: 13.5px; font-weight: 600; }
+.tvn-a, .tvn-b { font-size: 13.5px; font-variant-numeric: tabular-nums; }
+.tvn-a { color: var(--ink-faint); }
+.tvn-b { color: var(--ink); font-weight: 700; }
+.tvn-arrow { text-align: center; font-size: 11px; }
+.tvn-d { text-align: right; font-size: 12.5px; font-weight: 700; font-family: var(--mono); }
+.tvn-arrow.up, .tvn-d.up { color: var(--green); }
+.tvn-arrow.down, .tvn-d.down { color: var(--orange); }
+.tvn-arrow.flat, .tvn-d.flat { color: var(--ink-faint); }
+@media (max-width: 560px) {
+  .tvn-head, .tvn-row { grid-template-columns: 1fr auto 18px auto 56px; gap: 6px; }
+  .tvn-l { font-size: 12.5px; }
+}

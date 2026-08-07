@@ -161,7 +161,7 @@ function freshState() {
     party: { received: 0, sent: 0 },
     spend: { coinsBought: 0, coinsSpent: 0, purchases: 0, spendEvents: 0, items: {}, cur: {}, vendor: {}, boughtMonthly: {}, spentMonthly: {} },
     fitness: { daily: {} },
-    sessions: { monthly: {}, devices: {}, cities: {}, total: 0 },
+    sessions: { monthly: {}, devices: {}, cities: {}, places: {}, total: 0 },
     installs: { count: 0, first: null, devices: {} },
     liveEvents: [],
     wayfarer: null,
@@ -657,7 +657,18 @@ function parseSessions(text) {
     const city = (row.City || "").trim();
     const state = (row.State || "").trim();
     const place = [city, state].filter(Boolean).join(", ");
-    if (place) S.cities[place] = (S.cities[place] || 0) + 1;
+    if (place) {
+      S.cities[place] = (S.cities[place] || 0) + 1;
+      // Keep WHEN each place was seen, not just how often — a city with dates
+      // attached is a memory; a bare count is inventory.
+      if (ts) {
+        const rec = S.places[place] || (S.places[place] = { n: 0, first: ts, last: ts, days: new Set(), state });
+        rec.n++;
+        if (ts < rec.first) rec.first = ts;
+        if (ts > rec.last) rec.last = ts;
+        rec.days.add(ts.toISOString().slice(0, 10));
+      }
+    }
     S.total++;
   }
   if (S.total) markLoaded("App Sessions");
@@ -1827,10 +1838,76 @@ function renderYearOverYear() {
     });
   });
 
+  if (multi) inner += renderThenVsNow(years, data);
+
   const sub = multi
     ? `${years.length} years side by side — ${years[0]} to ${years[years.length - 1]}. Tap a metric to compare, and download any year as a shareable card.`
     : `Your ${years[0]} in one shareable card — download it and flex.`;
   return moduleHTML("📅", multi ? "Year over year" : "Your year in one card", sub, inner);
+}
+
+/* ── then vs now ──
+ * Absolute stacked timelines hide MIX shift: a quieter year just looks shorter,
+ * so a spins-heavy player turning into a raid-heavy player is invisible. This
+ * compares the first and last year as percentages of each year's own total. */
+function renderThenVsNow(years, data) {
+  const first = years[0], last = years[years.length - 1];
+  const A = data[first], B = data[last];
+  if (!A || !B || !A.events || !B.events) return "";
+
+  const METRICS = [
+    ["Logged actions", (w) => w.events],
+    ["Pokémon caught", (w) => catchesOf(w.kinds)],
+    ["Spins", (w) => w.kinds["Spins"] || 0],
+    ["Raids", (w) => w.kinds["Raids"] || 0],
+    ["Active days", (w) => w.activeDays],
+    ["Longest streak", (w) => w.streak],
+  ].filter(([, fn]) => fn(A) || fn(B));
+
+  const rows = METRICS.map(([label, fn]) => {
+    const a = fn(A), b = fn(B);
+    const pct = a ? Math.round((b - a) / a * 100) : null;
+    const dir = b > a ? "up" : b < a ? "down" : "flat";
+    const arrow = dir === "up" ? "▲" : dir === "down" ? "▼" : "＝";
+    return `<div class="tvn-row">
+      <span class="tvn-l">${esc(label)}</span>
+      <span class="tvn-a mono">${fmt(a)}</span>
+      <span class="tvn-arrow ${dir}">${arrow}</span>
+      <span class="tvn-b mono">${fmt(b)}</span>
+      <span class="tvn-d ${dir}">${pct === null ? "new" : (pct > 0 ? "+" : "") + pct + "%"}</span>
+    </div>`;
+  }).join("");
+
+  // mix shift — each year normalised to 100% of its own actions
+  const kinds = [...new Set([...Object.keys(A.kinds), ...Object.keys(B.kinds)])]
+    .filter((k) => SERIES_COLORS[k] && (A.kinds[k] || B.kinds[k]));
+  const cId = uid();
+  const share = (w, k) => (w.events ? (w.kinds[k] || 0) / w.events * 100 : 0);
+  later(() => newChart(cId, {
+    type: "bar",
+    data: {
+      labels: [first, last],
+      datasets: kinds.map((k) => ({
+        label: k, backgroundColor: SERIES_COLORS[k], stack: "mix", borderRadius: 2,
+        data: [share(A, k), share(B, k)],
+      })),
+    },
+    options: {
+      indexAxis: "y",
+      plugins: {
+        title: { display: true, text: "What your play is made of (share of each year)" },
+        tooltip: { callbacks: { label: (c) => `${c.dataset.label}: ${c.raw.toFixed(1)}%` } },
+      },
+      scales: { x: { stacked: true, max: 100, title: { display: true, text: "% of that year's actions" } }, y: { stacked: true, grid: { display: false } } },
+    },
+  }));
+
+  return `<hr class="mod-divider"><div style="font-weight:700;margin-bottom:2px">Then vs now — ${first} against ${last}</div>
+    <div class="mod-sub" style="margin-bottom:10px">Your first logged year beside your most recent one.</div>
+    <div class="tvn-head"><span class="tvn-l"></span><span class="tvn-a">${first}</span><span class="tvn-arrow"></span><span class="tvn-b">${last}</span><span class="tvn-d">change</span></div>
+    ${rows}
+    <div style="margin-top:16px">${chartWrap(cId, "short")}</div>
+    <div class="hw-caption">${last === String(new Date().getUTCFullYear()) ? "Note: " + last + " is still in progress, so its totals are partial — the mix percentages are still fair to compare." : "Niantic's export only reaches back a few years, so “then” means the earliest year in your files."}</div>`;
 }
 
 /* Shareable year-recap image — drawn to a canvas from the data so it
@@ -2774,7 +2851,65 @@ function renderSessions() {
     ${devices.length ? `<div><div style="font-weight:700;margin-bottom:10px">Devices you played on</div>${rankList(devices)}</div>` : "<div></div>"}
     ${cities.length ? `<div><div style="font-weight:700;margin-bottom:10px">Where you logged in</div>${rankList(cities)}</div>` : "<div></div>"}
   </div>`;
+  inner += renderTravelLog();
   return moduleHTML("📱", "Behind the screen", `${fmt(S.total)} app sessions across your devices and cities. (We never read the IPs or ad-IDs in these files.)`, inner);
+}
+
+/* ── travel log: the globe knows coordinates, this knows PLACE NAMES ──
+ * Home is simply where you play most. Everywhere else, grouped into trips by
+ * runs of consecutive days, is somewhere you took the game. Deliberately no
+ * "furthest trip" — a city name carries no coordinates, so any distance
+ * claim here would be invented. */
+function renderTravelLog() {
+  const places = STATE.sessions.places;
+  const names = Object.keys(places);
+  if (names.length < 2) return "";
+  const ranked = names.map((p) => [p, places[p]]).sort((a, b) => b[1].n - a[1].n);
+  const [homeName, home] = ranked[0];
+  const away = ranked.slice(1);
+  if (!away.length) return "";
+
+  /* Deliberately NOT counting "trips". Real exports report the login city, and
+   * an ordinary metro area spans several of them (Phoenix and Buckeye on
+   * alternating days is not two holidays), so any per-city run count would
+   * invent a travel story. Days away from home is a fact; a trip is a guess. */
+  const states = new Set();
+  const homeDays = home.days;
+  const awayDays = new Set();
+  away.forEach(([, rec]) => {
+    if (rec.state) states.add(rec.state);
+    rec.days.forEach((d) => { if (!homeDays.has(d)) awayDays.add(d); });
+  });
+  if (home.state) states.add(home.state);
+
+  // longest unbroken run of days spent entirely away from home
+  const sortedAway = [...awayDays].sort();
+  let longest = { len: 0, start: null };
+  let runLen = 0, runStart = null, prev = null;
+  for (const d of sortedAway) {
+    if (prev && isoShift(prev, 1) === d) runLen++;
+    else { runLen = 1; runStart = d; }
+    if (runLen > longest.len) longest = { len: runLen, start: runStart };
+    prev = d;
+  }
+
+  const rows = away.slice(0, 8).map(([name, rec]) => [
+    name + " · " + rec.days.size + " day" + (rec.days.size === 1 ? "" : "s"),
+    rec.n,
+  ]);
+  return `<hr class="mod-divider"><div style="font-weight:700;margin-bottom:2px">Your travel log</div>
+    <div class="mod-sub" style="margin-bottom:10px">
+      Home base is <b>${esc(homeName)}</b> — ${fmt(home.n)} of your sessions.
+      You've also opened the game in <b>${fmt(away.length)}</b> other place${away.length === 1 ? "" : "s"}${
+        states.size > 1 ? ` across <b>${fmt(states.size)}</b> states or regions` : ""},
+      on <b>${fmt(awayDays.size)}</b> day${awayDays.size === 1 ? "" : "s"} away from home.${
+        longest.len > 1
+          ? ` Your longest unbroken stretch away was <b>${longest.len} days</b>, from ${fmtDate(parseTS(longest.start))}.`
+          : ""}
+    </div>
+    ${rankList(rows, (v) => fmt(v) + " sessions")}
+    <div class="hw-caption">Places come from the login city Niantic records with each session — there are no coordinates here,
+      so this is "where you opened the game", not a GPS trail. Neighbouring towns in one metro area show up as separate places.</div>`;
 }
 
 /* ── wayfarer ── */
