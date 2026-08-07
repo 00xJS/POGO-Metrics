@@ -678,9 +678,26 @@ function rankList(items, fmtVal = (v) => fmt(v)) {
     <div class="rank-bar"><i style="width:${((v / max) * 100).toFixed(1)}%"></i></div>`).join("")}</div>`;
 }
 function chartWrap(id, cls = "") { return `<div class="chart-wrap ${cls}"><canvas id="${id}"></canvas></div>`; }
+/* Chart.js is lazy-loaded, so its defaults can only be themed once the library
+ * is actually present — doing it at DOMContentLoaded silently did nothing and
+ * left every chart with Chart.js's own low-contrast #666 text, the wrong font,
+ * and animations running for reduced-motion users. */
+let CHART_THEMED = false;
+function themeCharts() {
+  if (CHART_THEMED || !window.Chart) return;
+  CHART_THEMED = true;
+  Chart.defaults.color = C.dim;
+  Chart.defaults.font.family = "'Outfit', system-ui, sans-serif";
+  Chart.defaults.borderColor = C.grid;
+  Chart.defaults.plugins.legend.labels.boxWidth = 12;
+  Chart.defaults.plugins.legend.labels.boxHeight = 12;
+  if (REDUCED_MOTION) Chart.defaults.animation = false;
+}
+
 function newChart(id, cfg) {
   const ctx = $(id);
   if (!ctx) return;
+  themeCharts();
   cfg.options = cfg.options || {};
   cfg.options.maintainAspectRatio = false;
   // canvases are invisible to assistive tech without an explicit name
@@ -1315,14 +1332,18 @@ function longestStreakRange(isoDays) {
   }
   return best;
 }
-/* shift an hour-of-week grid by whole hours (UTC → viewer's clock) */
+/* shift an hour-of-week grid by whole hours (UTC → viewer's clock).
+ * The offset must stay SIGNED: normalising -7 to +17 gives the right hour but
+ * the wrong weekday, because -7 moves an event back a day while +17 moves it
+ * forward one. Keep the sign and let floor() decide the day. */
 function gridShift(grid, offsetHours) {
-  const off = ((Math.round(offsetHours) % 24) + 24) % 24;
+  const off = Math.round(offsetHours) % 24;
   if (!off) return grid;
+  const mod = (n, m) => ((n % m) + m) % m;
   const out = Array.from({ length: 7 }, () => Array(24).fill(0));
   for (let d = 0; d < 7; d++) for (let h = 0; h < 24; h++) {
     const nh = h + off;
-    out[(d + Math.floor(nh / 24)) % 7][nh % 24] += grid[d][h];
+    out[mod(d + Math.floor(nh / 24), 7)][mod(nh, 24)] += grid[d][h];
   }
   return out;
 }
@@ -2529,14 +2550,6 @@ function renderWayfarer() {
 
 /* ───────────────────────────── wiring ───────────────────────────── */
 document.addEventListener("DOMContentLoaded", () => {
-  if (window.Chart) {
-    Chart.defaults.color = C.dim;
-    Chart.defaults.font.family = "'Outfit', system-ui, sans-serif";
-    Chart.defaults.borderColor = C.grid;
-    Chart.defaults.plugins.legend.labels.boxWidth = 12;
-    Chart.defaults.plugins.legend.labels.boxHeight = 12;
-    if (REDUCED_MOTION) Chart.defaults.animation = false;
-  }
   // The upload UI only exists on metrics.html; the live-example page is
   // results-only, so wire it all up behind a dropzone check.
   const dz = $("dropzone");
