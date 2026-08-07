@@ -22,8 +22,13 @@
   <link rel="canonical" href="https://pogo-metrics.netlify.app/">
 
   <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>&#128506;</text></svg>">
+  <link rel="icon" type="image/png" sizes="32x32" href="favicon-32.png">
+  <link rel="apple-touch-icon" href="apple-touch-icon.png">
+  <link rel="manifest" href="site.webmanifest">
+  <link rel="preload" href="vendor/fonts/c8e7a734b1.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="preload" href="vendor/fonts/1cd702cd25.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="stylesheet" href="vendor/fonts/fonts.css" />
-  <link rel="stylesheet" href="css/style.css?v=20260619d" />
+  <link rel="stylesheet" href="css/style.css?v=20260806" />
 </head>
 <body>
   <nav id="topnav" data-active="home"></nav>
@@ -97,6 +102,11 @@
         only cover a short recent window, so the sooner you request after a big trip or event, the
         richer that part of your story will be. Not ready? <a href="demo.html">See a live example first →</a>
       </div>
+      <div class="notice" style="margin-top:12px">
+        <b>Just sent your request?</b> The wait is up to a week — and the download link Niantic sends
+        expires after 7 days. <a href="#" id="ics-reminder">📅 Download a calendar reminder</a> to
+        check back, and bookmark this page now so your story is one tap away.
+      </div>
     </section>
 
     <!-- ───────────────────────── privacy principles ───────────────────────── -->
@@ -167,8 +177,35 @@
     </p>
   </footer>
 
-  <script src="js/nav.js?v=20260619d"></script>
-  <script src="js/catalog.js?v=20260619d"></script>
-  <script src="js/catalog-ui.js?v=20260802"></script>
+  <script defer src="js/nav.js?v=20260806"></script>
+  <script defer src="js/catalog.js?v=20260806"></script>
+  <script defer src="js/catalog-ui.js?v=20260806"></script>
+  <script>
+    // "Check for my Niantic export" — a 7-days-from-now reminder, generated on
+    // the device as a plain .ics download. No calendar service, no request.
+    document.addEventListener("DOMContentLoaded", () => {
+      const a = document.getElementById("ics-reminder");
+      if (!a) return;
+      a.addEventListener("click", (e) => {
+        e.preventDefault();
+        const d = new Date(Date.now() + 7 * 86400000);
+        const ymd = d.toISOString().slice(0, 10).replace(/-/g, "");
+        const stamp = new Date().toISOString().replace(/[-:]/g, "").slice(0, 15) + "Z";
+        const ics = [
+          "BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//POGO Metrics//EN",
+          "BEGIN:VEVENT", "UID:" + stamp + "@pogo-metrics",
+          "DTSTAMP:" + stamp, "DTSTART;VALUE=DATE:" + ymd,
+          "SUMMARY:Check for your Pokémon GO data export",
+          "DESCRIPTION:Niantic's reply usually lands within a week — and the download link they send expires 7 days later. Grab the ZIP\\, then visualize it at https://pogo-metrics.netlify.app/",
+          "URL:https://pogo-metrics.netlify.app/", "END:VEVENT", "END:VCALENDAR",
+        ].join("\r\n");
+        const url = URL.createObjectURL(new Blob([ics], { type: "text/calendar" }));
+        const dl = document.createElement("a");
+        dl.href = url; dl.download = "pogo-metrics-reminder.ics";
+        document.body.appendChild(dl); dl.click(); dl.remove();
+        setTimeout(() => URL.revokeObjectURL(url), 4000);
+      });
+    });
+  </script>
 </body>
 </html>

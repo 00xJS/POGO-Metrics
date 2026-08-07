@@ -63,14 +63,24 @@ falls back to a flat Leaflet heatmap with the same data.
   rather than claiming otherwise.
 - The sensitivity ratings in the catalog warn the user *before* they open anything.
 
-## Vendored, offline-friendly
+## Vendored, offline-capable
 
 Chart.js, Leaflet + leaflet-heat, globe.gl, the Outfit/JetBrains Mono fonts, the globe
 textures and `countries.geo.json`/`us-states.geo.json` are all vendored under `vendor/`.
-There are **no runtime network calls at all** — every request the site makes is same-origin.
+There are **no runtime network calls at all** — every request the site makes is same-origin,
+and the Netlify `Content-Security-Policy` (`connect-src 'self'`, see `netlify.toml`) makes
+that browser-enforced rather than merely promised.
 The flat-map fallback deliberately ships without a remote tile layer: a third-party basemap
 would leak the viewer's IP plus tile coordinates centred on their own hotspots, so the map is
 drawn from the vendored country outlines instead.
+
+The heavy libraries are **not** loaded at page open: `app.js` injects Chart.js — and
+globe.gl *or* Leaflet, whichever the data needs — only when a dashboard is actually built,
+so the upload page is interactive immediately.
+
+`sw.js` (registered by `nav.js` on the deployed site only, never on localhost) makes the
+app installable and fully offline-capable — parsing an export works in airplane mode, which
+is the strongest demonstration of the no-upload claim.
 
 ## Local preview
 

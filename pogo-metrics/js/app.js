@@ -49,10 +49,14 @@ const base = (p) => (p || "").split("/").pop();
 let UID = 0;
 const uid = () => "u" + ++UID;
 
-function monthKey(d) { return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0"); }
+/* All bucketing runs in UTC — the export's own timezone. Local getters here
+ * would smear events near UTC month/day boundaries into neighbouring buckets
+ * (even fabricating phantom years) and make the same export show different
+ * numbers depending on the viewer's timezone. */
+function monthKey(d) { return d.getUTCFullYear() + "-" + String(d.getUTCMonth() + 1).padStart(2, "0"); }
 function fmtMonth(k) { const [y, m] = k.split("-"); return MONTHS[+m - 1] + " ’" + y.slice(2); }
-function fmtDate(d) { return MONTHS[d.getMonth()] + " " + d.getDate() + ", " + d.getFullYear(); }
-function weekdayMon(d) { return (d.getDay() + 6) % 7; } // 0 = Monday
+function fmtDate(d) { return MONTHS[d.getUTCMonth()] + " " + d.getUTCDate() + ", " + d.getUTCFullYear(); }
+function weekdayMon(d) { return (d.getUTCDay() + 6) % 7; } // 0 = Monday
 
 /* full inclusive list of month keys from first→last (fills gaps with zeros) */
 function monthSpan(keys) {
@@ -94,7 +98,7 @@ function haversine(la1, lo1, la2, lo2) {
 function parseRows(text, name) {
   const tab = /\.tsv$/i.test(name);
   const delim = tab ? "\t" : ",";
-  const lines = text.replace(/\r\n/g, "\n").replace(/\r/g, "\n").split("\n").filter((l) => l.length);
+  const lines = text.replace(/^﻿/, "").replace(/\r\n/g, "\n").replace(/\r/g, "\n").split("\n").filter((l) => l.length);
   if (!lines.length) return { header: [], rows: [] };
   const splitLine = tab
     ? (l) => l.split("\t")
@@ -145,19 +149,45 @@ function freshState() {
   };
 }
 let STATE = freshState();
-let RAW = [];               // [{ name, text, entry }]
+let RAW = [];               // [{ name, text, entry, oversize }]
 let CHARTS = [];
 let MAP = null;
 let GLOBE = null;
+let GLOBE_CLEANUP = [];     // window listeners / observers tied to the current globe
+let BUILDING = false;
+
+/* Heavy vendor libraries load on demand, not at page open — the upload UI
+ * must be interactive the moment the page paints, and most visits never need
+ * the 1.4MB globe bundle at all. */
+const _libLoads = {};
+function ensureScript(src) {
+  if (_libLoads[src]) return _libLoads[src];
+  return (_libLoads[src] = new Promise((res, rej) => {
+    const s = document.createElement("script");
+    s.src = src;
+    s.onload = res;
+    s.onerror = () => { delete _libLoads[src]; rej(new Error("failed to load " + src)); };
+    document.head.appendChild(s);
+  }));
+}
+function ensureCSS(href) {
+  if (_libLoads[href]) return _libLoads[href];
+  return (_libLoads[href] = new Promise((res) => {
+    const l = document.createElement("link");
+    l.rel = "stylesheet"; l.href = href;
+    l.onload = res; l.onerror = res;
+    document.head.appendChild(l);
+  }));
+}
 
 /* ───────────────────────────── ingest ───────────────────────────── */
 const $ = (id) => document.getElementById(id);
 
-function showError(msg) {
+function showError(msg, trustedHTML) {
   const el = $("upload-error");
   if (!el) { console.warn(msg); return; }
   el.style.display = "block";
-  el.innerHTML = `<b>Heads up:</b> ${esc(msg)}`;
+  el.innerHTML = `<b>Heads up:</b> ${trustedHTML ? msg : esc(msg)}`;
 }
 function clearError() { const el = $("upload-error"); if (el) el.style.display = "none"; }
 
@@ -191,16 +221,30 @@ async function collectFiles(items) {
 
 async function ingest(files) {
   clearError();
-  const list = [...files].filter((f) => f && f.name && /\.(tsv|csv|txt|json)$/i.test(f.name));
-  if (!list.length) { showError("No .tsv / .csv / .txt / .json files found in what you dropped."); return; }
+  const all = [...files].filter((f) => f && f.name);
+  const list = all.filter((f) => /\.(tsv|csv|txt|json)$/i.test(f.name));
+  if (!list.length) {
+    // The single most common first attempt: dropping the ZIP Niantic sent, unopened.
+    if (all.some((f) => /\.zip$/i.test(f.name)))
+      showError('That looks like the ZIP file Niantic sent you. Unzip it first — using the password from their message — then drop the unzipped folder here. Stuck? <a href="index.html#request">See the request guide →</a>', true);
+    else showError("No .tsv / .csv / .txt / .json files found in what you dropped.");
+    return;
+  }
   let added = 0;
   for (const f of list) {
-    if (f.size > 80 * 1024 * 1024) continue; // skip absurdly large files
-    let text;
-    try { text = await f.text(); } catch (e) { continue; }
     const name = base(f.name);
     const entry = window.catalogFor(name);
     const existing = RAW.findIndex((r) => r.name.toLowerCase() === name.toLowerCase());
+    // Too large to read in a browser tab — keep it visible in the list instead
+    // of silently vanishing, so the user knows why that chapter is missing.
+    if (f.size > 80 * 1024 * 1024) {
+      const rec = { name, text: null, entry, oversize: Math.round(f.size / 1024 / 1024) };
+      if (existing >= 0) RAW[existing] = rec; else RAW.push(rec);
+      added++;
+      continue;
+    }
+    let text;
+    try { text = await f.text(); } catch (e) { continue; }
     const rec = { name, text, entry };
     if (existing >= 0) RAW[existing] = rec; else RAW.push(rec);
     added++;
@@ -216,18 +260,35 @@ async function loadDemo() {
   const btn = $("demo-btn");
   if (btn) { btn.disabled = true; btn.textContent = "Loading demo…"; }
   try {
-    const man = await fetch("demo/manifest.json").then((r) => r.json());
-    const files = [];
-    for (const p of man.files) {
-      const t = await fetch("demo/" + p).then((r) => r.text());
-      files.push(new File([t], p.split("/").pop()));
-    }
+    const man = await fetch("demo/manifest.json").then((r) => {
+      if (!r.ok) throw new Error("manifest.json " + r.status);
+      return r.json();
+    });
+    // All in parallel — HTTP/2 serves the whole sample export in one round trip.
+    const files = await Promise.all(man.files.map(async (p) => {
+      const r = await fetch("demo/" + p);
+      if (!r.ok) throw new Error(p + " " + r.status);
+      return new File([await r.text()], p.split("/").pop());
+    }));
     RAW = [];
     await ingest(files);
     build();
   } catch (e) {
     console.warn(e);
-    showError("Couldn't load the demo dataset. Try again, or upload your own files.");
+    showError("Couldn't load the demo dataset (" + (e && e.message ? e.message : "network error") + "). Check your connection and try again — or upload your own files.");
+    // On the dedicated demo page there's no upload UI — give a real retry button
+    // instead of stranding the visitor on a dead spinner.
+    const res = window.DEMO_PAGE && $("results");
+    if (res) {
+      res.innerHTML = `<div class="empty-state"><div class="es-emoji">📡</div>
+        <h3 style="margin:10px 0 6px">The example couldn't load</h3>
+        <p>The sample export didn't come through — usually a connection blip.</p></div>`;
+      const rb = document.createElement("button");
+      rb.className = "btn btn-teal"; rb.type = "button"; rb.style.marginTop = "14px";
+      rb.textContent = "↻ Try again";
+      rb.onclick = () => { res.innerHTML = `<div class="empty-state"><div class="gl-spin" style="margin:0 auto 14px"></div><p>Building the example…</p></div>`; loadDemo(); };
+      res.querySelector(".empty-state").appendChild(rb);
+    }
   } finally {
     if (btn) { btn.disabled = false; btn.textContent = "See a live demo"; }
   }
@@ -245,16 +306,17 @@ function renderDetected() {
       if (r.entry.story) { cls = "ok"; status = "Ready"; }
       else { cls = "skip"; status = "Skipped (privacy)"; }
     }
+    if (r.oversize) { cls = "skip"; status = `Too large (${r.oversize} MB) — skipped`; }
     return `<div class="file-chip ${cls}">
       <span class="fc-icon">${icon}</span>
       <div class="fc-main"><div class="fc-name">${esc(name)}</div><div class="fc-file">${esc(r.name)} · ${esc(note)}</div></div>
-      <span class="fc-status">${status}</span>
+      <span class="fc-status">${esc(status)}</span>
     </div>`;
   }).join("");
   el.innerHTML = `
     <details class="det-files">
       <summary class="det-head">
-        <h3>${RAW.length} file${RAW.length > 1 ? "s" : ""} ready</h3>
+        <h2>${RAW.length} file${RAW.length > 1 ? "s" : ""} ready</h2>
         <span class="det-toggle">Review files</span>
       </summary>
       <div class="det-list">${rows}</div>
@@ -267,7 +329,7 @@ function routeFile(name, text) {
   const n = name.toLowerCase();
   try {
     if (/gameplay\.txt$/i.test(n)) return parseGameplay(text);
-    if (PJ_EVENTS.some(([re]) => re.test(n)) || /^(pokestop_spin|sfida_capture|map_pokemon_encounter|join_raid_lobby|gym_battle|feed_pokemon|deploy_pokemon|incense_encounter|lure_encounter)\d?\.csv$/i.test(n)) {
+    if (PJ_EVENTS.some(([re]) => re.test(n)) || /^(pokestop_spin|sfida_capture|map_pokemon_encounter|join_raid_lobby|gym_battle|feed_pokemon|deploy_pokemon|incense_encounter|lure_encounter)\d*\.csv$/i.test(n)) {
       const hit = PJ_EVENTS.find(([re]) => re.test(n));
       if (hit) return parsePlayerJourney(hit[1], text);
     }
@@ -365,7 +427,7 @@ function parsePlayerJourney(label, text) {
     if (!e.last || ts > e.last) e.last = ts;
     const mk = monthKey(ts);
     (e.byMonth[mk] = e.byMonth[mk] || {})[label] = (e.byMonth[mk][label] || 0) + 1;
-    e.hourweek[weekdayMon(ts)][ts.getHours()]++;
+    e.hourweek[weekdayMon(ts)][ts.getUTCHours()]++;
     const iso = ts.toISOString().slice(0, 10);
     e.days.add(iso);
     e.dayCounts[iso] = (e.dayCounts[iso] || 0) + 1;
@@ -388,7 +450,7 @@ function parsePlayerJourney(label, text) {
         if (d > e.raidMaxKm) e.raidMaxKm = d;
         if (d >= 50) {
           e.raidRemote++;
-          e.remoteRaidsByYear[ts.getFullYear()] = (e.remoteRaidsByYear[ts.getFullYear()] || 0) + 1;
+          e.remoteRaidsByYear[ts.getUTCFullYear()] = (e.remoteRaidsByYear[ts.getUTCFullYear()] || 0) + 1;
           const ak = `${lat.toFixed(1)},${lon.toFixed(1)},${glat.toFixed(1)},${glon.toFixed(1)}`;
           e.raidArcs.set(ak, (e.raidArcs.get(ak) || 0) + 1);
           const gk = `${glat.toFixed(1)},${glon.toFixed(1)}`;
@@ -603,55 +665,123 @@ function newChart(id, cfg) {
   if (!ctx) return;
   cfg.options = cfg.options || {};
   cfg.options.maintainAspectRatio = false;
+  // canvases are invisible to assistive tech without an explicit name
+  const label = (cfg.options.plugins && cfg.options.plugins.title && cfg.options.plugins.title.text)
+    || (cfg.data && cfg.data.datasets && cfg.data.datasets[0] && cfg.data.datasets[0].label) || "Data chart";
+  ctx.setAttribute("role", "img");
+  ctx.setAttribute("aria-label", label);
   const ch = new Chart(ctx, cfg);
   CHARTS.push(ch);
   return ch;
 }
 
 /* ───────────────────────────── render ───────────────────────────── */
-function build() {
-  if (!RAW.length) return;
-  STATE = freshState();
+/* Destroy everything the last build created — charts, map, globe, and any
+ * window-level listeners/observers the globe registered. Shared by rebuilds,
+ * "Start over", and "Clear". Without this the WebGL render loop keeps
+ * spinning at 60fps against a detached canvas. */
+function teardown() {
   CHARTS.forEach((c) => { try { c.destroy(); } catch (e) {} });
   CHARTS = [];
   if (MAP) { try { MAP.remove(); } catch (e) {} MAP = null; }
   if (GLOBE) { try { GLOBE._destructor(); } catch (e) {} GLOBE = null; }
+  GLOBE_CLEANUP.forEach((fn) => { try { fn(); } catch (e) {} });
+  GLOBE_CLEANUP = [];
+}
 
-  RAW.forEach((r) => routeFile(r.name, r.text));
-
+async function build() {
+  if (!RAW.length || BUILDING) return;
+  BUILDING = true;
+  const btn = $("build-btn");
+  const btnLabel = btn ? btn.textContent : "";
+  if (btn) { btn.disabled = true; btn.textContent = "Building…"; }
   const res = $("results");
   res.classList.remove("results-hidden");
-  res.innerHTML = "";
+  res.innerHTML = `<div class="empty-state"><div class="gl-spin" style="margin:0 auto 14px"></div>
+    <p id="build-progress">Reading your files…</p></div>`;
+  try {
+    STATE = freshState();
+    teardown();
 
-  if (!STATE.loaded.length) {
-    res.innerHTML = `<div class="empty-state"><div class="es-emoji">🤔</div>
-      <h3 style="margin:10px 0 6px">Nothing to visualise yet</h3>
-      <p>None of those files had a story we can tell. Try adding files like <code>Gameplay.txt</code>,
-      <code>FriendList.tsv</code>, or your <code>Player_Journey</code> folder.</p></div>`;
+    // Kick off the libraries this build will need while we parse.
+    const libWaits = [ensureScript("vendor/chart.umd.min.js")];
+
+    // Yield between files via MessageChannel, NOT setTimeout — background tabs
+    // clamp timers to as little as once per minute, which would turn a 22-file
+    // build into a 20-minute crawl if the user switches tabs mid-build.
+    const nextTick = () => new Promise((res) => { const mc = new MessageChannel(); mc.port1.onmessage = () => res(); mc.port2.postMessage(0); });
+    const prog = $("build-progress");
+    for (const r of RAW) {
+      if (r.text == null) continue; // oversize placeholder
+      if (prog) prog.textContent = `Reading ${r.name}…`;
+      await nextTick(); // let the progress line paint without timer throttling
+      routeFile(r.name, r.text);
+    }
+
+    const needGeo = STATE.ev.geo.size > 0 || STATE.trail.length > 0;
+    if (needGeo) {
+      if (_webglOK()) libWaits.push(ensureScript("vendor/globe.gl.min.js"));
+      else libWaits.push(ensureCSS("vendor/leaflet.css")
+        .then(() => ensureScript("vendor/leaflet.js"))
+        .then(() => ensureScript("vendor/leaflet-heat.js")));
+    }
+    if (prog) prog.textContent = "Drawing your story…";
+    await Promise.all(libWaits.map((p) => p.catch((e) => console.warn(e))));
+
+    res.innerHTML = "";
+
+    if (!STATE.loaded.length) {
+      res.innerHTML = `<div class="empty-state"><div class="es-emoji">🤔</div>
+        <h3 style="margin:10px 0 6px">Nothing to visualise yet</h3>
+        <p>None of those files had a story we can tell. Try adding files like <code>Gameplay.txt</code>,
+        <code>FriendList.tsv</code>, or your <code>Player_Journey</code> folder.</p></div>`;
+      res.scrollIntoView({ behavior: scrollBehavior() });
+      return;
+    }
+
+    res.insertAdjacentHTML("beforeend", resHero());
+    // lead with the trainer card → adventure log → year-over-year → world → social → money → body → tech
+    safe(renderTrainer);
+    safe(renderActivity);
+    safe(renderYearOverYear);
+    safe(renderWorld);
+    safe(renderSocial);
+    safe(renderSpending);
+    safe(renderFitness);
+    safe(renderLiveEvents);
+    safe(renderSessions);
+    safe(renderWayfarer);
+
+    // chapter navigation — anchors into each module, right under the hero
+    const mods = [...res.querySelectorAll(".module")];
+    if (mods.length >= 3) {
+      const chips = mods.map((m) => {
+        const h = m.querySelector(".mod-head h3");
+        const icon = m.querySelector(".mod-icon");
+        const t = h ? h.textContent.trim() : "Chapter";
+        m.id = "ch-" + t.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+        return `<a class="ch-chip" href="#${m.id}">${icon ? icon.textContent + " " : ""}${esc(t)}</a>`;
+      }).join("");
+      res.querySelector(".res-hero").insertAdjacentHTML("afterend",
+        `<nav class="chapter-nav" aria-label="Chapters">${chips}</nav>`);
+    }
+
+    res.insertAdjacentHTML("beforeend", outro());
+
+    // wire up post-render bits (charts/maps were referenced by id)
+    POST.forEach((fn) => { try { fn(); } catch (e) { console.warn(e); } });
+    POST = [];
+
+    wireToolbar();
+    // move focus to the story so keyboard/screen-reader users land where the action is
+    const hero = res.querySelector(".res-hero h2");
+    if (hero) { hero.setAttribute("tabindex", "-1"); try { hero.focus({ preventScroll: true }); } catch (e) {} }
     res.scrollIntoView({ behavior: scrollBehavior() });
-    return;
+  } finally {
+    BUILDING = false;
+    POST = [];
+    if (btn) { btn.disabled = false; btn.textContent = btnLabel; }
   }
-
-  res.insertAdjacentHTML("beforeend", resHero());
-  // lead with the trainer card → adventure log → year-over-year → world → social → money → body → tech
-  safe(renderTrainer);
-  safe(renderActivity);
-  safe(renderYearOverYear);
-  safe(renderWorld);
-  safe(renderSocial);
-  safe(renderSpending);
-  safe(renderFitness);
-  safe(renderLiveEvents);
-  safe(renderSessions);
-  safe(renderWayfarer);
-  res.insertAdjacentHTML("beforeend", outro());
-
-  // wire up post-render bits (charts/maps were referenced by id)
-  POST.forEach((fn) => { try { fn(); } catch (e) { console.warn(e); } });
-  POST = [];
-
-  wireToolbar();
-  res.scrollIntoView({ behavior: scrollBehavior() });
 }
 let POST = [];
 function later(fn) { POST.push(fn); }
@@ -687,11 +817,40 @@ function resHero() {
 function wireToolbar() {
   const a = $("addmore-btn"), r = $("restart-btn");
   if (a) a.onclick = () => $("upload-section").scrollIntoView({ behavior: scrollBehavior() });
-  if (r) r.onclick = () => { RAW = []; renderDetected(); $("results").classList.add("results-hidden"); $("results").innerHTML = ""; $("upload-section").scrollIntoView({ behavior: scrollBehavior() }); };
+  if (r) r.onclick = () => {
+    // two-tap confirm — a mis-tap here would throw away minutes of file-picking
+    if (!r.dataset.armed) {
+      r.dataset.armed = "1";
+      r.textContent = "⚠ Really start over?";
+      setTimeout(() => { if (r.isConnected) { delete r.dataset.armed; r.textContent = "↺ Start over"; } }, 4000);
+      return;
+    }
+    teardown();
+    RAW = [];
+    renderDetected();
+    clearError();
+    $("results").classList.add("results-hidden");
+    $("results").innerHTML = "";
+    $("upload-section").scrollIntoView({ behavior: scrollBehavior() });
+  };
 }
 function outro() {
+  if (window.DEMO_PAGE) {
+    return `<div class="notice" style="margin-top:30px">
+      <b>Like what you see?</b> This whole page was built from a sample export — yours would be built
+      from your real journey. <a href="metrics.html">Build yours →</a> or
+      <a href="index.html#request">request your data from Niantic first</a>.</div>`;
+  }
+  // tell the player exactly which chapters their remaining files would unlock
+  const locked = (window.CATALOG || []).filter((c) =>
+    c.story && !RAW.some((r) => c.match.test(r.name))).slice(0, 3);
+  const more = locked.length
+    ? `<div style="margin-top:10px">${locked.map((c) =>
+        `<span class="locked-chip">${c.icon} <code>${esc(c.id)}</code> unlocks <b>${esc(c.name)}</b></span>`).join("")}
+      <div style="margin-top:8px"><a href="index.html#datasets">See what every file unlocks →</a></div></div>`
+    : "";
   return `<div class="notice" style="margin-top:30px">
-    <b>That's your story — for now.</b> Add more files above to unlock new chapters of your journey.</div>`;
+    <b>That's your story — for now.</b> Add more files above to unlock new chapters of your journey.${more}</div>`;
 }
 
 /* ── trainer card (Gameplay.txt) ── */
@@ -805,6 +964,7 @@ function renderActivity() {
       data: { labels: series, datasets: [{ data: series.map((s) => e.totals[s]), backgroundColor: series.map((s) => SERIES_COLORS[s] || C.dim), borderWidth: 0 }] },
       options: { cutout: "60%", plugins: { legend: { position: "right" }, title: { display: true, text: "What you did most" } } },
     });
+
     // hour-of-week heat grid
     renderHourWeek($("hw-" + cMonthly), e.hourweek);
   });
@@ -849,6 +1009,10 @@ function renderHourWeek(host, grid) {
   html += `<div class="hw-axis"><span></span>`;
   for (let h = 0; h < 24; h++) html += `<span>${h % 6 === 0 ? (h === 0 ? "12a" : h < 12 ? h + "a" : h === 12 ? "12p" : (h - 12) + "p") : ""}</span>`;
   html += `</div></div>`;
+  // name the peak in text — the hover tooltip is unreachable on touch and for AT
+  let bd = 0, bh = 0, bn = 0;
+  for (let d = 0; d < 7; d++) for (let h = 0; h < 24; h++) if (grid[d][h] > bn) { bn = grid[d][h]; bd = d; bh = h; }
+  if (bn) html += `<div class="hw-caption">Busiest: <b>${DAY_FULL[bd]} around ${hourLabel(bh)}</b> — ${fmt(bn)} events. Tap any cell for its count.</div>`;
   host.innerHTML = html;
   attachHourWeekTip(host);
 }
@@ -864,7 +1028,7 @@ function attachHourWeekTip(host) {
     document.body.appendChild(tip);
   }
   const show = (ev) => {
-    const cell = ev.target.closest(".hw-cell");
+    const cell = ev.target.closest("[data-info]");
     if (!cell) { tip.classList.remove("on"); return; }
     tip.innerHTML = `<b>${cell.dataset.info}</b><span>${cell.dataset.sub}</span>`;
     tip.classList.add("on");
@@ -877,6 +1041,11 @@ function attachHourWeekTip(host) {
   };
   gridEl.addEventListener("mousemove", show);
   gridEl.addEventListener("mouseleave", () => tip.classList.remove("on"));
+  gridEl.addEventListener("click", show); // tap support on touch screens
+  if (!tip.dataset.wired) { // the tip element is shared across rebuilds — wire window once
+    tip.dataset.wired = "1";
+    window.addEventListener("scroll", () => tip.classList.remove("on"), { passive: true });
+  }
 }
 
 /* ── year over year (multi-year journeys) ── */
@@ -893,7 +1062,7 @@ function buildYearData() {
   const byMonth = e.byMonth;
   const months = Object.keys(byMonth);
   const years = [...new Set(months.map((m) => m.slice(0, 4)))].sort();
-  if (years.length < 2) return { years: [], data: {} };
+  if (!years.length) return { years: [], data: {} };
 
   const dayByYear = {};
   for (const [d, n] of Object.entries(e.dayCounts)) (dayByYear[d.slice(0, 4)] = dayByYear[d.slice(0, 4)] || {})[d] = n;
@@ -931,15 +1100,17 @@ function buildYearData() {
 
 function renderYearOverYear() {
   const { years, data } = buildYearData();
-  if (years.length < 2) return;
+  if (!years.length) return;
+  const multi = years.length > 1;
 
-  // superlative badges — each award goes to the winning year
+  // superlative badges — each award goes to the winning year (multi-year only;
+  // with one year every award is a hollow win)
   const award = (label, emoji, valueOf) => {
     let best = null, bestV = 0;
     years.forEach((y) => { const v = valueOf(data[y]) || 0; if (v > bestV) { bestV = v; best = y; } });
     return best ? { year: best, text: `${emoji} ${label}` } : null;
   };
-  const awards = [
+  const awards = !multi ? [] : [
     award("Biggest year", "🏆", (w) => w.events),
     award("Globe-trotter", "🌍", (w) => w.remoteRaids),
     award("Most social", "🤝", (w) => w.friendsAdded),
@@ -965,13 +1136,17 @@ function renderYearOverYear() {
 
   const cId = uid();
   const chipsId = uid();
-  let inner = `<div id="${chipsId}" class="yoy-metrics">${METRICS.map(([label], i) =>
-    `<button class="yoy-chip${i === 0 ? " active" : ""}" type="button" data-i="${i}">${esc(label)}</button>`).join("")}</div>`;
-  inner += `<div>${chartWrap(cId)}</div>`;
+  let inner = "";
+  if (multi) {
+    inner = `<div id="${chipsId}" class="yoy-metrics">${METRICS.map(([label], i) =>
+      `<button class="yoy-chip${i === 0 ? " active" : ""}" type="button" aria-pressed="${i === 0}" data-i="${i}">${esc(label)}</button>`).join("")}</div>`;
+    inner += `<div>${chartWrap(cId)}</div>`;
+    inner += `<hr class="mod-divider">`;
+  }
 
-  // one shareable year card per year
-  inner += `<hr class="mod-divider"><div style="font-weight:700;margin-bottom:2px">Your year cards</div>
-    <div class="mod-sub" style="margin-bottom:0">A shareable recap for each year — download any as a PNG.</div>`;
+  // one shareable year card per year — single-year players get theirs too
+  inner += `<div style="font-weight:700;margin-bottom:2px">Your year card${multi ? "s" : ""}</div>
+    <div class="mod-sub" style="margin-bottom:0">A shareable recap${multi ? " for each year" : ""} — download ${multi ? "any" : "it"} as a PNG.</div>`;
   inner += `<div class="wrap-cards">`;
   const nowYear = String(new Date().getFullYear());
   // On the public demo, keep it tidy with just the three most recent years.
@@ -1007,28 +1182,30 @@ function renderYearOverYear() {
   inner += `</div>`;
 
   later(() => {
-    // versus bar chart, one bar per year, toggled by metric
-    const ch = newChart(cId, {
-      type: "bar",
-      data: { labels: years, datasets: [{ data: [], label: METRICS[0][0], backgroundColor: years.map((y) => yearColors(y)[0]), borderRadius: 6 }] },
-      options: {
-        plugins: { legend: { display: false }, title: { display: true, text: "Year vs year — " + METRICS[0][0] } },
-        scales: { x: { grid: { display: false }, ticks: { font: { size: 14, weight: 700 } } }, y: { beginAtZero: true } },
-      },
-    });
-    const renderVs = (i) => {
-      const [label, fn] = METRICS[i];
-      ch.data.datasets[0].data = years.map((y) => fn(data[y]));
-      ch.data.datasets[0].label = label;
-      ch.options.plugins.title.text = "Year vs year — " + label;
-      ch.update();
-    };
-    const chips = [...$(chipsId).querySelectorAll(".yoy-chip")];
-    chips.forEach((btn) => btn.addEventListener("click", () => {
-      chips.forEach((b) => b.classList.toggle("active", b === btn));
-      renderVs(+btn.dataset.i);
-    }));
-    renderVs(0);
+    if (multi) {
+      // versus bar chart, one bar per year, toggled by metric
+      const ch = newChart(cId, {
+        type: "bar",
+        data: { labels: years, datasets: [{ data: [], label: METRICS[0][0], backgroundColor: years.map((y) => yearColors(y)[0]), borderRadius: 6 }] },
+        options: {
+          plugins: { legend: { display: false }, title: { display: true, text: "Year vs year — " + METRICS[0][0] } },
+          scales: { x: { grid: { display: false }, ticks: { font: { size: 14, weight: 700 } } }, y: { beginAtZero: true } },
+        },
+      });
+      const renderVs = (i) => {
+        const [label, fn] = METRICS[i];
+        ch.data.datasets[0].data = years.map((y) => fn(data[y]));
+        ch.data.datasets[0].label = label;
+        ch.options.plugins.title.text = "Year vs year — " + label;
+        ch.update();
+      };
+      const chips = [...$(chipsId).querySelectorAll(".yoy-chip")];
+      chips.forEach((btn) => btn.addEventListener("click", () => {
+        chips.forEach((b) => { b.classList.toggle("active", b === btn); b.setAttribute("aria-pressed", String(b === btn)); });
+        renderVs(+btn.dataset.i);
+      }));
+      renderVs(0);
+    }
 
     // wire each card's download button
     document.querySelectorAll(".wrap-card").forEach((cardEl) => {
@@ -1052,8 +1229,10 @@ function renderYearOverYear() {
     });
   });
 
-  const sub = `${years.length} years side by side — ${years[0]} to ${years[years.length - 1]}. Tap a metric to compare, and download any year as a shareable card.`;
-  return moduleHTML("📅", "Year over year", sub, inner);
+  const sub = multi
+    ? `${years.length} years side by side — ${years[0]} to ${years[years.length - 1]}. Tap a metric to compare, and download any year as a shareable card.`
+    : `Your ${years[0]} in one shareable card — download it and flex.`;
+  return moduleHTML("📅", multi ? "Year over year" : "Your year in one card", sub, inner);
 }
 
 /* Shareable year-recap image — drawn to a canvas from the data so it
@@ -1206,7 +1385,8 @@ function renderWorld() {
   const e = STATE.ev;
   if (e.geo.size === 0 && STATE.trail.length === 0) return;
   if (window.Globe && _webglOK()) return renderGlobe();
-  return renderFlatMap();
+  if (window.L) return renderFlatMap();
+  return; // map libraries failed to load (offline?) — skip rather than crash
 }
 function _webglOK() {
   try { const c = document.createElement("canvas"); return !!(c.getContext("webgl") || c.getContext("experimental-webgl")); }
@@ -1272,12 +1452,22 @@ function buildTrailPaths() {
   const rows = STATE.trail.filter((p) => p.ts).slice().sort((a, b) => a.ts - b.ts);
   const days = {}; let last = null;
   for (const p of rows) {
-    const d = new Date(p.ts).toLocaleDateString("en-CA");
+    const d = p.ts.toISOString().slice(0, 10); // same UTC day-key the flat map uses
     if (last && last.d === d && Math.abs(p.lat - last.la) < 2e-4 && Math.abs(p.lon - last.lo) < 2e-4) continue;
     (days[d] = days[d] || []).push([p.lat, p.lon, 0.002]);
     last = { d, la: p.lat, lo: p.lon };
   }
-  return Object.keys(days).sort().filter((d) => days[d].length >= 2).map((d) => ({ date: d, pts: days[d] }));
+  let paths = Object.keys(days).sort().filter((d) => days[d].length >= 2).map((d) => ({ date: d, pts: days[d] }));
+  // cap total vertices like points (4000) and arcs (600) are capped — a multi-year
+  // trail can otherwise feed hundreds of thousands of animated line segments to the GPU
+  const total = paths.reduce((a, p) => a + p.pts.length, 0);
+  if (total > 15000) {
+    const step = Math.ceil(total / 15000);
+    paths = paths
+      .map((p) => ({ date: p.date, pts: p.pts.filter((_, i) => i % step === 0 || i === p.pts.length - 1) }))
+      .filter((p) => p.pts.length >= 2);
+  }
+  return paths;
 }
 function gToggle(id, color, label, checked) {
   return `<label class="gh-toggle"><input type="checkbox" id="${id}" ${checked ? "checked" : ""}><span class="gh-sw" style="--c:${color}"></span>${esc(label)}</label>`;
@@ -1286,7 +1476,10 @@ function gToggle(id, color, label, checked) {
 function renderGlobe() {
   const e = STATE.ev;
   const P = "glb-";
-  const points = [...e.geo.entries()].sort((a, b) => b[1] - a[1]).slice(0, 4000).map(([key, count]) => {
+  // fewer unmerged point meshes on phones / low-RAM devices — each is a draw call
+  const coarse = window.matchMedia && window.matchMedia("(pointer: coarse)").matches;
+  const pointCap = coarse || (navigator.deviceMemory && navigator.deviceMemory <= 4) ? 2000 : 4000;
+  const points = [...e.geo.entries()].sort((a, b) => b[1] - a[1]).slice(0, pointCap).map(([key, count]) => {
     const [lat, lng] = key.split(",").map(Number);
     const kc = e.geoKind.get(key) || {};
     const kind = (Object.entries(kc).sort((a, b) => b[1] - a[1])[0] || ["Encounters"])[0];
@@ -1315,17 +1508,17 @@ function renderGlobe() {
       <div id="${P}canvas" class="globe-canvas"></div>
       <div id="${P}loading" class="globe-loading"><div class="gl-spin"></div>Spinning up the world…</div>
       <div id="${P}stats" class="globe-hud globe-hud-tl"></div>
-      <div class="globe-hud globe-hud-tr">
-        <div class="gh-title">Layers</div>
+      <details class="globe-hud globe-hud-tr" id="${P}layers" open>
+        <summary class="gh-title">Layers</summary>
         ${gToggle(P + "ly-points", C.teal, "Activity columns", true)}
         ${gToggle(P + "ly-arcs", C.red, "Remote raid arcs", arcs.length > 0)}
-        <div class="gh-slider" id="${P}arc-ctl"><input type="range" id="${P}arc-dist" min="0" max="100" value="100"><span class="mono" id="${P}arc-lbl">all distances</span></div>
+        <div class="gh-slider" id="${P}arc-ctl"><input type="range" id="${P}arc-dist" min="0" max="100" value="100" aria-label="Maximum raid arc distance"><span class="mono" id="${P}arc-lbl">all distances</span></div>
         ${gToggle(P + "ly-trail", C.yellow, "GPS trail", paths.length > 0)}
         ${gToggle(P + "ly-borders", "#5a6db8", "Country lines", true)}
         ${gToggle(P + "ly-labels", "#dfe6ff", "Country names", true)}
         ${gToggle(P + "ly-rotate", C.blue, "Auto-rotate", !REDUCED_MOTION)}
         <button id="${P}shot" class="gh-btn" type="button">📷 Save image</button>
-      </div>
+      </details>
       <div id="${P}legend" class="globe-hud globe-legend"></div>
       <div id="${P}country" class="globe-hud globe-country" hidden></div>
     </div>
@@ -1346,10 +1539,10 @@ function initGlobe({ P, points, maxCount, arcs, home, paths }) {
   const $$ = (id) => $(P + id);
 
   const world = Globe({ rendererConfig: { preserveDrawingBuffer: true, antialias: true } })(el)
-    .width(el.clientWidth).height(560)
+    .width(el.clientWidth).height(el.clientHeight || 560)
     .globeImageUrl("vendor/img/earth-night.jpg")
     .bumpImageUrl("vendor/img/earth-topology.png")
-    .backgroundImageUrl("vendor/img/night-sky.png")
+    .backgroundImageUrl("vendor/img/night-sky.jpg")
     .atmosphereColor(C.teal).atmosphereAltitude(0.18)
     .pointsData(points).pointLat("lat").pointLng("lng")
     .pointAltitude((p) => 0.004 + Math.log10(p.count + 1) / Math.log10(maxCount + 1) * 0.13)
@@ -1361,17 +1554,33 @@ function initGlobe({ P, points, maxCount, arcs, home, paths }) {
     .arcColor((a) => { const t = Math.min(1, a.km / 9000); return ["rgba(65,216,198,.75)", t < 0.5 ? "rgba(255,203,5,.8)" : "rgba(255,83,80,.85)"]; })
     .arcStroke((a) => 0.18 + Math.log10(a.count + 1) * 0.28)
     .arcAltitudeAutoScale(0.42).arcDashLength(0.45).arcDashGap(0.6)
-    .arcDashAnimateTime((a) => 2200 + (a.km % 1500))
+    .arcDashAnimateTime(REDUCED_MOTION ? 0 : (a) => 2200 + (a.km % 1500))
     .arcLabel((a) => `<b>${fmt(a.count)}</b> raid${a.count > 1 ? "s" : ""} · ${fmt(Math.round(a.km))} km away`)
     .pathsData(paths).pathPoints("pts").pathPointLat((p) => p[0]).pathPointLng((p) => p[1]).pathPointAlt((p) => p[2])
     .pathColor(() => ["rgba(255,203,5,.9)", "rgba(255,157,66,.9)"])
-    .pathStroke(1.6).pathDashLength(0.18).pathDashGap(0.035).pathDashAnimateTime(14000)
+    .pathStroke(1.6).pathDashLength(0.18).pathDashGap(0.035).pathDashAnimateTime(REDUCED_MOTION ? 0 : 14000)
     .pathLabel((p) => `GPS trail · ${p.date}`)
-    .ringsData([{ lat: home.lat, lng: home.lng }])
+    // reduced-motion users asked the OS for stillness — no pulsing home ring
+    .ringsData(REDUCED_MOTION ? [] : [{ lat: home.lat, lng: home.lng }])
     .ringColor(() => (t) => `rgba(65,216,198,${1 - t})`)
     .ringMaxRadius(2.6).ringPropagationSpeed(1.1).ringRepeatPeriod(1400)
-    .onGlobeReady(() => { const l = $$("loading"); if (l) l.classList.add("done"); world.pointOfView({ lat: home.lat, lng: home.lng, altitude: 1.9 }, 1600); });
+    .onGlobeReady(() => { world.__ready = true; const l = $$("loading"); if (l) l.classList.add("done"); world.pointOfView({ lat: home.lat, lng: home.lng, altitude: 1.9 }, 1600); });
   GLOBE = world;
+
+  // never leave an eternal "Spinning up the world…" — if WebGL or a texture
+  // stalls, tell the user and offer a reload
+  setTimeout(() => {
+    if (GLOBE !== world || world.__ready) return;
+    const l = $$("loading");
+    if (l && !l.classList.contains("done")) {
+      l.innerHTML = `The globe is stuck — a texture may have failed to load, or WebGL gave up.`;
+      const rb = document.createElement("button");
+      rb.className = "gh-btn"; rb.type = "button"; rb.style.marginTop = "10px";
+      rb.textContent = "↻ Reload and try again";
+      rb.onclick = () => location.reload();
+      l.appendChild(rb);
+    }
+  }, 15000);
   if (!arcs.length) world.arcsData([]);
   if (!paths.length) world.pathsData([]);
 
@@ -1380,6 +1589,39 @@ function initGlobe({ P, points, maxCount, arcs, home, paths }) {
   controls.minDistance = world.getGlobeRadius() * 1.18;
   world.renderer().domElement.addEventListener("pointerdown", () => { controls.autoRotate = false; });
   world.renderer().domElement.addEventListener("pointerup", () => { controls.autoRotate = $$("ly-rotate").checked; });
+
+  // On touch screens the globe would otherwise swallow every swipe — a scroll
+  // trap on a long results page. Gate interaction behind one explicit tap.
+  const coarse = window.matchMedia && window.matchMedia("(pointer: coarse)").matches;
+  const stage = el.closest(".globe-stage");
+  let scrim = null;
+  if (coarse && stage) {
+    controls.enabled = false;
+    scrim = document.createElement("button");
+    scrim.type = "button";
+    scrim.className = "globe-scrim";
+    scrim.textContent = "👆 Tap to explore the globe";
+    stage.appendChild(scrim);
+    scrim.addEventListener("click", () => { controls.enabled = true; scrim.hidden = true; });
+  }
+  // collapse the Layers panel by default where there's no room for it
+  const layersEl = $$("layers");
+  if (layersEl && window.innerWidth <= 860) layersEl.open = false;
+
+
+  // don't burn GPU on a globe nobody is looking at
+  if ("IntersectionObserver" in window) {
+    const io = new IntersectionObserver(([en]) => {
+      if (GLOBE !== world) return;
+      if (en.isIntersecting) world.resumeAnimation();
+      else {
+        world.pauseAnimation();
+        if (scrim) { controls.enabled = false; scrim.hidden = false; } // re-arm the tap gate
+      }
+    }, { threshold: 0.05 });
+    io.observe(el);
+    GLOBE_CLEANUP.push(() => io.disconnect());
+  }
 
   // stats
   const geoEvents = [...e.geo.values()].reduce((a, b) => a + b, 0);
@@ -1402,7 +1644,7 @@ function initGlobe({ P, points, maxCount, arcs, home, paths }) {
     fetch("vendor/geo/countries.geo.json").then((r) => r.json()),
     fetch("vendor/geo/us-states.geo.json").then((r) => r.json()).catch(() => ({ features: [] })),
   ]).then(([countries, states]) => {
-    countries.features.forEach((f) => { f.properties._kind = "country"; f._centroid = featureCentroid(f); });
+    countries.features.forEach((f) => { f.properties._kind = "country"; f._centroid = featureCentroid(f); f._bbox = featureBBox(f); });
     states.features.forEach((f) => (f.properties._kind = "state"));
     borderFeatures = [...countries.features, ...states.features];
     // Attribute each remote raid to a country. If the endpoint isn't inside any
@@ -1499,8 +1741,9 @@ function initGlobe({ P, points, maxCount, arcs, home, paths }) {
     updateArcs();
   };
 
-  const onResize = () => { if (GLOBE === world && el.isConnected) world.width(el.clientWidth); };
+  const onResize = () => { if (GLOBE === world && el.isConnected) world.width(el.clientWidth).height(el.clientHeight || 560); };
   window.addEventListener("resize", onResize);
+  GLOBE_CLEANUP.push(() => window.removeEventListener("resize", onResize));
 }
 
 /* --- GeoJSON point-in-polygon (lng/lat order) --- */
@@ -1520,9 +1763,24 @@ function polygonContains(lng, lat, rings) {
 function featureContains(f, lng, lat) {
   const g = f.geometry;
   if (!g) return false;
+  // bbox early-reject: skips the full ray-cast for ~99% of countries per test
+  const b = f._bbox;
+  if (b && (lng < b[0] || lng > b[2] || lat < b[1] || lat > b[3])) return false;
   if (g.type === "Polygon") return polygonContains(lng, lat, g.coordinates);
   if (g.type === "MultiPolygon") return g.coordinates.some((p) => polygonContains(lng, lat, p));
   return false;
+}
+/* [minLng, minLat, maxLng, maxLat] over every ring of a feature */
+function featureBBox(f) {
+  const g = f.geometry;
+  if (!g) return null;
+  const polys = g.type === "Polygon" ? [g.coordinates] : g.type === "MultiPolygon" ? g.coordinates : [];
+  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+  polys.forEach((rings) => rings.forEach((ring) => ring.forEach(([x, y]) => {
+    if (x < minX) minX = x; if (x > maxX) maxX = x;
+    if (y < minY) minY = y; if (y > maxY) maxY = y;
+  })));
+  return minX === Infinity ? null : [minX, minY, maxX, maxY];
 }
 /* area-weighted centroid of a ring (lng/lat order) */
 function ringCentroid(ring) {
@@ -1568,6 +1826,15 @@ function nearestCountry(features, lng, lat, maxDeg) {
   const kLng = Math.cos((lat * Math.PI) / 180);
   for (const f of features) {
     const g = f.geometry; if (!g) continue;
+    // bbox distance lower-bound — skip countries that can't possibly win
+    if (f._bbox) {
+      const b = f._bbox;
+      let dx = lng < b[0] ? b[0] - lng : lng > b[2] ? lng - b[2] : 0;
+      if (dx > 180) dx = 360 - dx;
+      const dy = lat < b[1] ? b[1] - lat : lat > b[3] ? lat - b[3] : 0;
+      const lower = Math.hypot(dx * kLng, dy);
+      if (lower > maxDeg || lower >= bestD) continue;
+    }
     const polys = g.type === "Polygon" ? [g.coordinates] : g.type === "MultiPolygon" ? g.coordinates : [];
     for (const rings of polys) {
       const ring = rings[0]; if (!ring) continue;
@@ -1679,9 +1946,9 @@ function renderSpending() {
   if (window.DEMO_PAGE && curEntries.some(([c]) => c === "USD")) {
     curEntries = curEntries.filter(([c]) => c === "USD");
   }
-  // Headline the spend in USD for our US audience; any other currencies a user
-  // actually spent in still appear in the "Spending by currency" breakdown.
-  const primary = (S.cur.USD && S.cur.USD.purchases) ? ["USD", S.cur.USD] : curEntries[0];
+  // Headline whichever currency this player actually used most; the rest
+  // still appear in the "Spending by currency" breakdown.
+  const primary = curEntries[0];
   const sym = primary ? (CUR_SYM[primary[0]] || primary[0] + " ") : "";
   const stats = [
     [primary ? sym + fmt(round(primary[1].native)) : "—", primary ? "Spent (" + primary[0] + ")" : "Real money"],
@@ -1770,7 +2037,7 @@ function renderLiveEvents() {
     [spendStr || "—", "Spent on tickets"],
   ]);
   inner += `<div style="font-weight:700;margin:18px 0 10px">Events you bought into</div>`;
-  inner += rankList(evs.slice(0, 12).map((e) => [e.name + (e.date ? " · " + e.date.getFullYear() : ""), e.tickets]), (v) => v + " 🎟️");
+  inner += rankList(evs.slice(0, 12).map((e) => [e.name + (e.date ? " · " + e.date.getUTCFullYear() : ""), e.tickets]), (v) => v + " 🎟️");
   return moduleHTML("🎟️", "Your live events", `Tickets to ${evs.length} real-world Pokémon GO event${evs.length > 1 ? "s" : ""}.`, inner);
 }
 
@@ -1784,7 +2051,7 @@ function renderSessions() {
     [fmt(S.total), "App sessions"],
     [fmt(Object.keys(S.devices).length || Object.keys(I.devices).length), "Devices used"],
     [fmt(Object.keys(S.cities).length), "Cities seen"],
-    [I.count ? (I.first ? I.first.getFullYear() : fmt(I.count)) : "—", I.first ? "First install" : "Installs"],
+    [I.count ? (I.first ? I.first.getUTCFullYear() : fmt(I.count)) : "—", I.first ? "First install" : "Installs"],
   ]);
   const months = monthSpan(Object.keys(S.monthly));
   if (months.length > 1) {
@@ -1846,12 +2113,34 @@ document.addEventListener("DOMContentLoaded", () => {
     });
 
     $("build-btn").addEventListener("click", build);
-    $("clear-btn").addEventListener("click", () => { RAW = []; renderDetected(); clearError(); });
+    // Clear means clear: the file queue AND anything already on screen. For a
+    // privacy tool, leaving the built dashboard up after "Clear" is a betrayal.
+    $("clear-btn").addEventListener("click", () => {
+      RAW = [];
+      renderDetected();
+      clearError();
+      teardown();
+      const res = $("results");
+      res.innerHTML = "";
+      res.classList.add("results-hidden");
+    });
     const demoBtn = $("demo-btn");
     if (demoBtn) demoBtn.addEventListener("click", loadDemo);
+
+    // iOS has no real folder picker (webkitdirectory is ignored) — hide the
+    // button rather than let it degrade into a confusing files-only dialog.
+    const isIOS = /iPhone|iPad|iPod/.test(navigator.userAgent)
+      || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+    if (isIOS) $("folder-btn").style.display = "none";
+    // "Drop your files here" describes a gesture touch screens don't have
+    if (window.matchMedia && window.matchMedia("(pointer: coarse)").matches) {
+      const h = dz.querySelector("h2, h3");
+      if (h) h.textContent = "Add your export files";
+    }
   }
 
   // Auto-load the sample export on the dedicated live-example page, or when
-  // metrics.html is opened with ?demo=1.
-  if (window.DEMO_PAGE || /[?&]demo=1\b/.test(location.search)) setTimeout(loadDemo, 200);
+  // metrics.html is opened with ?demo=1. Called directly — a setTimeout here
+  // gets clamped to a full minute if the page opens in a background tab.
+  if (window.DEMO_PAGE || /[?&]demo=1\b/.test(location.search)) loadDemo();
 });

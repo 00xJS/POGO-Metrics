@@ -17,9 +17,14 @@
       </a>
       <div class="nav-pages">
         ${pages.map((p) => `
-          <a href="${p.href}" class="${p.id === active ? "active" : ""} ${p.cta ? "nav-cta" : ""}">
-            <span class="np-icon">${p.icon}</span><span class="np-label">${p.label}</span>
+          <a href="${p.href}" aria-label="${p.label}"${p.id === active ? ' aria-current="page"' : ""} class="${p.id === active ? "active" : ""} ${p.cta ? "nav-cta" : ""}">
+            <span class="np-icon" aria-hidden="true">${p.icon}</span><span class="np-label">${p.label}</span>
           </a>`).join("")}
       </div>
     </div>`;
+
+  // Installable + offline-capable. Skipped on localhost so local dev never
+  // fights a stale service-worker cache.
+  if ("serviceWorker" in navigator && location.protocol === "https:" && location.hostname !== "localhost")
+    navigator.serviceWorker.register("sw.js").catch(() => {});
 })();

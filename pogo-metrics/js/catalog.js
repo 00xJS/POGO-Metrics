@@ -40,7 +40,7 @@ window.CATALOG = [
   },
   {
     id: "Player_Journey",
-    match: /^(pokestop_spin|sfida_capture|map_pokemon_encounter|join_raid_lobby|gym_battle|feed_pokemon|deploy_pokemon|incense_encounter|lure_encounter)\d?\.csv$/i,
+    match: /^(pokestop_spin|sfida_capture|map_pokemon_encounter|join_raid_lobby|gym_battle|feed_pokemon|deploy_pokemon|incense_encounter|lure_encounter)\d*\.csv$/i,
     name: "Player Journey events",
     icon: "🗺️",
     group: "Your Activity",

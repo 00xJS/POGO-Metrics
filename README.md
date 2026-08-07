@@ -41,7 +41,7 @@ Each file you drop in lights up its own chapter. Upload one file or the whole ex
 |---|---|
 | **Trainer card** — level, XP, distance, collection by region, medal cabinet | `Gameplay.txt` |
 | **Adventure log** — monthly timeline, hour-of-week rhythm, activity breakdown | `Player_Journey/*.csv` |
-| **Year over year** — every year compared, plus a shareable recap card per year (downloadable PNG) | `Player_Journey/*.csv` |
+| **Year over year** — every year compared, plus a shareable recap card per year (downloadable PNG; single-year journeys get their card too) | `Player_Journey/*.csv` |
 | **Your world** — a 3D globe of everywhere you've played, GPS trail, and remote-raid arcs | location files |
 | **Social** — friendships over time, how you connect, who reaches out first | `FriendList.tsv` and friends |
 | **Spending** — coin flow, top items, spend by currency | `InAppPurchases.tsv` |
@@ -64,7 +64,12 @@ This is the whole point, so it should be checkable rather than promised:
   point, so they do plot where you played — on your device, published nowhere. Your email, IP
   addresses and advertising IDs are never read at all. The visualizations only touch the parts that tell
   a story. The catalog on the landing page rates how sensitive each file is *before* you open it.
-- **You can audit all of it** — it's ~2,700 lines of vanilla JavaScript in this repo, no build step.
+- **The browser enforces it.** The deployed site ships a `Content-Security-Policy` with
+  `connect-src 'self'` (see `netlify.toml`), so no script — ours or otherwise — *can* send your
+  data anywhere off-origin.
+- **It works in airplane mode.** Once visited, a service worker makes the whole app run offline —
+  the strongest proof there's nothing to upload to.
+- **You can audit all of it** — it's ~3,000 lines of vanilla JavaScript in this repo, no build step.
 
 ## Getting your data from Niantic
 
@@ -103,8 +108,12 @@ pogo-metrics/          the deployed site (netlify.toml publishes this folder as-
 ├── tools/scrub-demo.mjs   regenerates demo/ from a real export
 ├── og-card.html       source for the share image; render it to regenerate og-image.png
 ├── og-image.png       1200×630 Open Graph / Twitter card
+├── 404.html           branded not-found page (Netlify serves it automatically)
+├── sw.js              service worker: installable + fully offline-capable
+├── site.webmanifest   PWA manifest (+ favicon-32 / apple-touch-icon / icon-192 / icon-512)
+├── robots.txt         keeps demo data + og-card out of search; sitemap.xml alongside
 ├── static-server.mjs  tiny dependency-free static server for local preview
-└── vendor/            Chart.js, Leaflet, globe.gl, fonts, geo — all vendored
+└── vendor/            Chart.js, Leaflet, globe.gl, fonts, geo — all vendored, lazy-loaded
 ```
 
 ## The demo dataset
