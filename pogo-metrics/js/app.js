@@ -57,6 +57,11 @@ const GO_EVENTS = {
 };
 const eventFor = (iso) => GO_EVENTS[iso] || null;
 
+/* Gameplay.txt mixes real tiered medals with event/collection badges under the
+ * same "BADGE_NAME: n" syntax. These families are participation badges whose
+ * number is a count, not a Bronze-to-Platinum tier. */
+const EVENT_BADGE = /^BADGE_(EVENT|GOFEST|GOTOUR|GO_TOUR|GOWA|SMORES|MINI_COLLECTION|COMMUNITY|SAFARI|CITY|WILD_AREA)/;
+
 /* ───────────────────────────── tiny helpers ───────────────────────────── */
 const fmt = (n) => Number(n).toLocaleString("en-US");
 const round = (n) => Math.round(n);
@@ -173,7 +178,12 @@ function freshState() {
   };
 }
 let STATE = freshState();
-let RAW = [];               // [{ name, text, entry, oversize }]
+let RAW = [];               // [{ name, text, entry, oversize, file }]
+/* Bumped whenever the user wipes their data (Clear / Start over / demo reload).
+ * build() awaits file reads and library loads, so a Clear part-way through must
+ * be able to abandon the in-flight build — otherwise it finishes and re-renders
+ * the dashboard the user just told us to erase. */
+let DATA_GEN = 0;
 let CHARTS = [];
 let MAP = null;
 let GLOBE = null;
@@ -307,7 +317,7 @@ async function loadDemo() {
       if (!r.ok) throw new Error(p + " " + r.status);
       return new File([await r.text()], p.split("/").pop());
     }));
-    RAW = [];
+    RAW = []; DATA_GEN++;
     await ingest(files);
     build();
   } catch (e) {
@@ -423,12 +433,18 @@ function parseGameplay(text) {
   const re = /^[ \t]*Badge: (.+?)\.? where X is : (\d+)[ \t]*$|^[ \t]*(BADGE_\w+): (\d+)[ \t]*$|^[ \t]*Badge: ([^:\n]+): : (\d+)[ \t]*$/gm;
   let m;
   while ((m = re.exec(text))) {
-    const raw = m[1] || m[5] || titleCase((m[3] || "").replace(/^BADGE_/, ""));
+    const token = m[3] || "";
+    const raw = m[1] || m[5] || titleCase(token.replace(/^BADGE_/, ""));
     const name = String(raw || "").replace(/\bX\b/g, "…").trim();
     const value = +(m[2] || m[4] || m[6]);
     if (!name || !value) continue;
-    const tiered = value >= 1 && value <= 4;
-    medals.push({ name, tier: tiered ? value : null, progress: tiered ? null : value });
+    /* Event and collection badges store PARTICIPATION, not a tier: a GO Fest
+     * badge is "1" because you attended once, not because it is Bronze. Counting
+     * them as Bronze put 70 of them in the cabinet and turned a level-80
+     * trainer's 3 Bronze medals into 71. Only genuine medals carry tiers 1-4. */
+    const isEvent = EVENT_BADGE.test(token);
+    const tiered = !isEvent && value >= 1 && value <= 4;
+    medals.push({ name, tier: tiered ? value : null, progress: tiered ? null : value, event: isEvent });
   }
   STATE.medals = medals.sort((a, b) => (b.tier || 0) - (a.tier || 0));
 
@@ -846,6 +862,8 @@ function teardown() {
 async function build() {
   if (!RAW.length || BUILDING) return;
   BUILDING = true;
+  const gen = DATA_GEN;
+  const stale = () => gen !== DATA_GEN;
   const btn = $("build-btn");
   const btnLabel = btn ? btn.textContent : "";
   if (btn) { btn.disabled = true; btn.textContent = "Building…"; }
@@ -871,6 +889,7 @@ async function build() {
       await nextTick(); // let the progress line paint without timer throttling
       // On a rebuild the text was released after the last build; read it again
       // from the File handle the browser still holds.
+      if (stale()) return; // the user cleared while we were reading
       let text = r.text;
       if (text == null && r.file) {
         try { text = await r.file.text(); } catch (e) { unreadable.push(r.name); continue; }
@@ -895,6 +914,7 @@ async function build() {
     }
     if (prog) prog.textContent = "Drawing your story…";
     await Promise.all(libWaits.map((p) => p.catch((e) => console.warn(e))));
+    if (stale()) return; // cleared while libraries were loading — draw nothing
 
     res.innerHTML = "";
 
@@ -1020,7 +1040,7 @@ function wireToolbar() {
       return;
     }
     teardown();
-    RAW = [];
+    RAW = []; DATA_GEN++;
     renderDetected();
     clearError();
     $("results").classList.add("results-hidden");
@@ -1224,7 +1244,7 @@ function downloadStatsJSON() {
   const out = {
     generated: new Date().toISOString(),
     source: "POGO Metrics — parsed locally in your browser from your official Niantic export",
-    note: "Precise location data (GPS trail, activity coordinates) is deliberately NOT included in this export.",
+    note: "Location data is deliberately NOT included in this export: no GPS trail, no activity or stop coordinates, and no city or travel history. Those stay in the browser.",
     profile: STATE.profile,
     totalsByAction: e.totals,
     monthly: e.byMonth,
@@ -1234,7 +1254,8 @@ function downloadStatsJSON() {
     friends: { total: STATE.friends.rows.length, monthly: STATE.friends.monthly, sources: STATE.friends.sources, unfriended: STATE.friends.unfriended },
     spending: STATE.spend,
     fitnessDaily: STATE.fitness.daily,
-    sessions: STATE.sessions,
+    // cities/places are location history — excluded to keep the note above true
+    sessions: { total: STATE.sessions.total, monthly: STATE.sessions.monthly, devices: STATE.sessions.devices },
     installs: STATE.installs,
     liveEvents: STATE.liveEvents.length,
     wayfarer: STATE.wayfarer,
@@ -1282,7 +1303,8 @@ function renderTrainer() {
   if (STATE.medals.length) {
     const tiers = { 4: 0, 3: 0, 2: 0, 1: 0 };
     STATE.medals.forEach((m) => { if (m.tier) tiers[m.tier]++; });
-    const untiered = STATE.medals.filter((m) => !m.tier).length;
+    const events = STATE.medals.filter((m) => m.event).length;
+    const untiered = STATE.medals.filter((m) => !m.tier && !m.event).length;
     const cards = [
       [4, "Platinum"], [3, "Gold"], [2, "Silver"], [1, "Bronze"],
     ].map(([t, label]) =>
@@ -1290,8 +1312,9 @@ function renderTrainer() {
     // The tiers must visibly reconcile with the "Medals earned" card above.
     const tiered = tiers[4] + tiers[3] + tiers[2] + tiers[1];
     const reconcile = `${fmt(tiered)} medal${tiered === 1 ? "" : "s"} at a tier` +
-      (untiered ? ` · ${fmt(untiered)} event badge${untiered === 1 ? "" : "s"} tracked by progress, not tier` : "") +
-      ` — ${fmt(tiered + untiered)} in total.`;
+      (events ? ` · ${fmt(events)} event badge${events === 1 ? "" : "s"} (GO Fest, GO Tour and friends — collected, not tiered)` : "") +
+      (untiered ? ` · ${fmt(untiered)} tracked by progress` : "") +
+      ` — ${fmt(tiered + events + untiered)} in total.`;
     inner += `<div style="margin-top:20px;font-weight:700">Medal cabinet</div>
       <div class="mod-sub">${reconcile}</div>
       <div class="medal-cards">${cards}</div>`;
@@ -1517,7 +1540,9 @@ function renderRhythm() {
   const e = STATE.ev;
   const b = buildBouts(e.stamps);
   const topFort = [...e.forts.values()].sort((x, y) => y.n - x.n)[0];
-  if (!b && !topFort) return;
+  // Both halves can be absent (one tiny Player_Journey file yields no measurable
+  // sessions and no repeat stop) — don't emit a chapter heading with no body.
+  if (!b && !(topFort && topFort.n > 1)) return;
 
   let inner = "";
   if (b) {
@@ -1560,11 +1585,18 @@ function renderRhythm() {
         You've visited <b>${fmt(forts.length)}</b> distinct PokéStops. Your number one accounts for
         <b>${fmt(topFort.n)}</b> visits${years >= 0.15 ? ` across <b>${years.toFixed(1)} years</b>` : ""} —
         first on ${fmtDate(topFort.first)}, most recently ${fmtDate(topFort.last)}.
-        Your top five are <b>${Math.round(top5 / totalSpins * 100)}%</b> of everything you've spun.
+        Your top five are <b>${Math.round(top5 / totalSpins * 100)}%</b> of the visits we can place on the map.
       </div>`;
-    inner += rankList(forts.slice(0, 8).map((f, i) => ["Stop #" + (i + 1) + " · " + f.lat.toFixed(3) + ", " + f.lon.toFixed(3), f.n]), (v) => fmt(v) + " visits");
-    inner += `<div class="hw-caption">Niantic's export gives coordinates but no stop names, so these are your places by location.
-      They're computed and displayed on your device only.</div>`;
+    /* Deliberately NOT printing the coordinates. The site tells people to
+     * screenshot and share these chapters, and a ~110 m fix on someone's
+     * most-visited stop is their home address. Rank and counts carry the story;
+     * the position stays on the globe, where the user already expects it. */
+    inner += rankList(forts.slice(0, 8).map((f, i) => [
+      "Stop #" + (i + 1) + (i === 0 ? " — your local" : ""),
+      f.n,
+    ]), (v) => fmt(v) + " visits");
+    inner += `<div class="hw-caption">Niantic's export gives coordinates but no stop names, so your stops are ranked rather than named.
+      Coordinates are deliberately not printed here — this chapter is safe to screenshot.</div>`;
   }
 
   return moduleHTML("⏱️", "Your rhythm", "How you actually play — in sessions, and in the places you keep returning to.", inner);
@@ -1969,7 +2001,10 @@ function renderThenVsNow(years, data) {
     <div class="tvn-head"><span class="tvn-l"></span><span class="tvn-a">${first}</span><span class="tvn-arrow"></span><span class="tvn-b">${last}</span><span class="tvn-d">change</span></div>
     ${rows}
     <div style="margin-top:16px">${chartWrap(cId, "short")}</div>
-    <div class="hw-caption">${last === String(new Date().getUTCFullYear()) ? "Note: " + last + " is still in progress, so its totals are partial — the mix percentages are still fair to compare." : "Niantic's export only reaches back a few years, so “then” means the earliest year in your files."}</div>`;
+    <div class="hw-caption"><b>Read the percentages with care.</b> Niantic's export only reaches back a few years, so
+      ${first} starts wherever your logs begin — if that is mid-year, it is a partial year and every "change" against it is
+      inflated.${last === String(new Date().getUTCFullYear()) ? ` ${last} is still in progress, so it is partial too.` : ""}
+      The mix chart below compares shares of each year's own total, so it stays fair either way.</div>`;
 }
 
 /* Shareable year-recap image — drawn to a canvas from the data so it
@@ -2931,47 +2966,31 @@ function renderTravelLog() {
   const away = ranked.slice(1);
   if (!away.length) return "";
 
-  /* Deliberately NOT counting "trips". Real exports report the login city, and
-   * an ordinary metro area spans several of them (Phoenix and Buckeye on
-   * alternating days is not two holidays), so any per-city run count would
-   * invent a travel story. Days away from home is a fact; a trip is a guess. */
+  /* Deliberately reports only what the data actually says: which places, how
+   * often, and when. NOT "trips" and NOT "days away from home" — Niantic logs
+   * the login city, and an ordinary metro spans several of them (the real
+   * export alternates between Phoenix and Buckeye), so a commuter's normal week
+   * would be rendered as months of travel. Anyone who moved house would get a
+   * "longest stretch away" measured in years. Places and dates are facts;
+   * turning them into a travel narrative is a guess that reads as a bug. */
   const states = new Set();
-  const homeDays = home.days;
-  const awayDays = new Set();
-  away.forEach(([, rec]) => {
-    if (rec.state) states.add(rec.state);
-    rec.days.forEach((d) => { if (!homeDays.has(d)) awayDays.add(d); });
-  });
-  if (home.state) states.add(home.state);
-
-  // longest unbroken run of days spent entirely away from home
-  const sortedAway = [...awayDays].sort();
-  let longest = { len: 0, start: null };
-  let runLen = 0, runStart = null, prev = null;
-  for (const d of sortedAway) {
-    if (prev && isoShift(prev, 1) === d) runLen++;
-    else { runLen = 1; runStart = d; }
-    if (runLen > longest.len) longest = { len: runLen, start: runStart };
-    prev = d;
-  }
+  [homeName, ...away.map(([n]) => n)].forEach((n) => { const r = places[n]; if (r && r.state) states.add(r.state); });
 
   const rows = away.slice(0, 8).map(([name, rec]) => [
     name + " · " + rec.days.size + " day" + (rec.days.size === 1 ? "" : "s"),
     rec.n,
   ]);
+  const span = away.reduce((best, [name, rec]) => (rec.days.size > (best ? best[1].days.size : 0) ? [name, rec] : best), null);
   return `<hr class="mod-divider"><div style="font-weight:700;margin-bottom:2px">Your travel log</div>
     <div class="mod-sub" style="margin-bottom:10px">
       Home base is <b>${esc(homeName)}</b> — ${fmt(home.n)} of your sessions.
       You've also opened the game in <b>${fmt(away.length)}</b> other place${away.length === 1 ? "" : "s"}${
-        states.size > 1 ? ` across <b>${fmt(states.size)}</b> states or regions` : ""},
-      on <b>${fmt(awayDays.size)}</b> day${awayDays.size === 1 ? "" : "s"} away from home.${
-        longest.len > 1
-          ? ` Your longest unbroken stretch away was <b>${longest.len} days</b>, from ${fmtDate(parseTS(longest.start))}.`
-          : ""}
+        states.size > 1 ? `, across <b>${fmt(states.size)}</b> states or regions in total` : ""}.${
+        span ? ` The one you've played in most besides home is <b>${esc(span[0].split(",")[0])}</b>, on ${fmt(span[1].days.size)} separate day${span[1].days.size === 1 ? "" : "s"}.` : ""}
     </div>
     ${rankList(rows, (v) => fmt(v) + " sessions")}
-    <div class="hw-caption">Places come from the login city Niantic records with each session — there are no coordinates here,
-      so this is "where you opened the game", not a GPS trail. Neighbouring towns in one metro area show up as separate places.</div>`;
+    <div class="hw-caption">Places come from the login city Niantic records with each session — no coordinates are involved.
+      Neighbouring towns in one metro area appear as separate places, so this is "where you opened the game", not a travel diary.</div>`;
 }
 
 /* ── wayfarer ── */
@@ -3020,7 +3039,7 @@ document.addEventListener("DOMContentLoaded", () => {
     // Clear means clear: the file queue AND anything already on screen. For a
     // privacy tool, leaving the built dashboard up after "Clear" is a betrayal.
     $("clear-btn").addEventListener("click", () => {
-      RAW = [];
+      RAW = []; DATA_GEN++;
       renderDetected();
       clearError();
       teardown();
