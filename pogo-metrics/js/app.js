@@ -864,6 +864,9 @@ async function build() {
   BUILDING = true;
   const gen = DATA_GEN;
   const stale = () => gen !== DATA_GEN;
+  // Abandoning a build must leave nothing behind: a file parsed in the moment
+  // the user hit Clear would otherwise sit in the fresh STATE afterwards.
+  const abort = () => { STATE = freshState(); };
   const btn = $("build-btn");
   const btnLabel = btn ? btn.textContent : "";
   if (btn) { btn.disabled = true; btn.textContent = "Building…"; }
@@ -889,12 +892,13 @@ async function build() {
       await nextTick(); // let the progress line paint without timer throttling
       // On a rebuild the text was released after the last build; read it again
       // from the File handle the browser still holds.
-      if (stale()) return; // the user cleared while we were reading
+      if (stale()) return abort(); // the user cleared while we were reading
       let text = r.text;
       if (text == null && r.file) {
         try { text = await r.file.text(); } catch (e) { unreadable.push(r.name); continue; }
       }
       if (text == null) continue;
+      if (stale()) return abort(); // cleared during the read
       routeFile(r.name, text);
       // Release immediately: the parsed aggregates in STATE are all we need,
       // and holding every file's text is the single largest retention in the app.
@@ -914,7 +918,7 @@ async function build() {
     }
     if (prog) prog.textContent = "Drawing your story…";
     await Promise.all(libWaits.map((p) => p.catch((e) => console.warn(e))));
-    if (stale()) return; // cleared while libraries were loading — draw nothing
+    if (stale()) return abort(); // cleared while libraries loaded — draw nothing
 
     res.innerHTML = "";
 
