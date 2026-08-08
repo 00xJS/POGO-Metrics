@@ -44,6 +44,13 @@ anonymized sample used by the Live Example page.)
   - **App_Sessions / App_Installs** → sessions, devices, login cities and countries
   - **SupportInteractions\*.tsv** → ticket count and subjects (never the message bodies)
   - **LiveEventRegistrationHistory** → ticketed events; **wayfarer_player_data.json** → contributions
+  Beyond the chapters, `app.js` also drives four things the toolbar exposes once a build finishes:
+  `storyMode()` (a full-screen Wrapped-style recap, also `demo.html`'s hero CTA and promised twice
+  on `index.html`), `downloadJourneyCard()` and `downloadYearCard()` (canvas-rendered shareable
+  PNGs — drawn from the data rather than screenshotted, so they work offline), and
+  `downloadStatsJSON()`. That last one writes `STATE.profile` to disk and deliberately omits every
+  location field; if you add a stat to it, keep that split intact and update the `note` string it
+  embeds.
 - **`js/catalog-ui.js`** — The "Filter Deck" that renders the catalog on the landing page.
   Every file is on screen with **nothing nested** — no `<details>` anywhere. Four stat tiles
   double as filters, three chip rails slice by sensitivity / what-we-do / group, a

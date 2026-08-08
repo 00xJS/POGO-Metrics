@@ -74,7 +74,12 @@ const GOLDEN = {
   "distinct raid gyms": 624,
   "snapshots": 341,
   "snapshot months": 19,
-  "support tickets": 26,
+  // Two conversations, 26 messages between them. Counting rows called that 26
+  // tickets. The demo fixture renumbers ticket ids CONSISTENTLY so these two
+  // numbers can differ — if they ever match again, the fixture has regressed
+  // back to one-ticket-per-row and stopped testing the grouping.
+  "support tickets": 2,
+  "support messages": 26,
   "login countries": 2,
   "coin vendors": 3,
   "free daily boxes": 917,
@@ -196,6 +201,7 @@ const actual = {
   "snapshots": S.photos.total,
   "snapshot months": Object.keys(S.photos.monthly).length,
   "support tickets": S.support.tickets,
+  "support messages": S.support.messages,
   "login countries": Object.keys(S.sessions.countries).length,
   "coin vendors": Object.keys(S.spend.vendor).length,
   "free daily boxes": S.spend.freeBundles,
@@ -250,6 +256,7 @@ const invariants = [
     !S.photos.first || !S.photos.last || S.photos.first <= S.photos.last],
   ["support topics never outnumber support tickets",
     Object.values(S.support.topics).reduce((a, b) => a + b, 0) <= S.support.tickets],
+  ["support tickets never outnumber support messages", S.support.tickets <= S.support.messages],
   /* The whole point of reading this file is that the message bodies are not
    * read. Nothing but a date, a subject and a count may reach STATE. */
   ["support state carries no message text",
