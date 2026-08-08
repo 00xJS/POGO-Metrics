@@ -588,7 +588,9 @@ function parseUnfriended(text) {
   const { rows } = parseRows(text, "x.tsv", true);
   const F = STATE.friends;
   for (const row of rows) {
-    const ts = parseTS(row["Date and time"] || row.__cells[1] || row.__cells[0]);
+    // cells[1] is the date column; cells[0] is the friend's NAME, and parseTS's
+    // last resort (new Date(s)) will happily turn some codenames into dates.
+    const ts = parseTS(row["Date and time"] || row.__cells[1]);
     if (ts) { F.unfriendedMonthly[monthKey(ts)] = (F.unfriendedMonthly[monthKey(ts)] || 0) + 1; F.unfriended++; }
   }
   if (F.unfriended) markLoaded("Recently Unfriended");
@@ -706,7 +708,12 @@ function parseInstalls(text) {
   const { rows } = parseRows(text, "x.csv", true);
   const I = STATE.installs;
   for (const row of rows) {
-    const ts = parseTS(row.Install_time || row.__cells[0]);
+    /* Real exports carry Install_time; the scrubbed demo fixture is reshaped to
+     * Event_time,Device_model,Platform,City,State and has no Install_time at
+     * all, so read BOTH names before falling back to a position. Column 0
+     * differs between the two files (Attributed_touch_time vs Event_time), so
+     * the positional read is a genuine last resort, not the working path. */
+    const ts = parseTS(row.Install_time || row.Event_time || row.__cells[0]);
     if (ts && (!I.first || ts < I.first)) I.first = ts;
     const dev = ((row.Device_model || "") + "").split("::").pop().trim();
     if (dev) I.devices[dev] = (I.devices[dev] || 0) + 1;
@@ -828,6 +835,12 @@ function teardown() {
   GLOBE_CLEANUP.forEach((fn) => { try { fn(); } catch (e) {} });
   GLOBE_CLEANUP = [];
   if (COUNT_IO) { COUNT_IO.disconnect(); COUNT_IO = null; }
+  /* Release the parsed export too. Clear and "Start over" used to tear down the
+   * charts while leaving every aggregate — trail points, timestamps, fort and
+   * gym maps, friend rows — alive in STATE, so the memory a user was trying to
+   * clear stayed put until they happened to build again. build() calls this
+   * first, so it gets its fresh state from here. */
+  STATE = freshState();
 }
 
 async function build() {
@@ -841,8 +854,7 @@ async function build() {
   res.innerHTML = `<div class="empty-state"><div class="gl-spin" style="margin:0 auto 14px"></div>
     <p id="build-progress">Reading your files…</p></div>`;
   try {
-    STATE = freshState();
-    teardown();
+    teardown(); // also resets STATE
 
     // Kick off the libraries this build will need while we parse.
     const libWaits = [ensureScript("vendor/chart.umd.min.js")];
@@ -887,10 +899,17 @@ async function build() {
     res.innerHTML = "";
 
     if (!STATE.loaded.length) {
-      res.innerHTML = `<div class="empty-state"><div class="es-emoji">🤔</div>
-        <h3 style="margin:10px 0 6px">Nothing to visualise yet</h3>
-        <p>None of those files had a story we can tell. Try adding files like <code>Gameplay.txt</code>,
-        <code>FriendList.tsv</code>, or your <code>Player_Journey</code> folder.</p></div>`;
+      // Blaming the user's files for what is actually a stale file handle is the
+      // wrong story: if nothing could be re-read, say exactly that.
+      res.innerHTML = unreadable.length
+        ? `<div class="empty-state"><div class="es-emoji">📂</div>
+          <h3 style="margin:10px 0 6px">Couldn't re-read your files</h3>
+          <p>The export folder may have moved, been deleted, or been renamed since you picked it.
+          Add ${unreadable.length === 1 ? esc(unreadable[0]) : "the files"} again to rebuild.</p></div>`
+        : `<div class="empty-state"><div class="es-emoji">🤔</div>
+          <h3 style="margin:10px 0 6px">Nothing to visualise yet</h3>
+          <p>None of those files had a story we can tell. Try adding files like <code>Gameplay.txt</code>,
+          <code>FriendList.tsv</code>, or your <code>Player_Journey</code> folder.</p></div>`;
       res.scrollIntoView({ behavior: scrollBehavior() });
       return;
     }
@@ -2977,8 +2996,16 @@ document.addEventListener("DOMContentLoaded", () => {
     $("browse-btn").addEventListener("click", () => fileInput.click());
     $("folder-btn").addEventListener("click", () => folderInput.click());
     dz.addEventListener("click", (e) => { if (e.target.closest("button")) return; fileInput.click(); });
-    fileInput.addEventListener("change", (e) => ingest(e.target.files));
-    folderInput.addEventListener("change", (e) => ingest(e.target.files));
+    /* Clear the input after reading it. A file input fires no change event when
+     * you re-pick the SAME path, so without this "add it again" — the advice we
+     * give when a file handle has gone stale — silently does nothing. */
+    const takeFiles = async (input) => {
+      const files = [...input.files];
+      input.value = "";
+      await ingest(files);
+    };
+    fileInput.addEventListener("change", () => takeFiles(fileInput));
+    folderInput.addEventListener("change", () => takeFiles(folderInput));
 
     ["dragenter", "dragover"].forEach((ev) => dz.addEventListener(ev, (e) => { e.preventDefault(); dz.classList.add("drag"); }));
     ["dragleave", "drop"].forEach((ev) => dz.addEventListener(ev, (e) => { e.preventDefault(); if (ev === "drop" || e.target === dz) dz.classList.remove("drag"); }));
