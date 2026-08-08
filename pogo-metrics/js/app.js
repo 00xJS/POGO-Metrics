@@ -2876,6 +2876,7 @@ function renderSpending() {
  * a code prettifies into something no trainer would recognise. */
 const ITEM_NAMES = {
   ITEM_ENHANCED_CURRENCY: "Link Charges",
+  ITEM_ENHANCED_CURRENCY_HOLDER: "Link Holder", // the container; its count is how many charges you hold
 };
 function prettyItem(n) {
   if (ITEM_NAMES[n]) return ITEM_NAMES[n];
