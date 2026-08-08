@@ -62,6 +62,10 @@ const GOLDEN = {
   "busiest hour-of-week cell": "Thu 01:00",
   "busiest cell count": 599,
   "busiest day of week": "Sat",
+  "bag items": 16807,
+  "bag kinds": 56,
+  "event pass points": 234182,
+  "fusion resources": 36870,
 };
 
 /* ---------- the smallest browser the parsers will accept ---------- */
@@ -158,6 +162,10 @@ const actual = {
   "busiest day of week": DAYS[S.ev.hourweek
     .map((row, d) => [d, row.reduce((a, b) => a + b, 0)])
     .sort((a, b) => b[1] - a[1])[0][0]],
+  "bag items": S.bag ? S.bag.bagTotal : 0,
+  "bag kinds": S.bag ? S.bag.distinct : 0,
+  "event pass points": S.bag ? S.bag.points : 0,
+  "fusion resources": S.bag ? S.bag.resources : 0,
 };
 
 /* Invariants that must hold for ANY export, not just this fixture. These catch
@@ -177,6 +185,14 @@ const invariants = [
   ["remote raids do not exceed all raids", S.ev.raidRemote <= S.ev.raidTotal],
   ["every friend row has a name", S.friends.rows.every((r) => r.name)],
   ["no fort has zero visits", [...S.ev.forts.values()].every((f) => f.n > 0)],
+  ["bag splits reconcile with Niantic's own item count",
+    !S.bag || S.bag.bagTotal + S.bag.points + S.bag.resources === S.bag.declared],
+  ["every bag item has a name, a positive count and a group",
+    !S.bag || S.bag.items.every((i) => i.name && i.n > 0 && i.group)],
+  ["bag groups sum to the bag total",
+    !S.bag || Object.values(S.bag.groups).reduce((a, b) => a + b, 0) === S.bag.bagTotal],
+  ["bag items are sorted biggest first",
+    !S.bag || S.bag.items.every((it, i, a) => i === 0 || a[i - 1].n >= it.n)],
 ];
 
 /* ---------- report ---------- */

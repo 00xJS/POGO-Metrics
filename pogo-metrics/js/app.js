@@ -166,6 +166,7 @@ function freshState() {
       raidArcs: new Map(), raidGymBins: new Map(), remoteRaidsByYear: {},
     },
     trail: [], trailCount: 0, trailStride: 1,
+    bag: null,
     friends: { rows: [], monthly: {}, sources: {}, initiated: {}, games: {}, unfriendedMonthly: {}, unfriended: 0 },
     invites: { sent: 0, accepted: 0, declined: 0 },
     party: { received: 0, sent: 0 },
@@ -429,6 +430,8 @@ function parseGameplay(text) {
    * A handful of event/collection badges (BADGE_MINI_COLLECTION, BADGE_SMORES_01)
    * store a PROGRESS COUNT rather than a 1-4 tier, so they are kept and counted
    * but deliberately left untiered instead of being charted as "tier 162". */
+  parseBag(text);
+
   const medals = [];
   const re = /^[ \t]*Badge: (.+?)\.? where X is : (\d+)[ \t]*$|^[ \t]*(BADGE_\w+): (\d+)[ \t]*$|^[ \t]*Badge: ([^:\n]+): : (\d+)[ \t]*$/gm;
   let m;
@@ -944,6 +947,7 @@ async function build() {
     // trainer card rather than six chapters down where people never reach it.
     safe(renderTrainer);
     safe(renderWorld);
+    safe(renderBag);
     safe(renderActivity);
     safe(renderRhythm);
     safe(renderRecords);
@@ -1539,6 +1543,52 @@ function humanDur(ms) {
   if (h < 24) return h + "h" + (m ? " " + m + "m" : "");
   const d = Math.floor(h / 24);
   return d + " day" + (d === 1 ? "" : "s") + (h % 24 ? " " + (h % 24) + "h" : "");
+}
+
+/* ── what's in your bag ── */
+function renderBag() {
+  const b = STATE.bag;
+  if (!b || !b.items.length) return;
+
+  const stats = [
+    [fmt(b.bagTotal), "Items in your bag", `${fmt(b.distinct)} different kinds`],
+    [b.items[0] ? fmt(b.items[0].n) : "—", "Most-stocked item", b.items[0] ? b.items[0].name : ""],
+  ];
+  const balls = b.groups["Poké Balls"] || 0;
+  const berries = b.groups["Berries"] || 0;
+  if (balls) stats.push([fmt(balls), "Poké Balls ready", "across every ball type"]);
+  if (berries) stats.push([fmt(berries), "Berries", "for catches and gym defenders"]);
+  let inner = statGrid(stats);
+
+  const groups = Object.entries(b.groups).sort((a, c) => c[1] - a[1]);
+  const cId = uid();
+  inner += `<div class="split" style="margin-top:16px">
+    <div>${chartWrap(cId)}</div>
+    <div><div style="font-weight:700;margin-bottom:10px">Your ten deepest stacks</div>
+      ${rankList(b.items.slice(0, 10).map((i) => [i.name, i.n]))}</div>
+  </div>`;
+  later(() => newChart(cId, {
+    type: "doughnut",
+    data: {
+      labels: groups.map((g) => g[0]),
+      datasets: [{ data: groups.map((g) => g[1]),
+        backgroundColor: groups.map((g) => (BAG_GROUPS.find((x) => x[0] === g[0]) || [, , C.dim])[2]), borderWidth: 0 }],
+    },
+    options: { cutout: "58%", plugins: { legend: { position: "right" }, title: { display: true, text: "What your bag is made of" } } },
+  }));
+
+  // Niantic's own item count is mostly not bag items at all — say so, because
+  // that number is in the export and ours would otherwise look wrong.
+  const asides = [];
+  if (b.points) asides.push(`<b>${fmt(b.points)}</b> event pass points`);
+  if (b.resources) asides.push(`<b>${fmt(b.resources)}</b> fusion and crafting resources`);
+  if (asides.length) {
+    inner += `<div class="hw-caption">Niantic counts ${fmt(b.declared)} “items” for you, but that total includes
+      ${asides.join(" and ")} — progress currencies rather than things in your bag. The ${fmt(b.bagTotal)} above is
+      what you are actually carrying.</div>`;
+  }
+
+  return moduleHTML("🎒", "What's in your bag", `${fmt(b.bagTotal)} items across ${fmt(b.distinct)} kinds, as of your last sync.`, inner);
 }
 
 /* ── "your rhythm": how you actually played, not just how much ── */
@@ -2871,16 +2921,78 @@ function renderSpending() {
 
   return moduleHTML("💳", "Your spending story", `Every coin bought and spent${primary ? ` — ${sym}${fmt(round(primary[1].native))} in ${primary[0]} across ${fmt(primary[1].purchases)} purchase${primary[1].purchases === 1 ? "" : "s"}` : ""}.`, inner);
 }
+/* ── bag inventory (Gameplay.txt) ──
+ * The item list sits under "You have N items:" as indented "Name: count" lines,
+ * mixing friendly names ("Master balls") with raw codes ("ITEM_XL_RARE_CANDY").
+ *
+ * That headline N is badly misleading and the trainer card has been printing it
+ * as "Items in bag": on the reference export it reads 287,859, but 234,182 of
+ * those are event-pass POINTS and 36,870 are fusion/crafting resources. The
+ * actual bag holds 16,807. Points and resources are counted, but kept out of
+ * the bag figure and labelled for what they are. */
+const BAG_GROUPS = [
+  ["Poké Balls", /ball/i, "#e63946"],
+  ["Berries", /berry|razz|nanab|pinap/i, "#5ad469"],
+  ["Potions & Revives", /potion|revive/i, "#ff6bb3"],
+  ["Raid & battle passes", /raid pass|raid ticket|battle_pass|premium/i, "#ff9d42"],
+  ["Evolution items", /evolution|stone|dragon scale|king's rock|metal coat|up-grade|sinnoh|unova/i, "#a06bff"],
+  ["TMs & move items", /\bTM\b|move_reroll/i, "#3b6cff"],
+  ["Candy", /candy/i, "#ffcb05"],
+  ["Incubators", /incubator/i, "#41d8c6"],
+  ["Lures & Incense", /lure|incense/i, "#c23e8c"],
+  ["Boosters", /lucky egg|star piece|max_boost|beans|poffin|breakfast/i, "#ffc24b"],
+  ["Link items", /enhanced_currency/i, "#2bb3a3"],
+];
+function bagGroupFor(name) {
+  for (const [label, re] of BAG_GROUPS) if (re.test(name)) return label;
+  return "Other gear";
+}
+function parseBag(text) {
+  const lines = text.replace(/\r/g, "").split("\n");
+  const start = lines.findIndex((l) => /^You have \d+ items:/.test(l));
+  if (start < 0) return;
+  const declared = +lines[start].match(/(\d+)/)[1];
+  const items = [];
+  let points = 0, resources = 0, bagTotal = 0;
+  for (let i = start + 1; i < lines.length; i++) {
+    const line = lines[i];
+    if (!line.trim()) continue;                      // blank line inside the block
+    if (!/^\t[^\t]/.test(line)) break;               // the section ends at the first non-item line
+    const m = line.match(/^\t(.+?):\s*(\d+)\s*$/);
+    if (!m) continue;
+    const raw = m[1].trim(), n = +m[2];
+    if (/EVENT_PASS_POINT/i.test(raw)) { points += n; continue; }
+    if (/^FUSION_RESOURCE|ITEM_RESOURCE|^ITEM_MP$/i.test(raw)) { resources += n; continue; }
+    bagTotal += n;
+    if (n > 0) items.push({ name: prettyItem(raw), n, group: bagGroupFor(raw + " " + prettyItem(raw)) });
+  }
+  if (!items.length) return;
+  items.sort((a, b) => b.n - a.n);
+  const groups = {};
+  items.forEach((it) => (groups[it.group] = (groups[it.group] || 0) + it.n));
+  STATE.bag = { items, groups, bagTotal, points, resources, declared, distinct: items.length };
+}
+
 /* Niantic's internal item codes don't always tidy up into the name players
  * actually see in the shop, so override those by hand. Add a line here whenever
  * a code prettifies into something no trainer would recognise. */
 const ITEM_NAMES = {
   ITEM_ENHANCED_CURRENCY: "Link Charges",
   ITEM_ENHANCED_CURRENCY_HOLDER: "Link Holder", // the container; its count is how many charges you hold
+  ITEM_XL_RARE_CANDY: "Rare Candy XL",
+  ITEM_GEN4_EVOLUTION_STONE: "Sinnoh Stone",
+  ITEM_GEN5_EVOLUTION_STONE: "Unova Stone",
+  ITEM_GOLDEN_PINAP_BERRY: "Silver Pinap Berry",
+  ITEM_MOVE_REROLL_ELITE_FAST_ATTACK: "Elite Fast TM",
+  ITEM_MOVE_REROLL_ELITE_SPECIAL_ATTACK: "Elite Charged TM",
+  ITEM_REMOTE_RAID_TICKET: "Remote Raid Pass",
+  ITEM_INCENSE_DAILY_ADVENTURE: "Daily Adventure Incense",
 };
 function prettyItem(n) {
   if (ITEM_NAMES[n]) return ITEM_NAMES[n];
-  return n.startsWith("ITEM_") ? cap(n.replace(/^ITEM_/, "").replace(/_/g, " ")) : titleCase(n);
+  // Title-case both shapes so a coded name sits beside a friendly one without
+  // looking like a different kind of thing ("Poke Balls" / "Shadow Gem").
+  return titleCase(n.replace(/^ITEM_/, ""));
 }
 
 /* ── fitness (Adventure Sync) ── */
