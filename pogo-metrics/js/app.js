@@ -1465,7 +1465,16 @@ function renderTrainer() {
     [fmt(p.stardust || 0), "Stardust"],
     [fmt(p.eggsHatched || 0), "Eggs hatched"],
     [fmt(p.pokecoin || 0), "PokéCoins on hand"],
-    [fmt(p.totalItems || 0), "Items in bag"],
+    /* Niantic's own "You have N items" counts event-pass points and crafting
+     * resources as items — 287,859 against a real bag of 16,807 on the
+     * reference export. The bag chapter has split those out since it landed,
+     * but this card went on printing the raw figure, so the same page showed
+     * two "items in bag" numbers 17x apart. Prefer the real one; fall back only
+     * when there is no parseable item list to count (parseBag bails on some
+     * profiles, so STATE.bag genuinely can be absent). */
+    STATE.bag
+      ? [fmt(STATE.bag.bagTotal), "Items in bag", fmt(STATE.bag.distinct) + " different kinds"]
+      : [fmt(p.totalItems || 0), "Items in bag", "as counted by Niantic"],
     [fmt(p.medalCount || STATE.medals.length || 0), "Medals earned"],
   ];
   let inner = statGrid(stats);

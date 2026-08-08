@@ -61,8 +61,13 @@ falls back to a flat Leaflet heatmap with the same data.
 ## Privacy
 
 - 100% client-side. There is no backend, no upload, no account.
-- Emails, IP addresses, advertising IDs and order numbers are never read at all, even when the
-  raw file contains them.
+- Emails, IP addresses, advertising IDs and order numbers are never parsed, rendered, or exported,
+  even when the raw file contains them. Be precise when writing this claim down: `ingest()` reads
+  each accepted file whole with `.text()`, and `parseRows` builds a row object per line with every
+  column on it, so those values do pass through memory. What is true — and what the wording must
+  say — is that no parser extracts them, no chapter shows them, `downloadStatsJSON` omits them, and
+  `connect-src 'self'` means nothing can send them off-origin. An allowlisting parser would make
+  the stronger claim literally true; it has been judged not worth the bug surface.
 - Locations **are** read — the globe and map are the point. They are drawn on-device and
   published nowhere, but they do plot where the user played, and `renderGlobe()` derives a
   `home` point from the densest activity bin and centres the camera on it. The UI says so
