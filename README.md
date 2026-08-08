@@ -31,7 +31,7 @@ already know what you're looking at and can upload only what you're comfortable 
 
 That catalog is searchable down to Niantic's own column names: type `latitude` and it shows you
 the two files that carry your coordinates, quoting the real `Player_Latitude` header back at you.
-Filter by sensitivity, or by the six files this site deliberately never reads.
+Filter by sensitivity, or by the files this site deliberately never reads.
 
 ## What you get
 
@@ -40,13 +40,18 @@ Each file you drop in lights up its own chapter. Upload one file or the whole ex
 | Chapter | Built from |
 |---|---|
 | **Trainer card** — level, XP, distance, collection by region, medal cabinet | `Gameplay.txt` |
+| **Your bag** — what you're carrying, by kind, plus the eggs on your bench | `Gameplay.txt` |
 | **Adventure log** — monthly timeline, hour-of-week rhythm, activity breakdown | `Player_Journey/*.csv` |
+| **Your rhythm** — play sessions rebuilt from timestamps, and the stops and gyms you keep going back to | `Player_Journey/*.csv` |
+| **Your last day on the map** — a minute-by-minute close-up of your most recent session, with the CP of the ones that got away | `Gameplay.txt` |
 | **Year over year** — every year compared, plus a shareable recap card per year (downloadable PNG; single-year journeys get their card too) | `Player_Journey/*.csv` |
 | **Your world** — a 3D globe of everywhere you've played, GPS trail, and remote-raid arcs | location files |
 | **Social** — friendships over time, how you connect, who reaches out first | `FriendList.tsv` and friends |
-| **Spending** — coin flow, top items, spend by currency | `InAppPurchases.tsv` |
+| **Spending** — coin flow, top items, which storefront, free boxes and support gifts | `InAppPurchases.tsv` |
 | **Fitness** — Adventure Sync steps and real-world equivalents | `FitnessData.tsv` |
-| **Sessions, events, contributions** | app sessions, live events, Wayfarer |
+| **Photo album** — every GO Snapshot you've taken, by month | `ImageData.txt` |
+| **Behind the screen** — sessions, devices, cities, countries, support tickets | app sessions, installs, support |
+| **Live events and Wayfarer contributions** | tickets, `wayfarer_player_data.json` |
 
 Nothing is required. Upload only `FriendList.tsv` and you'll get exactly the social chapter and
 nothing else.
@@ -120,8 +125,14 @@ pogo-metrics/          the deployed site (netlify.toml publishes this folder as-
 
 `demo/` is generated from a real export by `tools/scrub-demo.mjs`: GPS coordinates are translated
 and jittered to a fake city, every name, email, order number, IP and ad-ID is faked or dropped,
-cities are remapped, and the big event logs are downsampled. Numbers, dates, medals, species and
-timing are preserved so the story still feels real. **No real personal data is present.**
+account and referral IDs are replaced, cities and countries are remapped, support message bodies
+are dropped entirely, and the big event logs are downsampled. Numbers, dates, medals, species and
+timing are preserved so the story still feels real.
+
+The scrubber will not let you ship a half-anonymized demo: it records every identifier it
+replaces, then re-reads everything it wrote and fails — deleting the output rather than
+publishing it — if any of them survived, or if any email address or IP address appears anywhere.
+**No real personal data is present**, and that is checked rather than asserted.
 
 ```sh
 node pogo-metrics/tools/scrub-demo.mjs "<path to an unzipped export>"

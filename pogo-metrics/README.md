@@ -28,18 +28,24 @@ anonymized sample used by the Live Example page.)
   file detection.
 - **`js/app.js`** — The engine. Reads each `File` with `.text()`, routes it by filename to a
   parser, accumulates into a single `STATE`, then renders independent story chapters:
-  - **Gameplay.txt** → trainer card, collection by region, top species, medal cabinet
+  - **Gameplay.txt** → trainer card, collection by region, top species, medal cabinet, bag
+    breakdown + egg bench, and the rolling end-of-file activity log (a close-up of the last
+    session, the only place in the export where individual Pokémon and their CP appear)
   - **Player_Journey/\*.csv** → activity totals, monthly stacked timeline, breakdown donut,
     hour-of-week heat grid, **year-over-year comparison** with downloadable per-year recap
-    cards (PNG), the world globe, and remote-raid detection (≥50 km via haversine)
+    cards (PNG), the world globe, remote-raid detection (≥50 km via haversine), and the
+    most-visited PokéStops and raid gyms (ranked, never with coordinates)
   - **GameplayLocationHistory.tsv** → day-segmented GPS trail on the map
   - **FriendList / RecentlyUnfriended / RecentInviteActions / ActivityInvites** → social world
-  - **InAppPurchases.tsv** → spending: coin flow, top items, spend by currency
+  - **InAppPurchases.tsv** → spending: coin flow, top items, spend by currency, storefront
+    split, free daily boxes and support gifts
   - **FitnessData.tsv** → Adventure Sync steps + real-world equivalents
-  - **App_Sessions / App_Installs** → sessions, devices, login cities
+  - **ImageData.txt** → the GO Snapshot photo album (dates only — never an image)
+  - **App_Sessions / App_Installs** → sessions, devices, login cities and countries
+  - **SupportInteractions\*.tsv** → ticket count and subjects (never the message bodies)
   - **LiveEventRegistrationHistory** → ticketed events; **wayfarer_player_data.json** → contributions
 - **`js/catalog-ui.js`** — The "Filter Deck" that renders the catalog on the landing page.
-  All 21 files are on screen with **nothing nested** — no `<details>` anywhere. Four stat tiles
+  Every file is on screen with **nothing nested** — no `<details>` anywhere. Four stat tiles
   double as filters, three chip rails slice by sensitivity / what-we-do / group, a
   LIST · CARDS · FULL density switch controls how much of each entry shows, and the search box
   indexes the raw Niantic column names and echoes the matching fragment back (typing `latitude`

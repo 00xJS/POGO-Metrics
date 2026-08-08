@@ -69,6 +69,16 @@ const esc = (s) => String(s == null ? "" : s).replace(/&/g, "&amp;").replace(/</
 const cap = (s) => s.charAt(0).toUpperCase() + s.slice(1).toLowerCase();
 const titleCase = (s) => s.replace(/_/g, " ").toLowerCase().replace(/\b\w/g, (c) => c.toUpperCase());
 const base = (p) => (p || "").split("/").pop();
+/* ISO-3166 code → country name, straight from the browser's own locale data:
+ * a bundled 250-entry lookup table would be pure weight, and fetching one would
+ * break the "no external requests at all" promise. Falls back to the raw code
+ * wherever Intl.DisplayNames isn't available. */
+const REGION_NAMES = (() => {
+  try { return new Intl.DisplayNames(["en"], { type: "region" }); } catch (e) { return null; }
+})();
+function countryName(cc) {
+  try { return (REGION_NAMES && REGION_NAMES.of(cc)) || cc; } catch (e) { return cc; }
+}
 let UID = 0;
 const uid = () => "u" + ++UID;
 
@@ -157,7 +167,7 @@ function parseRows(text, name, keepCells) {
 function freshState() {
   return {
     loaded: [],              // catalog names that produced data
-    profile: null, collection: null, medals: [], recentLog: null,
+    profile: null, collection: null, medals: [], recent: null, eggs: null,
     ev: {
       totals: {}, byMonth: {}, hourweek: Array.from({ length: 7 }, () => Array(24).fill(0)),
       days: new Set(), dayCounts: {}, geo: new Map(), geoKind: new Map(), first: null, last: null,
@@ -170,9 +180,14 @@ function freshState() {
     friends: { rows: [], monthly: {}, sources: {}, initiated: {}, games: {}, unfriendedMonthly: {}, unfriended: 0 },
     invites: { sent: 0, accepted: 0, declined: 0 },
     party: { received: 0, sent: 0 },
-    spend: { coinsBought: 0, coinsSpent: 0, purchases: 0, spendEvents: 0, items: {}, cur: {}, vendor: {}, boughtMonthly: {}, spentMonthly: {} },
+    spend: {
+      coinsBought: 0, coinsSpent: 0, purchases: 0, spendEvents: 0, items: {}, cur: {}, vendor: {},
+      boughtMonthly: {}, spentMonthly: {}, freeBundles: 0, paidBundles: 0, granted: 0, grantedItems: {},
+    },
     fitness: { daily: {} },
-    sessions: { monthly: {}, devices: {}, cities: {}, places: {}, total: 0 },
+    photos: { monthly: {}, days: {}, total: 0, first: null, last: null },
+    support: { tickets: 0, topics: {}, first: null, last: null },
+    sessions: { monthly: {}, devices: {}, cities: {}, countries: {}, places: {}, total: 0 },
     installs: { count: 0, first: null, devices: {} },
     liveEvents: [],
     wayfarer: null,
@@ -287,7 +302,10 @@ async function ingest(files) {
     // Keep the File handle alongside the text. build() drops the text once it
     // has parsed it and re-reads from the handle on a rebuild, so a 40 MB
     // export stops costing ~72 MB of retained UTF-16 for the tab's lifetime.
-    const rec = { name, text, entry, file: f };
+    // Several files (sweepstakes, leaderboards, refunds) arrive containing
+    // nothing but "No data found." — that isn't a file we failed to read, it's
+    // Niantic saying there's nothing on record, and the list should say so.
+    const rec = { name, text, entry, file: f, empty: /^\s*No data found\.?\s*$/i.test(text) };
     if (existing >= 0) RAW[existing] = rec; else RAW.push(rec);
     added++;
   }
@@ -357,6 +375,7 @@ function renderDetected() {
       else if (r.entry.sensitivity === "high") { cls = "skip"; status = "Skipped (privacy)"; }
       else { cls = "skip"; status = "No chapter yet"; }
     }
+    if (r.empty) { cls = "skip"; status = "Empty — nothing on record"; note = "Niantic sent this file with no rows in it."; }
     if (r.oversize) { cls = "skip"; status = `Too large (${r.oversize} MB) — skipped`; }
     return `<div class="file-chip ${cls}">
       <span class="fc-icon">${icon}</span>
@@ -395,6 +414,8 @@ function routeFile(name, text) {
     if (/app_installs\.csv$/i.test(n)) return parseInstalls(text);
     if (/liveeventregistrationhistory_aspurchaser\.tsv$/i.test(n)) return parseLiveEvents(text);
     if (/wayfarer_player_data\.json$/i.test(n)) return parseWayfarer(text);
+    if (/imagedata\.txt$/i.test(n)) return parsePhotos(text);
+    if (/supportinteractions\d*\.tsv$/i.test(n)) return parseSupport(text);
   } catch (e) {
     console.warn("Failed to parse", name, e);
   }
@@ -482,8 +503,86 @@ function parseGameplay(text) {
     topSpecies: Object.entries(species).sort((a, b) => b[1] - a[1]).slice(0, 12),
     genCounts,
   };
-  STATE.recentLog = { caught: (text.match(/was caught!/g) || []).length, fled: (text.match(/ran away!/g) || []).length };
+  parseEggs(text);
+  parseRecentLog(text);
   markLoaded("Gameplay Summary");
+}
+
+/* ── egg pool (Gameplay.txt) ──
+ * "You have hatched N and currently have M eggs:" is followed by one line per
+ * egg — "\tEgg 1: in incubator - 3.3 / 10.0 km" or "\tEgg 3: 0 / 2.0 km". The
+ * km figure is the egg's TIER (2/5/7/10/12), and "in incubator" says which ones
+ * are actually walking. Only the hatched count was ever read. */
+function parseEggs(text) {
+  const lines = text.replace(/\r/g, "").split("\n");
+  const start = lines.findIndex((l) => /^You have hatched \d+ and currently have \d+ eggs:/.test(l));
+  if (start < 0) return;
+  const idle = text.match(/You have (\d+) incubators not in use/);
+  const held = +lines[start].match(/currently have (\d+) eggs/)[1];
+  const tiers = {};
+  let incubating = 0;
+  for (let i = start + 1; i < lines.length; i++) {
+    const m = lines[i].match(/^\tEgg \d+:\s*(.*)$/);
+    if (!m) break;                                  // the list ends at the blank line
+    if (/in incubator/i.test(m[1])) incubating++;
+    const km = m[1].match(/\/\s*([\d.]+)\s*km/);
+    if (km) { const k = String(+km[1]); tiers[k] = (tiers[k] || 0) + 1; }
+  }
+  if (held || Object.keys(tiers).length) {
+    STATE.eggs = { held, incubating, idleIncubators: idle ? +idle[1] : null, tiers };
+  }
+}
+
+/* ── the rolling activity log (Gameplay.txt) ──
+ * Under "VS Seeker Status" Niantic ships a short, fully timestamped log of the
+ * last stretch you played: every stop and gym spun with its item haul, every
+ * Pokémon caught or fled WITH ITS CP, hatches, research completed, buddy candy.
+ * It has been in every export all along, and the app only ever counted two of
+ * its line shapes into a pair of numbers it then never rendered. */
+const RECENT_RE = {
+  items: /^Received (\d+) items? from (PokeStop|Gym)\.?$/i,
+  caught: /^(.+?) was caught! CP (\d+)$/,
+  fled: /^(.+?) ran away! CP (\d+)$/,
+  hatched: /^(.+?) was hatched! CP (\d+)$/,
+  buddy: /^BUDDY_POKEMON .+ found a candy\.?$/i,
+};
+/* "V0661_POKEMON_FLETCHLING" and "Growlithe" both appear in this log, exactly
+ * as they do in the collection list. Show players the name they know. */
+function prettySpecies(n) {
+  const m = String(n).match(/^V\d{4}_POKEMON_(.+)$/);
+  return titleCase(m ? m[1] : String(n));
+}
+function parseRecentLog(text) {
+  const lines = text.replace(/\r/g, "").split("\n");
+  const head = lines.findIndex((l) => /^Date and time\tDescription/i.test(l));
+  if (head < 0) return;
+  const R = {
+    caught: [], fled: [], hatched: [], research: 0, buddyCandy: 0, other: 0,
+    items: 0, spins: { PokeStop: 0, Gym: 0 }, first: null, last: null, rows: 0,
+  };
+  for (let i = head + 1; i < lines.length; i++) {
+    const line = lines[i];
+    if (!line.trim()) break;                        // the log ends at the blank line
+    const tab = line.indexOf("\t");
+    if (tab < 0) break;
+    const ts = parseTS(line.slice(0, tab));
+    const desc = line.slice(tab + 1).trim();
+    if (!ts || !desc) continue;
+    R.rows++;
+    if (!R.first || ts < R.first) R.first = ts;
+    if (!R.last || ts > R.last) R.last = ts;
+    let m;
+    if ((m = desc.match(RECENT_RE.items))) {
+      R.items += +m[1];
+      R.spins[/gym/i.test(m[2]) ? "Gym" : "PokeStop"]++;
+    } else if ((m = desc.match(RECENT_RE.caught))) R.caught.push({ name: prettySpecies(m[1]), cp: +m[2], ts });
+    else if ((m = desc.match(RECENT_RE.fled))) R.fled.push({ name: prettySpecies(m[1]), cp: +m[2], ts });
+    else if ((m = desc.match(RECENT_RE.hatched))) R.hatched.push({ name: prettySpecies(m[1]), cp: +m[2], ts });
+    else if (/^Completed Research:/i.test(desc)) R.research++;
+    else if (RECENT_RE.buddy.test(desc)) R.buddyCandy++;
+    else R.other++;
+  }
+  if (R.rows) STATE.recent = R;
 }
 
 function parsePlayerJourney(label, text) {
@@ -648,13 +747,21 @@ function parsePurchases(text) {
       if (ts) S.boughtMonthly[monthKey(ts)] = (S.boughtMonthly[monthKey(ts)] || 0) + coins;
       const c = (S.cur[cur] = S.cur[cur] || { native: 0, coins: 0, purchases: 0 });
       c.native += amt; c.coins += coins; c.purchases++;
-      S.vendor[vendor] = (S.vendor[vendor] || 0) + amt;
+      /* Track coins and purchase COUNT per vendor, never a summed native
+       * amount: a player can buy in USD on one store and IDR on another, and
+       * adding those together gives a number that means nothing. Coins are the
+       * one unit every vendor shares. */
+      const v = (S.vendor[vendor] = S.vendor[vendor] || { purchases: 0, coins: 0 });
+      v.purchases++; v.coins += coins;
     } else if (typ === "In-game item bought") {
       const item = (row["Item purchased"] || "").trim();
-      if (item && !item.startsWith("LPSKU")) {
-        const q = parseInt(parseFloat(row["Number of items"]) || 1, 10) || 1;
-        S.items[item] = (S.items[item] || 0) + Math.max(q, 1);
-      }
+      const q = Math.max(parseInt(parseFloat(row["Number of items"]) || 1, 10) || 1, 1);
+      /* LPSKU_* are shop BUNDLES rather than single items, and they used to be
+       * dropped whole. That threw away both the free daily box — the single
+       * most repeated "purchase" in a real export — and every paid bundle. */
+      if (item.startsWith("LPSKU")) {
+        if (/\bFREE\b/i.test(item)) S.freeBundles += q; else S.paidBundles += q;
+      } else if (item) S.items[item] = (S.items[item] || 0) + q;
     } else if (typ === "Pokecoin spent for in-game item") {
       S.spendEvents++;
       const delta = parseInt(parseFloat(row["Change in pokecoins"]) || 0, 10);
@@ -662,9 +769,15 @@ function parsePurchases(text) {
         S.coinsSpent += -delta;
         if (ts) S.spentMonthly[monthKey(ts)] = (S.spentMonthly[monthKey(ts)] || 0) + -delta;
       }
+    } else if (/granted by admin/i.test(typ)) {
+      /* Niantic's own compensation for outages, bugs and broken raids. This
+       * matched no branch at all before, so it was parsed and discarded. */
+      const item = (row["Item purchased"] || "").trim();
+      S.granted++;
+      if (item) S.grantedItems[item] = (S.grantedItems[item] || 0) + Math.max(parseInt(parseFloat(row["Number of items"]) || 1, 10) || 1, 1);
     }
   }
-  if (S.purchases || S.spendEvents || Object.keys(S.items).length) markLoaded("In-App Purchases");
+  if (S.purchases || S.spendEvents || S.freeBundles || S.granted || Object.keys(S.items).length) markLoaded("In-App Purchases");
 }
 
 /* Read fitness columns BY HEADER, like every other parser. Reading c[1]/c[2]/c[3]
@@ -703,6 +816,11 @@ function parseSessions(text) {
     if (ts) S.monthly[monthKey(ts)] = (S.monthly[monthKey(ts)] || 0) + 1;
     const dev = ((row.Device_model || "") + "").split("::").pop().trim();
     if (dev) S.devices[dev] = (S.devices[dev] || 0) + 1;
+    /* Country_code has always been in this file and was always read past. It is
+     * the one geography the app can show WITHOUT any GPS file — a session-only
+     * upload otherwise gets no world story at all. */
+    const cc = (row.Country_code || "").trim().toUpperCase();
+    if (/^[A-Z]{2}$/.test(cc)) S.countries[cc] = (S.countries[cc] || 0) + 1;
     const city = (row.City || "").trim();
     const state = (row.State || "").trim();
     const place = [city, state].filter(Boolean).join(", ");
@@ -755,6 +873,55 @@ function parseLiveEvents(text) {
     });
   }
   if (STATE.liveEvents.length) markLoaded("Live Event Tickets");
+}
+
+/* ── GO Snapshot photos (ImageData.txt) ──
+ * Two columns: an opaque image handle and an upload timestamp. No image, no
+ * caption, no coordinates — which makes this the one file in the export that is
+ * all story and no sensitivity. */
+function parsePhotos(text) {
+  const { header, rows } = parseRows(text, "x.tsv", true);
+  const P = STATE.photos;
+  const kId = header.find((h) => /image|id/i.test(h)) || header[0];
+  const kTs = header.find((h) => /date|time|upload/i.test(h)) || header[1];
+  const seen = new Set();
+  for (const row of rows) {
+    const id = (row[kId] || row.__cells[0] || "").trim();
+    const ts = parseTS(row[kTs] || row.__cells[1]);
+    if (!ts) continue;
+    if (id) { if (seen.has(id)) continue; seen.add(id); }   // the same photo can be listed twice
+    P.total++;
+    P.monthly[monthKey(ts)] = (P.monthly[monthKey(ts)] || 0) + 1;
+    P.days[ts.toISOString().slice(0, 10)] = (P.days[ts.toISOString().slice(0, 10)] || 0) + 1;
+    if (!P.first || ts < P.first) P.first = ts;
+    if (!P.last || ts > P.last) P.last = ts;
+  }
+  if (P.total) markLoaded("Photo / Image Data");
+}
+
+/* ── support tickets (SupportInteractions*.tsv) ──
+ * DATE AND SUBJECT ONLY. This file also carries the full text of everything you
+ * ever wrote to Niantic support, plus custom fields and internal metadata; the
+ * catalog promises those are never read, and this is where that promise is
+ * kept. The ticket number is an identifier, so it is stripped from the subject
+ * rather than stored. */
+function parseSupport(text) {
+  const { header, rows } = parseRows(text, "x.tsv", true);
+  const S = STATE.support;
+  const kTs = header.find((h) => /date|time/i.test(h)) || header[0];
+  const kTitle = header.find((h) => /ticket/i.test(h)) || header[1];
+  for (const row of rows) {
+    const ts = parseTS(row[kTs] || row.__cells[0]);
+    const topic = (row[kTitle] || row.__cells[1] || "").replace(/^\s*Ticket\s+\d+\s*:\s*/i, "").trim();
+    if (!ts && !topic) continue;
+    S.tickets++;
+    if (ts) {
+      if (!S.first || ts < S.first) S.first = ts;
+      if (!S.last || ts > S.last) S.last = ts;
+    }
+    if (topic) S.topics[topic] = (S.topics[topic] || 0) + 1;
+  }
+  if (S.tickets) markLoaded("Support Interactions");
 }
 
 function parseWayfarer(text) {
@@ -950,11 +1117,13 @@ async function build() {
     safe(renderBag);
     safe(renderActivity);
     safe(renderRhythm);
+    safe(renderRecentLog);
     safe(renderRecords);
     safe(renderYearOverYear);
     safe(renderSocial);
     safe(renderSpending);
     safe(renderFitness);
+    safe(renderPhotos);
     safe(renderLiveEvents);
     safe(renderSessions);
     safe(renderWayfarer);
@@ -1106,6 +1275,7 @@ function storySlides() {
   if (STATE.spend.coinsBought) s.push({ kicker: "THE WAR CHEST", num: STATE.spend.coinsBought, label: "PokéCoins bought", grad: 9 });
   const km = Object.values(STATE.fitness.daily).reduce((a, d) => a + (d.meters || 0), 0) / 1000;
   if (km > 1) s.push({ kicker: "ON FOOT", num: Math.round(km), label: "kilometres walked with the game open", grad: 10 });
+  if (STATE.photos.total) s.push({ kicker: "THROUGH THE LENS", num: STATE.photos.total, label: "GO Snapshots you stopped to take", grad: 3 });
   const years = [...new Set(Object.keys(e.byMonth).map((m) => m.slice(0, 4)))];
   s.push({
     kicker: "AND COUNTING",
@@ -1264,9 +1434,11 @@ function downloadStatsJSON() {
     friends: { total: STATE.friends.rows.length, monthly: STATE.friends.monthly, sources: STATE.friends.sources, unfriended: STATE.friends.unfriended },
     spending: STATE.spend,
     fitnessDaily: STATE.fitness.daily,
-    // cities/places are location history — excluded to keep the note above true
+    photos: { total: STATE.photos.total, monthly: STATE.photos.monthly },
+    // cities/places/countries are location history — excluded to keep the note above true
     sessions: { total: STATE.sessions.total, monthly: STATE.sessions.monthly, devices: STATE.sessions.devices },
     installs: STATE.installs,
+    supportTickets: STATE.support.tickets,
     liveEvents: STATE.liveEvents.length,
     wayfarer: STATE.wayfarer,
   };
@@ -1577,6 +1749,20 @@ function renderBag() {
     options: { cutout: "58%", plugins: { legend: { position: "right" }, title: { display: true, text: "What your bag is made of" } } },
   }));
 
+  /* Eggs live in their own section of Gameplay.txt rather than the item list,
+   * so they never appeared in a bag chapter built from items alone. */
+  const eg = STATE.eggs;
+  if (eg && eg.held) {
+    const tiers = Object.entries(eg.tiers).sort((a, c) => +a[0] - +c[0]);
+    inner += `<hr class="mod-divider"><div style="font-weight:700;margin-bottom:2px">Your egg bench</div>
+      <div class="mod-sub" style="margin-bottom:10px">
+        <b>${fmt(eg.held)}</b> egg${eg.held === 1 ? "" : "s"} in your bag right now, ${
+          eg.incubating ? `<b>${fmt(eg.incubating)}</b> of them walking in an incubator` : "none of them incubating"}${
+          eg.idleIncubators ? ` — and <b>${fmt(eg.idleIncubators)}</b> incubator${eg.idleIncubators === 1 ? "" : "s"} sitting unused` : ""}.
+        ${tiers.length ? "By distance: " + tiers.map(([km, n]) => `<b>${n}×</b> ${km} km`).join(" · ") + "." : ""}
+      </div>`;
+  }
+
   // Niantic's own item count is mostly not bag items at all — say so, because
   // that number is in the export and ours would otherwise look wrong.
   const asides = [];
@@ -1596,9 +1782,11 @@ function renderRhythm() {
   const e = STATE.ev;
   const b = buildBouts(e.stamps);
   const topFort = [...e.forts.values()].sort((x, y) => y.n - x.n)[0];
-  // Both halves can be absent (one tiny Player_Journey file yields no measurable
-  // sessions and no repeat stop) — don't emit a chapter heading with no body.
-  if (!b && !(topFort && topFort.n > 1)) return;
+  const topGym = [...e.gyms.values()].sort((x, y) => y.n - x.n)[0];
+  // Every part can be absent (one tiny Player_Journey file yields no measurable
+  // sessions, no repeat stop and no repeat gym) — don't emit a chapter heading
+  // with no body.
+  if (!b && !(topFort && topFort.n > 1) && !(topGym && topGym.n > 1)) return;
 
   let inner = "";
   if (b) {
@@ -1655,7 +1843,122 @@ function renderRhythm() {
       Coordinates are deliberately not printed here — this chapter is safe to screenshot.</div>`;
   }
 
+  /* The raid-gym twin of the stop ranking above. Gym_Latitude/Longitude have
+   * been parsed into e.gyms since the raid-distance work and read by nothing —
+   * the same "one place I keep going back to" story, for raiders. */
+  if (topGym && topGym.n > 1) {
+    const gyms = [...e.gyms.values()].sort((x, y) => y.n - x.n);
+    const totalLobbies = gyms.reduce((a, g) => a + g.n, 0);
+    const top5 = gyms.slice(0, 5).reduce((a, g) => a + g.n, 0);
+    const years = (topGym.last - topGym.first) / 31557600000;
+    inner += `<hr class="mod-divider"><div style="font-weight:700;margin-bottom:2px">The gyms you keep raiding</div>
+      <div class="mod-sub" style="margin-bottom:10px">
+        You've raided at <b>${fmt(gyms.length)}</b> distinct gyms. Your number one accounts for
+        <b>${fmt(topGym.n)}</b> lobbies${years >= 0.15 ? ` across <b>${years.toFixed(1)} years</b>` : ""} —
+        first on ${fmtDate(topGym.first)}, most recently ${fmtDate(topGym.last)}.
+        Your top five are <b>${Math.round(top5 / totalLobbies * 100)}%</b> of every lobby you joined.
+      </div>`;
+    inner += rankList(gyms.slice(0, 8).map((g, i) => [
+      "Gym #" + (i + 1) + (i === 0 ? " — your home gym" : ""),
+      g.n,
+    ]), (v) => fmt(v) + " lobbies");
+    inner += `<div class="hw-caption">Remote raids count here too, so a gym you've never stood next to can still top this list.
+      As above, the coordinates stay off the page.</div>`;
+  }
+
   return moduleHTML("⏱️", "Your rhythm", "How you actually play — in sessions, and in the places you keep returning to.", inner);
+}
+
+/* ── the last stretch Niantic wrote down (Gameplay.txt's rolling log) ──
+ * Every other chapter is an aggregate over years. This one is a single session
+ * in full detail — the only place in the whole export where individual Pokémon
+ * are named and their CP recorded. Deliberately framed as one recent window,
+ * because that is all Niantic keeps here. */
+function renderRecentLog() {
+  const R = STATE.recent;
+  if (!R || !R.rows) return;
+  const caught = R.caught.length, fled = R.fled.length, encounters = caught + fled;
+  const spanMs = R.last && R.first ? R.last - R.first : 0;
+
+  const stats = [];
+  if (encounters) {
+    stats.push([Math.round(caught / encounters * 100) + "%", "Catch rate",
+      `${fmt(caught)} caught, ${fmt(fled)} got away`]);
+  }
+  if (R.items) {
+    stats.push([fmt(R.items), "Items picked up",
+      `${fmt(R.spins.PokeStop)} stop${R.spins.PokeStop === 1 ? "" : "s"} · ${fmt(R.spins.Gym)} gym${R.spins.Gym === 1 ? "" : "s"} spun`]);
+  }
+  if (R.spins.PokeStop + R.spins.Gym) {
+    stats.push([(R.items / (R.spins.PokeStop + R.spins.Gym)).toFixed(1), "Items per spin", "what the stops actually gave you"]);
+  }
+  if (R.hatched.length) stats.push([fmt(R.hatched.length), "Eggs hatched", "in this window"]);
+  if (R.research) stats.push([fmt(R.research), "Research tasks done"]);
+  if (R.buddyCandy) stats.push([fmt(R.buddyCandy), "Buddy candy found"]);
+  if (spanMs > 60000) stats.push([humanDur(spanMs), "Window length", "first to last entry in the log"]);
+  let inner = statGrid(stats.slice(0, 8));
+
+  const byCP = (a, b) => b.cp - a.cp;
+  const best = R.caught.slice().sort(byCP)[0];
+  const escapees = R.fled.slice().sort(byCP).slice(0, 6);
+  if (best || escapees.length) {
+    inner += `<div class="split" style="margin-top:18px">
+      <div>${best ? `<div style="font-weight:700;margin-bottom:10px">Your best catch of the day</div>
+        ${rankList(R.caught.slice().sort(byCP).slice(0, 6).map((p) => [p.name, p.cp]), (v) => "CP " + fmt(v))}` : ""}</div>
+      <div>${escapees.length ? `<div style="font-weight:700;margin-bottom:10px">The ones that got away</div>
+        ${rankList(escapees.map((p) => [p.name, p.cp]), (v) => "CP " + fmt(v))}` : ""}</div>
+    </div>`;
+  }
+
+  inner += `<div class="hw-caption">This log is the short rolling window Niantic attaches to <code>Gameplay.txt</code> — usually the
+    last few hours you played, not your whole history. It is also the only place in the entire export where individual
+    Pokémon are named and their CP recorded${best ? `, which is how we know ${esc(best.name)} at CP ${fmt(best.cp)} was the best thing you caught that day` : ""}.</div>`;
+
+  const when = R.first ? fmtDate(R.first) : "";
+  return moduleHTML("🔍", "Your last day on the map",
+    `A close-up of ${when ? "<b>" + esc(when) + "</b>" : "your most recent logged session"} — ${fmt(R.rows)} entries, moment by moment.`,
+    inner);
+}
+
+/* ── GO Snapshot photos (ImageData.txt) ── */
+function renderPhotos() {
+  const P = STATE.photos;
+  if (!P.total) return;
+  const months = monthSpan(Object.keys(P.monthly));
+  const best = Object.entries(P.monthly).sort((a, b) => b[1] - a[1])[0];
+  const bestDay = Object.entries(P.days).sort((a, b) => b[1] - a[1])[0];
+  const bestDayEvent = bestDay ? eventFor(bestDay[0]) : null;
+  const activeMonths = Object.keys(P.monthly).length;
+
+  const stats = [
+    [fmt(P.total), "Snapshots taken", activeMonths ? `across ${fmt(activeMonths)} different months` : ""],
+    [best ? fmt(best[1]) : "—", "Busiest month", best ? fmtMonth(best[0]) : ""],
+    [bestDay ? fmt(bestDay[1]) : "—", "Most in one day",
+      bestDay ? fmtDate(parseTS(bestDay[0])) + (bestDayEvent ? " · " + bestDayEvent : "") : ""],
+    [P.first ? fmtDate(P.first) : "—", "Oldest photo kept", "the start of Niantic's window"],
+  ];
+  let inner = statGrid(stats);
+
+  const cId = uid();
+  inner += `<div style="margin-top:16px">${chartWrap(cId)}</div>`;
+  later(() => newChart(cId, {
+    type: "bar",
+    data: {
+      labels: months.map(fmtMonth),
+      datasets: [{ label: "Snapshots", backgroundColor: C.pink, borderRadius: 3, data: months.map((m) => P.monthly[m] || 0) }],
+    },
+    options: {
+      plugins: { legend: { display: false }, title: { display: true, text: "Snapshots you took, month by month" } },
+      scales: { x: { grid: { display: false }, ticks: { maxTicksLimit: 14 } }, y: { beginAtZero: true, title: { display: true, text: "photos" } } },
+    },
+  }));
+
+  inner += `<div class="hw-caption">Your export lists a reference and a date for every GO Snapshot — never the picture itself, and never
+    where it was taken. That makes this the one file in the whole export that is all story and no exposure, which is why it gets a chapter.</div>`;
+
+  return moduleHTML("📸", "Your photo album",
+    `${fmt(P.total)} GO Snapshots${P.first && P.last ? `, between ${esc(fmtDate(P.first))} and ${esc(fmtDate(P.last))}` : ""}.`,
+    inner);
 }
 
 function isoShift(iso, delta) {
@@ -1850,6 +2153,7 @@ function buildYearData() {
       coinsBought: sumMonths(STATE.spend.boughtMonthly, y),
       friendsAdded: sumMonths(STATE.friends.monthly, y),
       sessions: sumMonths(STATE.sessions.monthly, y),
+      photos: sumMonths(STATE.photos.monthly, y),
       monthLabels: yMonths.map((m) => MON1[+m.slice(5) - 1]),
       monthlyStacks: yMonths.map((m) => seriesKeys.map((lab) => [SERIES_COLORS[lab], byMonth[m][lab] || 0])),
     };
@@ -1891,6 +2195,7 @@ function renderYearOverYear() {
     ["Longest streak", (w) => w.streak],
     ["Friends added", (w) => w.friendsAdded],
     ["Coins bought", (w) => w.coinsBought],
+    ["Snapshots", (w) => w.photos],
   ].filter(([, fn]) => years.some((y) => fn(data[y]) > 0));
 
   const cId = uid();
@@ -2919,7 +3224,47 @@ function renderSpending() {
     <div><div style="font-weight:700;margin-bottom:10px">Spending by currency</div>${rankList(curEntries.map(([c, d]) => [c, d.native]), (v, name) => (CUR_SYM[name] || "") + fmt(round(v)))}</div>
   </div>`;
 
+  /* Where the coins were actually bought. Parsed since day one, shown nowhere —
+   * and the web-store split is the part players care about, because it pays a
+   * bonus the app stores don't. */
+  const vendors = Object.entries(S.vendor).sort((a, b) => b[1].coins - a[1].coins);
+  if (vendors.length > 1) {
+    inner += `<hr class="mod-divider"><div style="font-weight:700;margin-bottom:2px">Where you bought your coins</div>
+      <div class="mod-sub" style="margin-bottom:10px">Ranked by coins, not cash — your purchases may span several currencies.</div>`;
+    const buys = {};
+    vendors.forEach(([v, d]) => (buys[prettyVendor(v)] = d.purchases));
+    inner += rankList(vendors.map(([v, d]) => [prettyVendor(v), d.coins]),
+      (v, name) => fmt(v) + " coins · " + fmt(buys[name]) + "×");
+    if (S.vendor.XSOLLA && S.coinsBought > 0) {
+      inner += `<div class="hw-caption">Xsolla is Niantic's own web store, which sells coins at a bonus the App Store and Google Play don't match —
+        ${Math.round(S.vendor.XSOLLA.coins / S.coinsBought * 100)}% of your coins came through it.</div>`;
+    }
+  }
+
+  /* Two things the ledger records that no chapter ever mentioned: the free
+   * daily box (thrown away with the rest of the LPSKU bundles) and the items
+   * Niantic hands out as an apology. */
+  const extras = [];
+  if (S.freeBundles) extras.push([fmt(S.freeBundles), "free daily boxes claimed"]);
+  if (S.paidBundles) extras.push([fmt(S.paidBundles), "paid shop bundles"]);
+  if (S.granted) extras.push([fmt(S.granted), "gifts from Niantic support"]);
+  if (extras.length) {
+    inner += `<div style="margin-top:18px;font-weight:700">Also in the ledger</div>${calloutRow(extras)}`;
+    const gifts = Object.entries(S.grantedItems).sort((a, b) => b[1] - a[1]).slice(0, 4);
+    if (gifts.length) {
+      inner += `<div class="hw-caption">"Granted by admin" is Niantic making something right after an outage or a broken raid.
+        Yours came to ${gifts.map(([n, q]) => `<b>${fmt(q)}×</b> ${esc(prettyItem(n))}`).join(", ")}.</div>`;
+    } else if (S.freeBundles) {
+      inner += `<div class="hw-caption">The free daily box counts as a purchase in Niantic's ledger, which is why it shows up here at all.</div>`;
+    }
+  }
+
   return moduleHTML("💳", "Your spending story", `Every coin bought and spent${primary ? ` — ${sym}${fmt(round(primary[1].native))} in ${primary[0]} across ${fmt(primary[1].purchases)} purchase${primary[1].purchases === 1 ? "" : "s"}` : ""}.`, inner);
+}
+/* Niantic writes the payment processor's own name; players know the storefront. */
+function prettyVendor(v) {
+  const map = { APPLE: "App Store", GOOGLE: "Google Play", XSOLLA: "Web store (Xsolla)", SAMSUNG: "Galaxy Store", OTHER: "Other" };
+  return map[String(v).toUpperCase()] || titleCase(v);
 }
 /* ── bag inventory (Gameplay.txt) ──
  * The item list sits under "You have N items:" as indented "Name: count" lines,
@@ -3050,16 +3395,24 @@ function renderLiveEvents() {
 
 /* ── sessions / devices ── */
 function renderSessions() {
-  const S = STATE.sessions, I = STATE.installs;
-  if (!S.total && !I.count) return;
+  const S = STATE.sessions, I = STATE.installs, T = STATE.support;
+  // Support tickets ride in this chapter, so a support-only upload must still
+  // open it rather than falling through to nothing.
+  if (!S.total && !I.count && !T.tickets) return;
   const devices = Object.entries(S.devices).sort((a, b) => b[1] - a[1]).slice(0, 6);
   const cities = Object.entries(S.cities).sort((a, b) => b[1] - a[1]).slice(0, 8);
-  let inner = statGrid([
-    [fmt(S.total), "App sessions"],
-    [fmt(Object.keys(S.devices).length || Object.keys(I.devices).length), "Devices used"],
-    [fmt(Object.keys(S.cities).length), "Cities seen"],
-    [I.count ? (I.first ? I.first.getUTCFullYear() : fmt(I.count)) : "—", I.first ? "First install" : "Installs"],
-  ]);
+  const countries = Object.entries(S.countries).sort((a, b) => b[1] - a[1]);
+  let inner = "";
+  if (S.total || I.count) {
+    inner += statGrid([
+      [fmt(S.total), "App sessions"],
+      [fmt(Object.keys(S.devices).length || Object.keys(I.devices).length), "Devices used"],
+      countries.length
+        ? [fmt(countries.length), "Countries", countries.length === 1 ? countryName(countries[0][0]) : "you've opened the game in"]
+        : [fmt(Object.keys(S.cities).length), "Cities seen"],
+      [I.count ? (I.first ? I.first.getUTCFullYear() : fmt(I.count)) : "—", I.first ? "First install" : "Installs"],
+    ]);
+  }
   const months = monthSpan(Object.keys(S.monthly));
   if (months.length > 1) {
     const cId = uid();
@@ -3074,8 +3427,44 @@ function renderSessions() {
     ${devices.length ? `<div><div style="font-weight:700;margin-bottom:10px">Devices you played on</div>${rankList(devices)}</div>` : "<div></div>"}
     ${cities.length ? `<div><div style="font-weight:700;margin-bottom:10px">Where you logged in</div>${rankList(cities)}</div>` : "<div></div>"}
   </div>`;
+  /* Country is the one piece of geography that needs no GPS file at all, so
+   * this survives even when someone uploads nothing but their session log. */
+  if (countries.length > 1) {
+    inner += `<hr class="mod-divider"><div style="font-weight:700;margin-bottom:2px">Countries you've played in</div>
+      <div class="mod-sub" style="margin-bottom:10px">Niantic stamps each session with a country. No coordinates involved —
+      this is the only map in the app that works without a single GPS file.</div>`;
+    inner += rankList(countries.map(([cc, n]) => [countryName(cc), n]), (v) => fmt(v) + " sessions");
+  }
   inner += renderTravelLog();
-  return moduleHTML("📱", "Behind the screen", `${fmt(S.total)} app sessions across your devices and cities. (We never read the IPs or ad-IDs in these files.)`, inner);
+  inner += renderSupport();
+  const sub = S.total
+    ? `${fmt(S.total)} app sessions across your devices and cities. (We never read the IPs or ad-IDs in these files.)`
+    : `What Niantic's technical records say about you. (We never read the IPs or ad-IDs in these files.)`;
+  return moduleHTML("📱", "Behind the screen", sub, inner);
+}
+
+/* ── support tickets ──
+ * Date and subject only. The raw file also holds every word you have ever
+ * written to Niantic support; that column is never read, and saying so is
+ * worth as much as the stat itself. */
+function renderSupport() {
+  const T = STATE.support;
+  if (!T.tickets) return "";
+  const topics = Object.entries(T.topics).sort((a, b) => b[1] - a[1]);
+  const span = T.first && T.last && T.last - T.first > 864e5
+    ? ` between ${fmtDate(T.first)} and ${fmtDate(T.last)}` : T.first ? ` on ${fmtDate(T.first)}` : "";
+  // The export contains the ticket that asked for the export.
+  const meta = topics.find(([t]) => /request my data/i.test(t));
+  let out = `<hr class="mod-divider"><div style="font-weight:700;margin-bottom:2px">Your support history</div>
+    <div class="mod-sub" style="margin-bottom:10px">
+      <b>${fmt(T.tickets)}</b> ticket${T.tickets === 1 ? "" : "s"} with Niantic${span}.
+      ${meta ? `${meta[1] === T.tickets ? "Every one of them was" : `<b>${fmt(meta[1])}</b> of them were`} a request for your data —
+        including, somewhere in here, the one that produced the file you are reading this from.` : ""}
+    </div>`;
+  if (topics.length > 1) out += rankList(topics.slice(0, 6), (v) => fmt(v) + (v === 1 ? " ticket" : " tickets"));
+  out += `<div class="hw-caption">Only the date and the subject line are read. The message bodies, custom fields and metadata in this
+    file are never opened — not by this chapter, not anywhere.</div>`;
+  return out;
 }
 
 /* ── travel log: the globe knows coordinates, this knows PLACE NAMES ──
