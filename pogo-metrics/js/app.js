@@ -2871,7 +2871,14 @@ function renderSpending() {
 
   return moduleHTML("💳", "Your spending story", `Every coin bought and spent${primary ? ` — ${sym}${fmt(round(primary[1].native))} in ${primary[0]} across ${fmt(primary[1].purchases)} purchase${primary[1].purchases === 1 ? "" : "s"}` : ""}.`, inner);
 }
+/* Niantic's internal item codes don't always tidy up into the name players
+ * actually see in the shop, so override those by hand. Add a line here whenever
+ * a code prettifies into something no trainer would recognise. */
+const ITEM_NAMES = {
+  ITEM_ENHANCED_CURRENCY: "Link Charges",
+};
 function prettyItem(n) {
+  if (ITEM_NAMES[n]) return ITEM_NAMES[n];
   return n.startsWith("ITEM_") ? cap(n.replace(/^ITEM_/, "").replace(/_/g, " ")) : titleCase(n);
 }
 
