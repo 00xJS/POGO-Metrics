@@ -54,8 +54,10 @@ const GOLDEN = {
   "fitness days": 24,
   "pokecoins bought": 1052900,
   "live events": 2,
-  "remote raids": 925,
-  "geo hotspots": 514,
+  // Coordinates are generated, not translated (see tools/scrub-demo.mjs), so
+  // these two describe the SYNTHETIC world's shape, not anyone's real movement.
+  "remote raids": 686,
+  "geo hotspots": 1247,
   "player journey timestamps": 13905,
   // A raw total cannot see a shifted grid — only the shape can. This is the
   // assertion that catches a UTC-vs-local regression in the hour-of-week data.

@@ -123,16 +123,25 @@ pogo-metrics/          the deployed site (netlify.toml publishes this folder as-
 
 ## The demo dataset
 
-`demo/` is generated from a real export by `tools/scrub-demo.mjs`: GPS coordinates are translated
-and jittered to a fake city, every name, email, order number, IP and ad-ID is faked or dropped,
-account and referral IDs are replaced, cities and countries are remapped, support message bodies
-are dropped entirely, and the big event logs are downsampled. Numbers, dates, medals, species and
-timing are preserved so the story still feels real.
+`demo/` is generated from a real export by `tools/scrub-demo.mjs`. Every name, email, order number,
+IP, ad-ID, account ID and referral code is faked or dropped, support message bodies are removed,
+cities and countries are remapped, and the big event logs are downsampled. Numbers, dates, medals,
+species and timing are preserved so the story still feels real.
+
+**Coordinates are generated, not anonymized.** No location in `demo/` is derived from a real one.
+The scrubber builds a synthetic world — one home city and seven travel cities — and assigns each
+distinct real coordinate a place in it by *how often it appears*, never by where it is. Frequency
+rank is the only thing that crosses over, and visit counts are already on screen in the app, so
+nothing new is exposed. Two real stops that were metres apart routinely land on different
+continents. What survives is the *distribution* that makes the demo worth looking at: one stop you
+visit constantly, a long tail you don't, a home city, some travel, and raids far enough away to
+count as remote.
 
 The scrubber will not let you ship a half-anonymized demo: it records every identifier it
 replaces, then re-reads everything it wrote and fails — deleting the output rather than
-publishing it — if any of them survived, or if any email address or IP address appears anywhere.
-**No real personal data is present**, and that is checked rather than asserted.
+publishing it — if any of them survived, or if any email address, IP address, or real coordinate
+value appears anywhere. **No real personal data is present**, and that is checked rather than
+asserted.
 
 ```sh
 node pogo-metrics/tools/scrub-demo.mjs "<path to an unzipped export>"

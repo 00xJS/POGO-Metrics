@@ -112,9 +112,19 @@ it from any real export with:
 node tools/scrub-demo.mjs "<path to an unzipped export>"
 ```
 
-The scrubber translates + jitters all GPS coordinates to a fake city, fakes or drops every name,
-email, order number, IP and ad-ID, remaps cities, and uniformly downsamples the big event logs.
-Numbers, dates, medals, species and timing are preserved so the story still feels real. **No real
-personal data is present in `demo/`.**
+The scrubber **generates** all GPS coordinates rather than transforming the real ones — it builds a
+synthetic world (one home city, seven travel cities) and assigns each distinct real coordinate a
+place in it by how often it appears, never by where it is. It also fakes or drops every name,
+email, account ID, referral code, order number, IP and ad-ID, drops support message bodies, remaps
+cities and countries, and uniformly downsamples the big event logs. Numbers, dates, medals, species
+and timing are preserved so the story still feels real.
+
+It then checks its own work: every file it wrote is re-read, and it deletes the output rather than
+shipping if any redacted identifier, email, IP or real coordinate value survived. **No real
+personal data is present in `demo/`**, and that is verified on every run.
+
+> An earlier version translated every coordinate by one global offset. That is not anonymisation —
+> a rigid translation preserves every distance and bearing, so the published demo was one
+> subtraction away from the real map. Don't reintroduce it.
 
 > Independent fan project. Not affiliated with Niantic, Scopely, Nintendo, or The Pokémon Company.

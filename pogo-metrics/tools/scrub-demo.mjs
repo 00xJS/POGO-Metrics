@@ -73,48 +73,102 @@ function applyRedactions(text) {
   return text;
 }
 
-/* ---------- coordinate scrubbing ---------- */
-const DEMO_ORIGIN = [34.0522, -118.2437]; // downtown Los Angeles — generic, street-rich
+/* ---------- coordinates: generated, not derived ----------
+ * This used to translate every real coordinate by ONE global offset and add
+ * ±45 m of jitter. That reads as anonymisation and is not: a rigid translation
+ * preserves every distance, bearing and cluster shape exactly, so the published
+ * demo was the owner's real movement geometry with a constant added. Anyone who
+ * recognised a single cluster could solve for the offset and recover the lot,
+ * home included. The output spanned 105° of latitude and 335° of longitude,
+ * which is not the "fake city" the docs claimed either.
+ *
+ * So no demo coordinate is derived from a real one any more. Instead a
+ * synthetic world is built up front, and each DISTINCT real coordinate is
+ * assigned a place in it by how OFTEN it appears — never by where it is.
+ * Frequency rank is the only thing that crosses over, and visit counts are
+ * already on screen in the "regular haunts" chapter, so nothing new is exposed.
+ *
+ * What that buys, and why it is worth the trouble: the shape that makes the
+ * demo worth looking at is not the real map, it is the DISTRIBUTION — one stop
+ * you visit constantly, a tail of stops you don't, a home city, a handful of
+ * places you travelled to, and some raids far enough away to be remote. All of
+ * that is reproduced. None of it is his. */
 function num(x) { const n = parseFloat(x); return isNaN(n) ? null : n; }
 
-// First pass: estimate the player's home centroid from a sample of points.
-function estimateCentroid() {
-  let sumLa = 0, sumLo = 0, n = 0;
-  for (const fn of ["Pokestop_spin1.csv", "Sfida_capture1.csv"]) {
-    const fp = path.join(PJ_SRC, fn);
-    if (!fs.existsSync(fp)) continue;
-    const lines = fs.readFileSync(fp, "utf8").split("\n");
-    const head = lines[0].split(",");
-    const li = head.indexOf("Player_Latitude"), oi = head.indexOf("Player_Longitude");
-    for (let i = 1; i < lines.length && n < 8000; i++) {
-      const c = lines[i].split(",");
-      const la = num(c[li]), lo = num(c[oi]);
-      if (la && lo && Math.abs(la) < 89) { sumLa += la; sumLo += lo; n++; }
+/* Real, public city centres. They belong to no one and reveal nothing. */
+const HOME = { name: "Los Angeles", lat: 34.0522, lon: -118.2437, radiusKm: 20 };
+const AWAY = [
+  { name: "Seattle", lat: 47.6062, lon: -122.3321, radiusKm: 9 },
+  { name: "Chicago", lat: 41.8781, lon: -87.6298, radiusKm: 9 },
+  { name: "New York", lat: 40.7128, lon: -74.0060, radiusKm: 9 },
+  { name: "London", lat: 51.5074, lon: -0.1278, radiusKm: 7 },
+  { name: "Tokyo", lat: 35.6762, lon: 139.6503, radiusKm: 7 },
+  { name: "Sydney", lat: -33.8688, lon: 151.2093, radiusKm: 7 },
+  { name: "São Paulo", lat: -23.5505, lon: -46.6333, radiusKm: 7 },
+];
+const KM_PER_DEG = 111.32;
+/* A point drawn uniformly inside a city's disc. sqrt() on the radius keeps the
+ * density even instead of bunching everything around the centre. */
+function within(city) {
+  const r = Math.sqrt(rnd()) * city.radiusKm;
+  const th = rnd() * Math.PI * 2;
+  return [
+    city.lat + (r * Math.cos(th)) / KM_PER_DEG,
+    city.lon + (r * Math.sin(th)) / (KM_PER_DEG * Math.cos((city.lat * Math.PI) / 180)),
+  ];
+}
+const fix6 = ([a, o]) => [a.toFixed(6), o.toFixed(6)];
+
+/* Pre-pass: how many times does each distinct real coordinate appear? Only the
+ * COUNT is kept — the coordinate itself is used as a dictionary key and then
+ * thrown away. */
+function tally(counts, la, lo) {
+  const a = num(la), o = num(lo);
+  if (a == null || o == null || (a === 0 && o === 0)) return;
+  const key = a.toFixed(5) + "," + o.toFixed(5);
+  counts.set(key, (counts.get(key) || 0) + 1);
+}
+function surveyCoords() {
+  const place = new Map(), gym = new Map();
+  for (const [type] of EVENT_TYPES) {
+    for (const suffix of ["1", "2"]) {
+      const lines = readLines(path.join(PJ_SRC, `${type}${suffix}.csv`));
+      if (!lines || !lines.length) continue;
+      const cols = lines[0].split(",");
+      const latI = cols.findIndex((c) => /Player_Latitude/i.test(c));
+      const lonI = cols.findIndex((c) => /Player_Longitude/i.test(c));
+      const gLatI = cols.findIndex((c) => /(Gym|Fort)_Latitude/i.test(c));
+      const gLonI = cols.findIndex((c) => /(Gym|Fort)_Longitude/i.test(c));
+      const isGym = /Gym_Latitude/i.test(lines[0]);
+      for (let i = 1; i < lines.length; i++) {
+        if (!lines[i].trim()) continue;
+        const c = lines[i].split(",");
+        if (latI >= 0) tally(place, c[latI], c[lonI]);
+        // Fort_* is a PokéStop and shares the "place" world with the player;
+        // Gym_* is a raid target and gets its own, so raid distance is ours to set.
+        if (gLatI >= 0) tally(isGym ? gym : place, c[gLatI], c[gLonI]);
+      }
     }
   }
-  return n ? [sumLa / n, sumLo / n] : [0, 0];
+  return { place, gym };
 }
-const CENTROID = estimateCentroid();
-const DLAT = DEMO_ORIGIN[0] - CENTROID[0];
-const DLON = DEMO_ORIGIN[1] - CENTROID[1];
-const jit = () => (rnd() - 0.5) * 0.0008; // ~±45 m
-/* Jitter STABLY, per distinct real coordinate — not per row.
- * Jittering every row independently scattered repeat visits to one PokéStop
- * across hundreds of fake stops, which made the "regular haunts" chapter look
- * empty on the demo: the sample's busiest stop showed 19 visits where the real
- * export has 8,876. Remembering the offset per source coordinate preserves the
- * "I go to this one stop constantly" shape that makes the chapter worth having,
- * while still moving every point to the fake city. */
-const coordJitter = new Map();
-function mapCoord(la, lo) {
-  const a = num(la), o = num(lo);
-  if (a == null || o == null || (a === 0 && o === 0)) return [la, lo];
-  const key = a.toFixed(5) + "," + o.toFixed(5);
-  let j = coordJitter.get(key);
-  if (!j) { j = [jit(), jit()]; coordJitter.set(key, j); }
-  return [(a + DLAT + j[0]).toFixed(6), (o + DLON + j[1]).toFixed(6)];
+
+/* Assign every distinct real coordinate a synthetic home, ranked by frequency.
+ * The busiest handful are pinned to HOME so the "your local" story survives;
+ * the rest fall to HOME or a travel city on a seeded coin-flip. Because rank is
+ * the only input, two real stops that were metres apart routinely land on
+ * different continents — which is the point. */
+function buildAtlas(counts, { pinned, homeShare }) {
+  const ranked = [...counts.entries()].sort((a, b) => b[1] - a[1] || (a[0] < b[0] ? -1 : 1));
+  const atlas = new Map();
+  const cityOf = new Map();
+  ranked.forEach(([key], i) => {
+    const city = i < pinned || rnd() < homeShare ? HOME : pick(AWAY);
+    atlas.set(key, within(city));
+    cityOf.set(key, city);
+  });
+  return { atlas, cityOf, ranked };
 }
-console.log("Home centroid ~", CENTROID.map((x) => x.toFixed(3)).join(","), "→ translated to LA demo origin");
 
 /* ---------- helpers ---------- */
 const readLines = (fp) => fs.existsSync(fp) ? fs.readFileSync(fp, "utf8").replace(/\r/g, "").split("\n") : null;
@@ -166,6 +220,58 @@ const EVENT_TYPES = [
   ["Join_Raid_lobby", 3000], ["Gym_battle", 1000], ["Feed_Pokemon", 1400],
   ["Deploy_Pokemon", 1200], ["Incense_encounter", 800], ["Lure_encounter", 800],
 ];
+/* Build the synthetic world. Survey first (EVENT_TYPES has to exist), then hand
+ * every distinct real coordinate a home in it.
+ *   pinned    how many of the busiest get forced into HOME. 12 stops keeps the
+ *             "your local" ranking intact; 6 gyms does the same for raids.
+ *   homeShare the odds an unpinned coordinate stays in HOME. Real players are
+ *             overwhelmingly local, and a demo that isn't looks wrong. */
+const SURVEY = surveyCoords();
+const PLACES = buildAtlas(SURVEY.place, { pinned: 12, homeShare: 0.80 });
+const GYMS = buildAtlas(SURVEY.gym, { pinned: 6, homeShare: 0.72 });
+/* Share of raid lobbies joined remotely. Remote raiding is common enough to be
+ * worth a chapter and nowhere near universal — this is a plausible constant,
+ * not a measurement of anyone. */
+const REMOTE_SHARE = 0.34;
+const keyOf = (la, lo) => {
+  const a = num(la), o = num(lo);
+  return a == null || o == null || (a === 0 && o === 0) ? null : a.toFixed(5) + "," + o.toFixed(5);
+};
+function mapPlace(la, lo) { const k = keyOf(la, lo); return k ? PLACES.atlas.get(k) || null : null; }
+function placeGym(la, lo) {
+  const k = keyOf(la, lo);
+  if (!k || !GYMS.atlas.has(k)) return null;
+  return { pos: GYMS.atlas.get(k), city: GYMS.cityOf.get(k) };
+}
+/* Where the player stood for a raid, decided ONCE per (real spot, real gym)
+ * pair and reused. Generating this per row instead scattered every repeat raid
+ * to a fresh position and blew the app's "distinct places you played" count
+ * from ~500 to ~4,000 — a demo trainer who never stands in the same place
+ * twice. The pair is the right key: raid the same gym from the same spot and
+ * you get the same synthetic spot, which is what makes the map cluster. */
+const raidSpots = new Map();
+function raidSpot(pKey, gKey, g) {
+  const k = pKey + "→" + gKey;
+  let hit = raidSpots.get(k);
+  if (!hit) {
+    const remote = rnd() < REMOTE_SHARE;
+    const elsewhere = AWAY.filter((x) => x !== g.city);
+    hit = remote && elsewhere.length ? within(pick(elsewhere)) : nearby(g.pos, 12);
+    raidSpots.set(k, hit);
+  }
+  return hit;
+}
+/* A point within `km` of another — used to stand the player next to a gym. */
+function nearby([lat, lon], km) {
+  const r = Math.sqrt(rnd()) * km;
+  const th = rnd() * Math.PI * 2;
+  return [
+    lat + (r * Math.cos(th)) / KM_PER_DEG,
+    lon + (r * Math.sin(th)) / (KM_PER_DEG * Math.cos((lat * Math.PI) / 180)),
+  ];
+}
+console.log(`  synthetic world: ${PLACES.atlas.size} places, ${GYMS.atlas.size} gyms across ${1 + AWAY.length} cities`);
+
 for (const [type, cap] of EVENT_TYPES) {
   let header = null, body = [];
   for (const suffix of ["1", "2"]) {
@@ -180,24 +286,58 @@ for (const [type, cap] of EVENT_TYPES) {
   const lonI = cols.findIndex((c) => /Player_Longitude/i.test(c));
   const gLatI = cols.findIndex((c) => /(Gym|Fort)_Latitude/i.test(c));
   const gLonI = cols.findIndex((c) => /(Gym|Fort)_Longitude/i.test(c));
+  const isGym = /Gym_Latitude/i.test(header);
   const sampled = strideSample(body, cap).map((line) => {
     const c = line.split(",");
-    if (latI >= 0 && lonI >= 0) { const [a, o] = mapCoord(c[latI], c[lonI]); c[latI] = a; c[lonI] = o; }
-    if (gLatI >= 0 && gLonI >= 0) { const [a, o] = mapCoord(c[gLatI], c[gLonI]); c[gLatI] = a; c[gLonI] = o; }
+    /* Raids are the one event where the two coordinates must RELATE to each
+     * other — the app calls a raid remote when the player is ≥50 km from the
+     * gym, and that stat has its own chapter. Place the gym first, then put
+     * the player either beside it or in a different city entirely, on a coin
+     * flip weighted to match how people actually raid. The real distance is
+     * never consulted, so no real reach is disclosed. */
+    /* Sfida_capture carries Gym_* COLUMNS with empty VALUES, so "does the
+     * header mention a gym" is not the same question as "is this row a raid".
+     * Getting that wrong let 2,575 rows of real coordinates through untouched:
+     * the gym lookup failed, and the branch returned before anything was
+     * rewritten. Only take the raid path when a gym is actually there. */
+    const g = isGym && latI >= 0 && gLatI >= 0 ? placeGym(c[gLatI], c[gLonI]) : null;
+    if (g) {
+      const pKey = keyOf(c[latI], c[lonI]), gKey = keyOf(c[gLatI], c[gLonI]);
+      [c[gLatI], c[gLonI]] = fix6(g.pos);
+      [c[latI], c[lonI]] = fix6(raidSpot(pKey, gKey, g));
+      return c.join(",");
+    }
+    if (latI >= 0 && lonI >= 0) { const p = mapPlace(c[latI], c[lonI]); if (p) [c[latI], c[lonI]] = fix6(p); }
+    if (gLatI >= 0 && gLonI >= 0) { const p = mapPlace(c[gLatI], c[gLonI]); if (p) [c[gLatI], c[gLonI]] = fix6(p); }
     return c.join(",");
   });
   write(`Player_Journey/${type}1.csv`, [header, ...sampled].join("\n"));
 }
 
-/* ---------- GameplayLocationHistory.tsv (scrub coords, downsample) ---------- */
+/* ---------- GameplayLocationHistory.tsv → a synthetic walk ----------
+ * This one can't go through the atlas. The atlas maps each distinct coordinate
+ * independently, which is right for stops you revisit but wrong for a GPS
+ * trace: a walking route is a SEQUENCE, and scattering its points across the
+ * atlas would draw the globe a cloud of confetti instead of a trail.
+ * So the trail is generated rather than mapped — a random walk that starts a
+ * fresh outing whenever the real log has a gap of more than an hour, which
+ * keeps the timestamps (and therefore the app's day-segmenting) honest while
+ * owing nothing to the real route. */
 {
   const lines = readLines(path.join(SRC, "GameplayLocationHistory.tsv"));
   if (lines) {
     const header = lines[0];
-    const body = lines.slice(1).filter((l) => l.trim());
-    const out = strideSample(body, 1500).map((line) => {
+    const body = strideSample(lines.slice(1).filter((l) => l.trim()), 1500);
+    let prev = null, prevT = null;
+    const out = body.map((line) => {
       const c = line.split("\t");
-      const [a, o] = mapCoord(c[1], c[2]); c[1] = a; c[2] = o;
+      const t = Date.parse(c[0]);
+      const newOuting = !prev || !Number.isFinite(t) || !Number.isFinite(prevT) || t - prevT > 3600e3;
+      // Most outings are from home; occasionally the trail picks up on a trip.
+      if (newOuting) prev = within(rnd() < 0.85 ? HOME : pick(AWAY));
+      else prev = nearby(prev, 0.4);   // ≤400 m between consecutive fixes
+      prevT = t;
+      [c[1], c[2]] = fix6(prev);
       return c.join("\t");
     });
     write("GameplayLocationHistory.tsv", [header, ...out].join("\n"));
@@ -401,11 +541,43 @@ for (const [src, cap] of [["App_Sessions.csv", 2500], ["App_Installs.csv", 50]])
     [/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i, "an email address"],
     [/\b(?:\d{1,3}\.){3}\d{1,3}\b/, "an IP address"],
   ];
+  /* Coordinates need their own check, and it has to be a positive test rather
+   * than a pattern: a real latitude looks exactly like a fake one. Every real
+   * coordinate in the source export goes into a set, and no demo file may
+   * contain any of them. This is the check that was missing — a header-shaped
+   * bug sent 2,575 rows of real positions straight through, and an identifier
+   * sweep cannot see that. It is also what makes "no coordinate is derived
+   * from a real one" a claim the generator proves on every run. */
+  const realCoords = new Set();
+  for (const [type] of EVENT_TYPES) {
+    for (const suffix of ["1", "2"]) {
+      const lines = readLines(path.join(PJ_SRC, `${type}${suffix}.csv`));
+      if (!lines) continue;
+      for (let i = 1; i < lines.length; i++) {
+        for (const cell of lines[i].split(",")) {
+          const v = cell.trim();
+          if (/^-?\d{1,3}\.\d{4,}$/.test(v)) realCoords.add(v);
+        }
+      }
+    }
+  }
+  for (const line of (readLines(path.join(SRC, "GameplayLocationHistory.tsv")) || []).slice(1)) {
+    for (const cell of line.split("\t")) {
+      const v = cell.trim();
+      if (/^-?\d{1,3}\.\d{4,}$/.test(v)) realCoords.add(v);
+    }
+  }
   const leaks = [];
   for (const rel of written) {
     const text = fs.readFileSync(path.join(OUT, rel), "utf8");
     for (const [real] of chased) if (text.includes(real)) leaks.push(`${rel}: real identifier "${real}"`);
     for (const [re, what] of PATTERNS) { const m = text.match(re); if (m) leaks.push(`${rel}: ${what} (${m[0]})`); }
+    let hits = 0, sample = "";
+    for (const cell of text.split(/[,\t\n]/)) {
+      const v = cell.trim();
+      if (v.length > 6 && realCoords.has(v)) { hits++; if (!sample) sample = v; }
+    }
+    if (hits) leaks.push(`${rel}: ${hits} real coordinate value(s), e.g. ${sample}`);
   }
   if (leaks.length) {
     fs.rmSync(OUT, { recursive: true, force: true });
@@ -424,6 +596,33 @@ write("manifest.json", JSON.stringify({
   files: written.filter((f) => f !== "manifest.json"),
 }, null, 2));
 
-write("README.md", `# Demo dataset (synthetic)\n\nThis folder is generated by \`tools/scrub-demo.mjs\` from a real Niantic export.\nAll coordinates are translated + jittered to a fake city, all names/emails/account\nIDs/referral codes are faked or dropped, support message bodies are removed, and\nevent logs are downsampled. It exists only to preview the visualizations.\n**No real personal data is present** — the generator verifies this by re-reading\nevery file it writes and refusing to ship if any redacted identifier, email\naddress or IP address survived.\n\nRegenerate with:\n\n    node tools/scrub-demo.mjs "<path to your unzipped export>"\n`);
+write("README.md", `# Demo dataset (synthetic)
+
+Generated by \`tools/scrub-demo.mjs\` from a real Niantic export, to preview the
+visualizations. **No real personal data is present.**
+
+**Coordinates are generated, not anonymized.** No location in this folder is
+derived from a real one. The generator builds a synthetic world — one home city
+and seven travel cities — and assigns each distinct real coordinate a place in
+it by HOW OFTEN it appears, never by where it is. Frequency rank is the only
+thing that crosses over, and visit counts are already on screen in the app. Two
+real stops that were metres apart routinely land on different continents.
+
+An earlier version translated every coordinate by a single offset and called
+that a fake city. It was not: a rigid translation preserves every distance and
+bearing exactly, so the output was one subtraction away from the real map.
+
+Names, emails, account IDs, referral codes and support message bodies are faked
+or dropped; event logs are downsampled. Numbers, dates, medals, species and
+timing are preserved so the story still feels real.
+
+The generator checks its own work: it re-reads every file it writes and refuses
+to ship — deleting the output — if any redacted identifier, email address, IP
+address, or **real coordinate value** survived.
+
+Regenerate with:
+
+    node tools/scrub-demo.mjs "<path to your unzipped export>"
+`);
 
 console.log(`\nDone. ${written.length} files → ${OUT}`);
