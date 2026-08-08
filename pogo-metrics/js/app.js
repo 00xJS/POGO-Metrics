@@ -1191,10 +1191,19 @@ async function build() {
     // it here avoids opening a one-slide story over an empty build.
     const demoCta = $("demo-story-cta");
     if (demoCta) { demoCta.disabled = false; demoCta.onclick = () => storyMode(); }
-    // move focus to the story so keyboard/screen-reader users land where the action is
+    /* Move focus and scroll to the freshly built story — but ONLY when the user
+     * asked for a build. On metrics.html they pressed a button and expect to be
+     * taken to the result. The live-example page builds itself on load, so the
+     * same two lines fired ~3s after arrival and yanked the page out from under
+     * someone mid-sentence, stealing focus from anyone already tabbing. That is
+     * a change the user never requested, which is the WCAG distinction.
+     * The heading still gets tabindex so it remains a focus target. */
     const hero = res.querySelector(".res-hero h2");
-    if (hero) { hero.setAttribute("tabindex", "-1"); try { hero.focus({ preventScroll: true }); } catch (e) {} }
-    res.scrollIntoView({ behavior: scrollBehavior() });
+    if (hero) hero.setAttribute("tabindex", "-1");
+    if (!window.DEMO_PAGE) {
+      if (hero) { try { hero.focus({ preventScroll: true }); } catch (e) {} }
+      res.scrollIntoView({ behavior: scrollBehavior() });
+    }
   } finally {
     BUILDING = false;
     POST = [];
@@ -2798,7 +2807,12 @@ function initGlobe({ P, points, maxCount, arcs, home, paths }) {
   const world = Globe({ rendererConfig: { preserveDrawingBuffer: true, antialias: true } })(el)
     .width(el.clientWidth).height(el.clientHeight || 560)
     .globeImageUrl("vendor/img/earth-night.jpg")
-    .bumpImageUrl("vendor/img/earth-topology.png")
+    /* JPEG, not PNG. This is an 8-bit grayscale heightfield that only perturbs
+     * surface normals, so lossy encoding is invisible here and PNG was costing
+     * 192 KB for nothing. The extension change gives it a fresh URL, which
+     * matters because /vendor/* ships immutable — textures are never replaced
+     * in place. */
+    .bumpImageUrl("vendor/img/earth-topology.jpg")
     .backgroundImageUrl("vendor/img/night-sky.jpg")
     .atmosphereColor(C.teal).atmosphereAltitude(0.18)
     .pointsData(points).pointLat("lat").pointLng("lng")
