@@ -42,6 +42,36 @@ const FIRST = ["Alex", "Sam", "Jordan", "Casey", "Riley", "Taylor", "Morgan", "J
 const CITIES = [["Rivertown", "Oregon"], ["Lakeside", "Colorado"], ["Brightport", "Washington"], ["Maplefield", "Vermont"], ["Stonehaven", "Maine"], ["Fairview", "Idaho"], ["Westbrook", "Montana"], ["Greendale", "Iowa"]];
 const fakeCodename = () => pick(ADJ) + pick(NOUN) + Math.floor(rnd() * 900 + 100);
 const fakeNick = () => pick(FIRST);
+const ID_CHARS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+const fakeId = (len) => Array.from({ length: Math.max(6, len) }, () => ID_CHARS[Math.floor(rnd() * ID_CHARS.length)]).join("");
+
+/* ---------- redaction ledger ----------
+ * Every real identifier we find gets recorded here with the fake that replaces
+ * it, and the LAST thing this script does is scan every written file for these
+ * strings. Rewriting the one line an identifier is declared on is not enough:
+ * Gameplay.txt quotes the buddy's nickname again inside the VS Seeker log, so
+ * a line-scoped rewrite left it in the published demo. Register, replace
+ * globally, then verify. */
+const SECRETS = new Map(); // real value → the fake that replaces it
+/* Register a real identifier and get its fake back. The mapping is stable, so
+ * the same trainer gets the same fake codename everywhere they appear. */
+function hide(real, makeFake) {
+  const s = String(real == null ? "" : real).trim();
+  if (!s) return "";
+  if (!SECRETS.has(s)) SECRETS.set(s, makeFake(s));
+  return SECRETS.get(s);
+}
+const hideCodename = (real) => hide(real, fakeCodename) || fakeCodename();
+/* Below 3 characters a "secret" is more likely to collide with ordinary text
+ * (a species name, an item code) than to be an identifier worth chasing. */
+const chaseable = ([real]) => real.length >= 3;
+function applyRedactions(text) {
+  // Longest first, so a nickname nested inside a longer captured string
+  // ("Meowth (NICKNAME)" vs "NICKNAME") can't be half-replaced.
+  const pairs = [...SECRETS.entries()].filter(chaseable).sort((a, b) => b[0].length - a[0].length);
+  for (const [real, fake] of pairs) text = text.split(real).join(fake);
+  return text;
+}
 
 /* ---------- coordinate scrubbing ---------- */
 const DEMO_ORIGIN = [34.0522, -118.2437]; // downtown Los Angeles — generic, street-rich
@@ -96,12 +126,38 @@ function strideSample(rows, cap) {
   return rows.filter((_, i) => i % step === 0);
 }
 
-/* ---------- Gameplay.txt (keep stats, fake names) ---------- */
+/* ---------- Gameplay.txt (keep stats, strip every identifier) ----------
+ * This file is mostly numbers, but it ends with an identity section that has
+ * nothing to do with gameplay: two account IDs that tie the export to a real
+ * Nintendo/Pokémon Home account, your referral code, and the codenames of
+ * every trainer you referred — other people's data, in a file that ships in a
+ * public repo. Collect them all into the redaction ledger, then rewrite the
+ * whole file at once so nothing survives in a second place. */
 {
-  let t = fs.readFileSync(path.join(SRC, "Gameplay.txt"), "utf8");
-  t = t.replace(/(Pokemon Home Trainer Name:).*/i, "$1 AshDemo");
-  t = t.replace(/(Buddy nickname:).*/i, "$1 Sparky");
-  write("Gameplay.txt", t);
+  const raw = fs.readFileSync(path.join(SRC, "Gameplay.txt"), "utf8");
+  const lines = raw.replace(/\r/g, "").split("\n");
+  const single = [
+    [/^Pokemon Home Trainer Name:\s*(.*)$/i, () => "AshDemo"],
+    [/^Buddy nickname:\s*(.*)$/i, () => "Sparky"],
+    [/^Nintendo Account ID:\s*(.*)$/i, (v) => fakeId(v.length)],
+    [/^Pokemon Home Support ID:\s*(.*)$/i, (v) => fakeId(v.length)],
+    [/^Referral code:\s*(.*)$/i, (v) => fakeId(v.length)],
+  ];
+  let inReferral = false;
+  for (const line of lines) {
+    let matched = false;
+    for (const [re, fake] of single) {
+      const m = line.match(re);
+      if (m && m[1].trim()) { hide(m[1], fake); matched = true; break; }
+    }
+    if (matched) continue;
+    if (/^Referral Connections:/i.test(line)) { inReferral = true; continue; }
+    if (!inReferral) continue;
+    if (!line.trim()) { inReferral = false; continue; }
+    if (/^Player\b/i.test(line)) continue;      // the "Player\tAreFriends" header
+    hideCodename(line.split("\t")[0]);          // a real trainer you referred
+  }
+  write("Gameplay.txt", applyRedactions(raw));
 }
 
 /* ---------- Player_Journey event files (merge 1+2, scrub coords, downsample) ---------- */
@@ -159,7 +215,7 @@ for (const [type, cap] of EVENT_TYPES) {
     for (let i = 1; i < lines.length; i++) {
       if (!lines[i].trim()) continue;
       const c = lines[i].split("\t");
-      if (ci >= 0) c[ci] = fakeCodename();
+      if (ci >= 0) c[ci] = hideCodename(c[ci]);
       if (ni >= 0 && c[ni]) c[ni] = fakeNick();
       out.push(c.join("\t"));
     }
@@ -175,7 +231,7 @@ for (const [type, cap] of EVENT_TYPES) {
     for (let i = 1; i < lines.length; i++) {
       if (!lines[i].trim()) continue;
       const c = lines[i].split("\t");
-      c[0] = fakeCodename();
+      c[0] = hideCodename(c[0]);
       out.push(c.join("\t"));
     }
     write("RecentlyUnfriended.tsv", out.join("\n"));
@@ -190,7 +246,7 @@ for (const [type, cap] of EVENT_TYPES) {
     for (const line of lines) {
       if (!line.trim()) continue;
       const c = line.split("\t");
-      if (c.length >= 3) c[2] = fakeCodename();
+      if (c.length >= 3) c[2] = hideCodename(c[2]);
       out.push(c.join("\t"));
     }
     write("RecentInviteActions.tsv", out.join("\n"));
@@ -222,21 +278,76 @@ function fakeCityFor(real) {
   if (!cityMap[real]) cityMap[real] = pick(CITIES);
   return cityMap[real];
 }
+/* Country_code is coarser than City, but it is still real travel history, so it
+ * gets the same treatment: distinct real countries map to distinct fakes. The
+ * first country seen becomes US, which keeps the demo consistent with the fake
+ * US cities above. Kept (rather than dropped) so the demo actually exercises
+ * the login-geography chapter. */
+const COUNTRY_POOL = ["US", "CA", "MX", "JP", "GB", "DE", "AU", "NZ"];
+const countryMap = {};
+function fakeCountryFor(real) {
+  const k = (real || "").trim().toUpperCase();
+  if (!k) return "";
+  if (!countryMap[k]) countryMap[k] = COUNTRY_POOL[Object.keys(countryMap).length % COUNTRY_POOL.length];
+  return countryMap[k];
+}
 for (const [src, cap] of [["App_Sessions.csv", 2500], ["App_Installs.csv", 50]]) {
   const lines = readLines(path.join(PJ_SRC, src));
   if (!lines) continue;
   const head = lines[0].split(",");
   const idx = (name) => head.indexOf(name);
-  const ei = idx("Event_time"), di = idx("Device_model"), pi = idx("Platform"), cyi = idx("City"), sti = idx("State");
+  const ei = idx("Event_time"), di = idx("Device_model"), pi = idx("Platform"), cyi = idx("City"), sti = idx("State"), coi = idx("Country_code");
   const body = strideSample(lines.slice(1).filter((l) => l.trim()), cap);
-  const out = ["Event_time,Device_model,Platform,City,State"];
+  const out = ["Event_time,Device_model,Platform,City,State,Country_code"];
   for (const line of body) {
     const c = line.split(",");
     const [city, state] = fakeCityFor((c[cyi] || "").trim());
     const dev = ((c[di] || "").split("::").pop() || "").replace(/,/g, " ").trim();
-    out.push([c[ei] || "", dev, (c[pi] || "").trim(), city, state].join(","));
+    out.push([c[ei] || "", dev, (c[pi] || "").trim(), city, state, fakeCountryFor(c[coi])].join(","));
   }
   write("Player_Journey/" + src, out.join("\n"));
+}
+
+/* ---------- ImageData.txt → fake the image handles, keep the dates ----------
+ * The dates ARE the story (a snapshot timeline). The IDs are opaque Niantic
+ * handles to real photos, so they get replaced even though they carry no
+ * personal content on their own. */
+{
+  const lines = readLines(path.join(SRC, "ImageData.txt"));
+  if (lines && lines.length > 1) {
+    const hex = () => Array.from({ length: 16 }, () => "0123456789abcdef"[Math.floor(rnd() * 16)]).join("");
+    const out = [lines[0]];
+    for (let i = 1; i < lines.length; i++) {
+      if (!lines[i].trim()) continue;
+      const c = lines[i].split("\t");
+      c[0] = hex();
+      out.push(c.join("\t"));
+    }
+    write("ImageData.txt", out.join("\n"));
+  }
+}
+
+/* ---------- SupportInteractions → date + topic only ----------
+ * The raw file carries the full text of everything you wrote to Niantic
+ * support, plus custom fields and metadata. The site never reads those columns,
+ * and the demo must not even contain them: emit two columns and drop the rest.
+ * Ticket numbers are identifiers, so they are renumbered too. */
+{
+  const lines = readLines(path.join(SRC, "SupportInteractions1.tsv"));
+  if (lines && lines.length > 1) {
+    const head = lines[0].split("\t");
+    const ti = head.findIndex((h) => /date|time/i.test(h));
+    const si = head.findIndex((h) => /ticket/i.test(h));
+    const out = ["Date and time\tTicket number and title"];
+    let n = 10000000;
+    for (let i = 1; i < lines.length; i++) {
+      if (!lines[i].trim()) continue;
+      const c = lines[i].split("\t");
+      const title = (c[si >= 0 ? si : 1] || "").replace(/^\s*Ticket\s+\d+\s*:/i, `Ticket ${++n}:`);
+      out.push([(c[ti >= 0 ? ti : 0] || "").trim(), title.trim()].join("\t"));
+    }
+    write("SupportInteractions1.tsv", out.join("\n"));
+  }
 }
 
 /* ---------- LiveEvent tickets → drop email/order#/names/carrier ---------- */
@@ -277,6 +388,35 @@ for (const [src, cap] of [["App_Sessions.csv", 2500], ["App_Installs.csv", 50]])
   }
 }
 
+/* ---------- leak check ----------
+ * "No real personal data is present" is a claim this repo publishes, so it is
+ * verified rather than assumed. Two passes over everything just written:
+ * every identifier the scrub captured must be gone, and no email address or
+ * IP address may appear in any output at all. A hit is fatal — the demo is
+ * deleted rather than shipped, because a half-scrubbed export is worse than
+ * none. Add a pattern here whenever Niantic adds a field. */
+{
+  const chased = [...SECRETS.entries()].filter(chaseable);
+  const PATTERNS = [
+    [/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i, "an email address"],
+    [/\b(?:\d{1,3}\.){3}\d{1,3}\b/, "an IP address"],
+  ];
+  const leaks = [];
+  for (const rel of written) {
+    const text = fs.readFileSync(path.join(OUT, rel), "utf8");
+    for (const [real] of chased) if (text.includes(real)) leaks.push(`${rel}: real identifier "${real}"`);
+    for (const [re, what] of PATTERNS) { const m = text.match(re); if (m) leaks.push(`${rel}: ${what} (${m[0]})`); }
+  }
+  if (leaks.length) {
+    fs.rmSync(OUT, { recursive: true, force: true });
+    console.error(`\n✗ LEAK CHECK FAILED — ${leaks.length} problem(s), demo NOT written:`);
+    leaks.slice(0, 20).forEach((l) => console.error("   " + l));
+    if (leaks.length > 20) console.error(`   …and ${leaks.length - 20} more`);
+    process.exit(1);
+  }
+  console.log(`\n✓ Leak check passed — ${chased.length} identifiers redacted, 0 found in output.`);
+}
+
 /* ---------- manifest + notice ---------- */
 write("manifest.json", JSON.stringify({
   generated: new Date().toISOString().slice(0, 10),
@@ -284,6 +424,6 @@ write("manifest.json", JSON.stringify({
   files: written.filter((f) => f !== "manifest.json"),
 }, null, 2));
 
-write("README.md", `# Demo dataset (synthetic)\n\nThis folder is generated by \`tools/scrub-demo.mjs\` from a real Niantic export.\nAll coordinates are translated + jittered to a fake city, all names/emails/IDs are\nfaked or dropped, and event logs are downsampled. It exists only to preview the\nvisualizations. **No real personal data is present.**\n\nRegenerate with:\n\n    node tools/scrub-demo.mjs "<path to your unzipped export>"\n`);
+write("README.md", `# Demo dataset (synthetic)\n\nThis folder is generated by \`tools/scrub-demo.mjs\` from a real Niantic export.\nAll coordinates are translated + jittered to a fake city, all names/emails/account\nIDs/referral codes are faked or dropped, support message bodies are removed, and\nevent logs are downsampled. It exists only to preview the visualizations.\n**No real personal data is present** — the generator verifies this by re-reading\nevery file it writes and refusing to ship if any redacted identifier, email\naddress or IP address survived.\n\nRegenerate with:\n\n    node tools/scrub-demo.mjs "<path to your unzipped export>"\n`);
 
 console.log(`\nDone. ${written.length} files → ${OUT}`);

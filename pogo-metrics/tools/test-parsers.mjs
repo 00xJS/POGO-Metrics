@@ -34,7 +34,7 @@ const DEMO = path.join(ROOT, "demo");
 
 /* ---------- expected results, measured from the committed demo/ ---------- */
 const GOLDEN = {
-  "chapters unlocked": 13,
+  "chapters unlocked": 15,
   "logged actions": 13905,
   "active days": 831,
   "distinct months": 35,
@@ -66,6 +66,27 @@ const GOLDEN = {
   "bag kinds": 56,
   "event pass points": 234182,
   "fusion resources": 36870,
+  "eggs held": 9,
+  "eggs incubating": 1,
+  "idle incubators": 96,
+  "distinct raid gyms": 624,
+  "snapshots": 341,
+  "snapshot months": 19,
+  "support tickets": 26,
+  "login countries": 2,
+  "coin vendors": 3,
+  "free daily boxes": 917,
+  "paid bundles": 56,
+  "admin grants": 6,
+  // The rolling log at the end of Gameplay.txt. "other" must stay 0: any line
+  // shape Niantic adds shows up there first, and silently unclassified rows are
+  // exactly how this file went unread for so long.
+  "recent log rows": 47,
+  "recent log caught": 14,
+  "recent log fled": 6,
+  "recent log unclassified": 0,
+  "recent log items": 78,
+  "recent log best catch": "Growlithe CP 1139",
 };
 
 /* ---------- the smallest browser the parsers will accept ---------- */
@@ -166,6 +187,27 @@ const actual = {
   "bag kinds": S.bag ? S.bag.distinct : 0,
   "event pass points": S.bag ? S.bag.points : 0,
   "fusion resources": S.bag ? S.bag.resources : 0,
+  "eggs held": S.eggs ? S.eggs.held : 0,
+  "eggs incubating": S.eggs ? S.eggs.incubating : 0,
+  "idle incubators": S.eggs ? S.eggs.idleIncubators : 0,
+  "distinct raid gyms": S.ev.gyms.size,
+  "snapshots": S.photos.total,
+  "snapshot months": Object.keys(S.photos.monthly).length,
+  "support tickets": S.support.tickets,
+  "login countries": Object.keys(S.sessions.countries).length,
+  "coin vendors": Object.keys(S.spend.vendor).length,
+  "free daily boxes": S.spend.freeBundles,
+  "paid bundles": S.spend.paidBundles,
+  "admin grants": S.spend.granted,
+  "recent log rows": S.recent ? S.recent.rows : 0,
+  "recent log caught": S.recent ? S.recent.caught.length : 0,
+  "recent log fled": S.recent ? S.recent.fled.length : 0,
+  "recent log unclassified": S.recent ? S.recent.other : -1,
+  "recent log items": S.recent ? S.recent.items : 0,
+  "recent log best catch": (() => {
+    const b = S.recent && S.recent.caught.slice().sort((a, c) => c.cp - a.cp)[0];
+    return b ? `${b.name} CP ${b.cp}` : "—";
+  })(),
 };
 
 /* Invariants that must hold for ANY export, not just this fixture. These catch
@@ -193,6 +235,39 @@ const invariants = [
     !S.bag || Object.values(S.bag.groups).reduce((a, b) => a + b, 0) === S.bag.bagTotal],
   ["bag items are sorted biggest first",
     !S.bag || S.bag.items.every((it, i, a) => i === 0 || a[i - 1].n >= it.n)],
+  ["eggs incubating never exceed eggs held", !S.eggs || S.eggs.incubating <= S.eggs.held],
+  ["every raid gym has a positive lobby count", [...S.ev.gyms.values()].every((g) => g.n > 0)],
+  ["raid gym lobbies sum to no more than all raids",
+    [...S.ev.gyms.values()].reduce((a, g) => a + g.n, 0) <= S.ev.raidTotal],
+  ["every gym's first sighting is before its last", [...S.ev.gyms.values()].every((g) => g.first <= g.last)],
+  ["snapshot months sum to the snapshot total",
+    Object.values(S.photos.monthly).reduce((a, b) => a + b, 0) === S.photos.total],
+  ["snapshot days sum to the snapshot total",
+    Object.values(S.photos.days).reduce((a, b) => a + b, 0) === S.photos.total],
+  ["oldest snapshot is not newer than the newest",
+    !S.photos.first || !S.photos.last || S.photos.first <= S.photos.last],
+  ["support topics never outnumber support tickets",
+    Object.values(S.support.topics).reduce((a, b) => a + b, 0) <= S.support.tickets],
+  /* The whole point of reading this file is that the message bodies are not
+   * read. Nothing but a date, a subject and a count may reach STATE. */
+  ["support state carries no message text",
+    Object.keys(S.support.topics).every((t) => t.length < 120 && !/\n/.test(t))],
+  ["vendor coins never exceed all coins bought",
+    Object.values(S.spend.vendor).reduce((a, v) => a + v.coins, 0) <= S.spend.coinsBought],
+  ["vendor purchases reconcile with the purchase count",
+    Object.values(S.spend.vendor).reduce((a, v) => a + v.purchases, 0) === S.spend.purchases],
+  ["no bundle leaked into the itemised shop list",
+    Object.keys(S.spend.items).every((i) => !i.startsWith("LPSKU"))],
+  ["every country code is two letters",
+    Object.keys(S.sessions.countries).every((c) => /^[A-Z]{2}$/.test(c))],
+  ["country sessions never exceed all sessions",
+    Object.values(S.sessions.countries).reduce((a, b) => a + b, 0) <= S.sessions.total],
+  ["every logged catch and flee has a name and a CP",
+    !S.recent || [...S.recent.caught, ...S.recent.fled, ...S.recent.hatched].every((p) => p.name && p.cp > 0)],
+  ["no raw species code survived into the recent log",
+    !S.recent || [...S.recent.caught, ...S.recent.fled].every((p) => !/^V\d{4}_/.test(p.name))],
+  ["the recent log's first entry is before its last",
+    !S.recent || S.recent.first <= S.recent.last],
 ];
 
 /* ---------- report ---------- */
