@@ -113,7 +113,12 @@ function haversine(la1, lo1, la2, lo2) {
 }
 
 /* delimited parser: quote-aware for CSV, plain split for TSV */
-function parseRows(text, name) {
+/* keepCells: attach the raw positional cells to each row. Only the four
+ * small-file parsers that fall back to positions when a header is missing or
+ * renamed need it. The two parsers that see real volume (Player_Journey at
+ * ~446k rows, and the GPS history) never read it, and attaching it there cost
+ * ~37 MB of pointer arrays on a real export for nothing. */
+function parseRows(text, name, keepCells) {
   const tab = /\.tsv$/i.test(name);
   const delim = tab ? "\t" : ",";
   const lines = text.replace(/^﻿/, "").replace(/\r\n/g, "\n").replace(/\r/g, "\n").split("\n").filter((l) => l.length);
@@ -137,7 +142,7 @@ function parseRows(text, name) {
     const cells = splitLine(lines[i]);
     const row = {};
     header.forEach((h, j) => (row[h] = (cells[j] || "").trim()));
-    row.__cells = cells;
+    if (keepCells) row.__cells = cells;
     rows.push(row);
   }
   return { header, rows };
@@ -155,7 +160,7 @@ function freshState() {
       raidTotal: 0, raidRemote: 0, raidMaxKm: 0, raidKmSum: 0, raidWithDist: 0,
       raidArcs: new Map(), raidGymBins: new Map(), remoteRaidsByYear: {},
     },
-    trail: [],
+    trail: [], trailCount: 0, trailStride: 1,
     friends: { rows: [], monthly: {}, sources: {}, initiated: {}, games: {}, unfriendedMonthly: {}, unfriended: 0 },
     invites: { sent: 0, accepted: 0, declined: 0 },
     party: { received: 0, sent: 0 },
@@ -268,7 +273,10 @@ async function ingest(files) {
     }
     let text;
     try { text = await f.text(); } catch (e) { continue; }
-    const rec = { name, text, entry };
+    // Keep the File handle alongside the text. build() drops the text once it
+    // has parsed it and re-reads from the handle on a rebuild, so a 40 MB
+    // export stops costing ~72 MB of retained UTF-16 for the tab's lifetime.
+    const rec = { name, text, entry, file: f };
     if (existing >= 0) RAW[existing] = rec; else RAW.push(rec);
     added++;
   }
@@ -524,6 +532,26 @@ function parsePlayerJourney(label, text) {
   if (n) markLoaded("Player Journey events");
 }
 
+/* GPS trail retention.
+ * The map samples to 6,000 points and the globe to 15,000, so keeping every
+ * point of a multi-year history (185 B each) burns hundreds of MB to render
+ * none of it. Retain a uniform sample bounded by TRAIL_CAP: when the buffer
+ * fills, halve it in place and double the stride, which keeps the sample
+ * evenly spread over the whole time range no matter how long the file is.
+ * STATE.trailCount stays exact so displayed totals never lie. */
+const TRAIL_CAP = 60000; // 4x the globe's cap — plenty of shape, ~11 MB ceiling
+function pushTrailPoint(pt) {
+  STATE.trailCount++;
+  if (STATE.trailCount % STATE.trailStride !== 0) return;
+  STATE.trail.push(pt);
+  if (STATE.trail.length >= TRAIL_CAP) {
+    const kept = [];
+    for (let i = 0; i < STATE.trail.length; i += 2) kept.push(STATE.trail[i]);
+    STATE.trail = kept;
+    STATE.trailStride *= 2;
+  }
+}
+
 function parseLocation(text) {
   const { header, rows } = parseRows(text, "x.tsv");
   const latKey = header.find((h) => /lat/i.test(h)) || header[1];
@@ -532,7 +560,7 @@ function parseLocation(text) {
   for (const row of rows) {
     const lat = parseFloat(row[latKey]), lon = parseFloat(row[lonKey]);
     const ts = parseTS(row[tsKey]);
-    if (!isNaN(lat) && !isNaN(lon) && (lat || lon)) STATE.trail.push({ lat, lon, ts });
+    if (!isNaN(lat) && !isNaN(lon) && (lat || lon)) pushTrailPoint({ lat, lon, ts });
   }
   if (STATE.trail.length) markLoaded("Location History");
 }
@@ -557,7 +585,7 @@ function parseFriends(text) {
 }
 
 function parseUnfriended(text) {
-  const { rows } = parseRows(text, "x.tsv");
+  const { rows } = parseRows(text, "x.tsv", true);
   const F = STATE.friends;
   for (const row of rows) {
     const ts = parseTS(row["Date and time"] || row.__cells[1] || row.__cells[0]);
@@ -622,7 +650,7 @@ function parsePurchases(text) {
  * positionally meant a single inserted Niantic column would silently report
  * distance as steps — confidently wrong numbers rather than an obvious blank. */
 function parseFitness(text) {
-  const { header, rows } = parseRows(text, "x.tsv");
+  const { header, rows } = parseRows(text, "x.tsv", true);
   const D = STATE.fitness.daily;
   const col = (re, fallback) => {
     const h = header.find((x) => re.test(x));
@@ -647,7 +675,7 @@ function parseFitness(text) {
 }
 
 function parseSessions(text) {
-  const { rows } = parseRows(text, "x.csv");
+  const { rows } = parseRows(text, "x.csv", true);
   const S = STATE.sessions;
   for (const row of rows) {
     const ts = parseTS(row.Event_time || row.__cells[0]);
@@ -675,7 +703,7 @@ function parseSessions(text) {
 }
 
 function parseInstalls(text) {
-  const { rows } = parseRows(text, "x.csv");
+  const { rows } = parseRows(text, "x.csv", true);
   const I = STATE.installs;
   for (const row of rows) {
     const ts = parseTS(row.Install_time || row.__cells[0]);
@@ -824,11 +852,26 @@ async function build() {
     // build into a 20-minute crawl if the user switches tabs mid-build.
     const nextTick = () => new Promise((res) => { const mc = new MessageChannel(); mc.port1.onmessage = () => res(); mc.port2.postMessage(0); });
     const prog = $("build-progress");
+    const unreadable = [];
     for (const r of RAW) {
-      if (r.text == null) continue; // oversize placeholder
+      if (r.oversize) continue; // too large to read at all — already flagged in the list
       if (prog) prog.textContent = `Reading ${r.name}…`;
       await nextTick(); // let the progress line paint without timer throttling
-      routeFile(r.name, r.text);
+      // On a rebuild the text was released after the last build; read it again
+      // from the File handle the browser still holds.
+      let text = r.text;
+      if (text == null && r.file) {
+        try { text = await r.file.text(); } catch (e) { unreadable.push(r.name); continue; }
+      }
+      if (text == null) continue;
+      routeFile(r.name, text);
+      // Release immediately: the parsed aggregates in STATE are all we need,
+      // and holding every file's text is the single largest retention in the app.
+      if (r.file) r.text = null;
+    }
+    if (unreadable.length) {
+      showError("Couldn't re-read " + unreadable.map(esc).join(", ")
+        + " — if the file moved or was deleted since you picked it, add it again.", true);
     }
 
     const needGeo = STATE.ev.geo.size > 0 || STATE.trail.length > 0;
@@ -2134,7 +2177,7 @@ function renderFlatMap() {
 
   const bits = [];
   if (hasGeo) bits.push(`${fmt(e.geo.size)} activity hotspots`);
-  if (hasTrail) bits.push(`a ${fmt(STATE.trail.length)}-point GPS trail`);
+  if (hasTrail) bits.push(`a ${fmt(STATE.trailCount)}-point GPS trail${STATE.trailStride > 1 ? " (drawn from an even sample)" : ""}`);
   return moduleHTML("📍", "Where you played", `Your world map, built from ${bits.join(" and ")}. Drawn entirely on your device — no map tiles are fetched from anyone else.`, inner);
 }
 
