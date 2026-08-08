@@ -68,10 +68,21 @@ const CENTROID = estimateCentroid();
 const DLAT = DEMO_ORIGIN[0] - CENTROID[0];
 const DLON = DEMO_ORIGIN[1] - CENTROID[1];
 const jit = () => (rnd() - 0.5) * 0.0008; // ~±45 m
+/* Jitter STABLY, per distinct real coordinate — not per row.
+ * Jittering every row independently scattered repeat visits to one PokéStop
+ * across hundreds of fake stops, which made the "regular haunts" chapter look
+ * empty on the demo: the sample's busiest stop showed 19 visits where the real
+ * export has 8,876. Remembering the offset per source coordinate preserves the
+ * "I go to this one stop constantly" shape that makes the chapter worth having,
+ * while still moving every point to the fake city. */
+const coordJitter = new Map();
 function mapCoord(la, lo) {
   const a = num(la), o = num(lo);
   if (a == null || o == null || (a === 0 && o === 0)) return [la, lo];
-  return [(a + DLAT + jit()).toFixed(6), (o + DLON + jit()).toFixed(6)];
+  const key = a.toFixed(5) + "," + o.toFixed(5);
+  let j = coordJitter.get(key);
+  if (!j) { j = [jit(), jit()]; coordJitter.set(key, j); }
+  return [(a + DLAT + j[0]).toFixed(6), (o + DLON + j[1]).toFixed(6)];
 }
 console.log("Home centroid ~", CENTROID.map((x) => x.toFixed(3)).join(","), "→ translated to LA demo origin");
 
