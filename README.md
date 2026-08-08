@@ -67,14 +67,19 @@ This is the whole point, so it should be checkable rather than promised:
   the globe textures and the country borders are all vendored into `vendor/`.
 - **Your locations are mapped, and nothing else sensitive is.** The globe and the map are the
   point, so they do plot where you played — on your device, published nowhere. Your email, IP
-  addresses and advertising IDs are never read at all. The visualizations only touch the parts that tell
-  a story. The catalog on the landing page rates how sensitive each file is *before* you open it.
+  addresses and advertising IDs are never shown, charted, or written to any export. To be exact
+  about it: the browser hands the app whole files, so those columns pass through memory like every
+  other column — no parser extracts them, nothing renders them, and the `connect-src 'self'` policy
+  below means nothing *could* send them anywhere. The catalog on the landing page rates how
+  sensitive each file is *before* you open it.
 - **The browser enforces it.** The deployed site ships a `Content-Security-Policy` with
   `connect-src 'self'` (see `netlify.toml`), so no script — ours or otherwise — *can* send your
   data anywhere off-origin.
-- **It works in airplane mode.** Once visited, a service worker makes the whole app run offline —
-  the strongest proof there's nothing to upload to.
-- **You can audit all of it** — it's ~3,000 lines of vanilla JavaScript in this repo, no build step.
+- **It works in airplane mode.** A service worker caches the pages, the stylesheet, every app
+  script and the chart library, so once you've visited, the app loads and parses an export with no
+  network at all. The 3D globe's assets are large and cache on first use instead, so the globe
+  chapter needs one online build before it too works offline.
+- **You can audit all of it** — it's ~4,500 lines of vanilla JavaScript in this repo, no build step.
 
 ## Getting your data from Niantic
 
