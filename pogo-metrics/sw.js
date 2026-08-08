@@ -7,12 +7,12 @@
  *     cached copy when offline
  *   • vendor/ (pinned libs, textures, fonts, geojson) → cache-first
  * Bump VERSION on any release to sweep old caches. */
-const VERSION = "pogo-metrics-v20260807";
+const VERSION = "pogo-metrics-v20260808";
 const CORE = [
   "/", "index.html", "metrics.html", "demo.html", "404.html",
-  "css/style.css?v=20260807",
-  "js/nav.js?v=20260807", "js/catalog.js?v=20260807", "js/catalog-ui.js?v=20260807",
-  "js/pokedex.js?v=20260807", "js/app.js?v=20260807",
+  "css/style.css?v=20260808",
+  "js/nav.js?v=20260808", "js/catalog.js?v=20260808", "js/catalog-ui.js?v=20260808",
+  "js/pokedex.js?v=20260808", "js/app.js?v=20260808",
   "vendor/fonts/fonts.css",
   // Chart.js is precached so an installed app opened offline still draws its
   // charts. globe.gl (1.4MB) is deliberately left to the cache-first /vendor/

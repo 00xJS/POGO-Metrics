@@ -90,8 +90,10 @@ This is the whole point, so it should be checkable rather than promised:
   below means nothing *could* send them anywhere. The catalog on the landing page rates how
   sensitive each file is *before* you open it.
 - **The browser enforces it.** The deployed site ships a `Content-Security-Policy` with
-  `connect-src 'self'` (see `netlify.toml`), so no script — ours or otherwise — *can* send your
-  data anywhere off-origin.
+  `connect-src 'self'` (see `netlify.toml`), so no script — ours or otherwise — *can* fetch, XHR,
+  WebSocket or beacon your data off-origin. (Precisely that: `connect-src` governs those APIs, not
+  navigation. Nothing here navigates with parsed data, but this section invites you to check it,
+  so it should survive the check.)
 - **It works in airplane mode.** A service worker caches the pages, the stylesheet, every app
   script and the chart library, so once you've visited, the app loads and parses an export with no
   network at all. The 3D globe's assets are large and cache on first use instead, so the globe

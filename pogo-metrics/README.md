@@ -73,7 +73,8 @@ falls back to a flat Leaflet heatmap with the same data.
   each accepted file whole with `.text()`, and `parseRows` builds a row object per line with every
   column on it, so those values do pass through memory. What is true — and what the wording must
   say — is that no parser extracts them, no chapter shows them, `downloadStatsJSON` omits them, and
-  `connect-src 'self'` means nothing can send them off-origin. An allowlisting parser would make
+  `connect-src 'self'` means nothing can fetch, XHR, WebSocket or beacon them off-origin (that
+  directive governs those APIs, not navigation). An allowlisting parser would make
   the stronger claim literally true; it has been judged not worth the bug surface.
 - Locations **are** read — the globe and map are the point. They are drawn on-device and
   published nowhere, but they do plot where the user played, and `renderGlobe()` derives a

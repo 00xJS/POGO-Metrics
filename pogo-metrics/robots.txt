@@ -1,7 +1,13 @@
 User-agent: *
 Allow: /
-Disallow: /demo/
 Disallow: /og-card.html
 Disallow: /og-card-demo.html
+
+# /demo/ is deliberately NOT disallowed. Blocking it here stopped crawlers
+# fetching the sample export that demo.html builds itself from, so the indexed
+# version of the live example was a "Building the example…" spinner. The data
+# is kept out of search results by an X-Robots-Tag: noindex header on /demo/*
+# (see netlify.toml) — which excludes the files from the index while still
+# letting a crawler render the page that uses them.
 
 Sitemap: https://pogo-metrics.netlify.app/sitemap.xml

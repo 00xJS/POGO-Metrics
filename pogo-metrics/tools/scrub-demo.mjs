@@ -499,12 +499,20 @@ for (const [src, cap] of [["App_Sessions.csv", 2500], ["App_Installs.csv", 50]])
   }
 }
 
-/* ---------- LiveEvent tickets → drop email/order#/names/carrier ---------- */
+/* ---------- LiveEvent tickets → drop email/order#/names/carrier ----------
+ * The rule for this file: blank every column the app does not read.
+ * parseLiveEvents() reads only Event Details, Number of Tickets on Order,
+ * Total Paid, Currency Paid and Date of Order Placed — everything else is
+ * dead weight that can only leak. AddOn Info was the one exception, and it
+ * shipped an opaque 16-hex token glued to a product name
+ * ("… T-shirt-ae84fdbcbfc00862"). Almost certainly a merchandise SKU rather
+ * than anything personal, but "almost certainly" is not the standard this
+ * generator holds itself to elsewhere, and nothing reads the column. */
 {
   const lines = readLines(path.join(SRC, "LiveEventRegistrationHistory_AsPurchaser.tsv"));
   if (lines && lines.length > 1) {
     const head = lines[0].split("\t");
-    const blank = ["Order Number", "Email Used", "In-game names on Order", "Phone Carrier", "Ticket Info"];
+    const blank = ["Order Number", "Email Used", "In-game names on Order", "Phone Carrier", "Ticket Info", "AddOn Info"];
     const out = [lines[0]];
     for (let i = 1; i < lines.length; i++) {
       if (!lines[i].trim()) continue;

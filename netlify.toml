@@ -7,7 +7,9 @@
 # ── security headers ────────────────────────────────────────────────────────
 # The CSP makes the privacy promise browser-enforced, not just true: with
 # connect-src 'self', no script — ours, a tampered vendored lib, or an
-# injected one — can send parsed export data anywhere off-origin.
+# injected one — can fetch, XHR, WebSocket or beacon parsed export data
+# off-origin. Say it that precisely: connect-src governs those APIs, not
+# navigation, and this is a claim people are invited to check.
 [[headers]]
   for = "/*"
   [headers.values]
@@ -26,7 +28,12 @@
   [headers.values]
     Cache-Control = "public, max-age=31536000, immutable"
 
+# The sample export. Crawlers must be able to FETCH these (demo.html builds
+# itself from them, and robots.txt used to block that, so the indexed live
+# example was a loading spinner) but the raw data files should not themselves
+# appear in results — which is what noindex does and Disallow cannot.
 [[headers]]
   for = "/demo/*"
   [headers.values]
     Cache-Control = "public, max-age=3600"
+    X-Robots-Tag = "noindex"
