@@ -479,11 +479,20 @@ for (const [src, cap] of [["App_Sessions.csv", 2500], ["App_Installs.csv", 50]])
     const ti = head.findIndex((h) => /date|time/i.test(h));
     const si = head.findIndex((h) => /ticket/i.test(h));
     const out = ["Date and time\tTicket number and title"];
-    let n = 10000000;
+    /* Renumber ticket numbers CONSISTENTLY: one real ticket becomes one fake
+     * ticket, however many messages it has. Numbering each row sequentially
+     * (as this first did) fabricated a distinct ticket per message, which made
+     * the demo useless as a regression case for the very grouping the app
+     * does — the parser could count rows instead of tickets and the fixture
+     * would still agree with it. */
+    const ticketNo = new Map();
     for (let i = 1; i < lines.length; i++) {
       if (!lines[i].trim()) continue;
       const c = lines[i].split("\t");
-      const title = (c[si >= 0 ? si : 1] || "").replace(/^\s*Ticket\s+\d+\s*:/i, `Ticket ${++n}:`);
+      const title = (c[si >= 0 ? si : 1] || "").replace(/^\s*Ticket\s+(\d+)\s*:/i, (_, real) => {
+        if (!ticketNo.has(real)) ticketNo.set(real, 10000000 + ticketNo.size);
+        return `Ticket ${ticketNo.get(real)}:`;
+      });
       out.push([(c[ti >= 0 ? ti : 0] || "").trim(), title.trim()].join("\t"));
     }
     write("SupportInteractions1.tsv", out.join("\n"));

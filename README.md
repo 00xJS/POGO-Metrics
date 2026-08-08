@@ -50,11 +50,28 @@ Each file you drop in lights up its own chapter. Upload one file or the whole ex
 | **Spending** — coin flow, top items, which storefront, free boxes and support gifts | `InAppPurchases.tsv` |
 | **Fitness** — Adventure Sync steps and real-world equivalents | `FitnessData.tsv` |
 | **Photo album** — every GO Snapshot you've taken, by month | `ImageData.txt` |
+| **Record book** — your personal bests: biggest day, best month, longest streak, farthest raid | `Player_Journey/*.csv` |
 | **Behind the screen** — sessions, devices, cities, countries, support tickets | app sessions, installs, support |
 | **Live events and Wayfarer contributions** | tickets, `wayfarer_player_data.json` |
 
 Nothing is required. Upload only `FriendList.tsv` and you'll get exactly the social chapter and
 nothing else.
+
+### Four things to do with the result
+
+Once a dashboard is built, the toolbar above it offers:
+
+- **▶ Play my story** — a full-screen, tappable recap of your whole journey, one number at a
+  time. Tap right for next, left to go back, Esc to close. It's also the demo page's main CTA.
+- **⬇ Journey card** — your entire journey as one shareable PNG: headline totals, a month-by-month
+  chart with a legend, and auto-awarded badges. The Year-over-year chapter offers the same thing
+  per year.
+- **🧾 My numbers** — a JSON dump of every figure the app computed, for anyone who'd rather have
+  the data than the pictures. **Location data is deliberately excluded** — no GPS trail, no stop or
+  activity coordinates, no cities, no countries. Those stay in the browser. Everything else,
+  including your trainer profile, is in the file, so treat it like you would any personal export.
+- **＋ Add more files** — drop in the rest of your export later and the new chapters appear
+  alongside the ones you already have.
 
 ## Privacy, concretely
 

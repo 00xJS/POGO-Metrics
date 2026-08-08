@@ -186,7 +186,7 @@ function freshState() {
     },
     fitness: { daily: {} },
     photos: { monthly: {}, days: {}, total: 0, first: null, last: null },
-    support: { tickets: 0, topics: {}, first: null, last: null },
+    support: { tickets: 0, messages: 0, topics: {}, first: null, last: null },
     sessions: { monthly: {}, devices: {}, cities: {}, countries: {}, places: {}, total: 0 },
     installs: { count: 0, first: null, devices: {} },
     liveEvents: [],
@@ -238,6 +238,12 @@ function showError(msg, trustedHTML) {
   if (!el) { console.warn(msg); return; }
   el.style.display = "block";
   el.innerHTML = `<b>Heads up:</b> ${trustedHTML ? msg : esc(msg)}`;
+  /* On a phone this banner renders roughly 325px BELOW the fold, so the most
+   * common first-run failure — dropping the ZIP unopened — looked like the page
+   * simply ignoring you. Bring it into view and let assistive tech announce it.
+   * role=alert lives on the element (see metrics.html) so it is announced on
+   * every message, not just the first. */
+  el.scrollIntoView({ behavior: scrollBehavior(), block: "center" });
 }
 function clearError() { const el = $("upload-error"); if (el) el.style.display = "none"; }
 
@@ -271,6 +277,14 @@ async function collectFiles(items) {
 
 async function ingest(files) {
   clearError();
+  /* Reading files is a long await chain — one disk round-trip per file, and a
+   * full export is 41 of them. build() has always been able to abandon a stale
+   * run; ingest() could not, so hitting Clear part-way through a folder pick
+   * silently refilled RAW after the wipe. For a tool whose promise is "close
+   * the tab and it's gone", a Clear that half-undoes itself is the wrong kind
+   * of surprise. */
+  const gen = DATA_GEN;
+  const stale = () => gen !== DATA_GEN;
   const all = [...files].filter((f) => f && f.name);
   const list = all.filter((f) => /\.(tsv|csv|txt|json)$/i.test(f.name));
   if (!list.length) {
@@ -299,6 +313,7 @@ async function ingest(files) {
     }
     let text;
     try { text = await f.text(); } catch (e) { continue; }
+    if (stale()) return;   // cleared while this file was being read
     // Keep the File handle alongside the text. build() drops the text once it
     // has parsed it and re-reads from the handle on a rebuild, so a 40 MB
     // export stops costing ~72 MB of retained UTF-16 for the tab's lifetime.
@@ -309,6 +324,7 @@ async function ingest(files) {
     if (existing >= 0) RAW[existing] = rec; else RAW.push(rec);
     added++;
   }
+  if (stale()) return;   // cleared on the last file — leave the wipe alone
   if (!added) showError("Couldn't read those files. Try choosing them again, or pick the folder.");
   renderDetected();
   // On a phone the Build button lands below the fold, so picking files looked
@@ -910,17 +926,30 @@ function parseSupport(text) {
   const S = STATE.support;
   const kTs = header.find((h) => /date|time/i.test(h)) || header[0];
   const kTitle = header.find((h) => /ticket/i.test(h)) || header[1];
+  /* One TICKET is many ROWS — a conversation with support is one row per
+   * message, all sharing "Ticket 38788709: <subject>". Counting rows called a
+   * six-reply conversation six tickets. Group on the ticket number, and fall
+   * back to the subject when a row has none so an untitled row still counts
+   * once rather than merging with every other untitled row. */
+  const seen = new Set();
+  let untitled = 0;
   for (const row of rows) {
     const ts = parseTS(row[kTs] || row.__cells[0]);
-    const topic = (row[kTitle] || row.__cells[1] || "").replace(/^\s*Ticket\s+\d+\s*:\s*/i, "").trim();
-    if (!ts && !topic) continue;
-    S.tickets++;
+    const title = (row[kTitle] || row.__cells[1] || "").trim();
+    const num = (title.match(/^\s*Ticket\s+(\d+)\s*:/i) || [])[1];
+    const topic = title.replace(/^\s*Ticket\s+\d+\s*:\s*/i, "").trim();
+    if (!ts && !title) continue;
+    const id = num ? "#" + num : topic ? "t:" + topic + "|" + (ts ? ts.toISOString().slice(0, 10) : ++untitled) : "u:" + ++untitled;
     if (ts) {
       if (!S.first || ts < S.first) S.first = ts;
       if (!S.last || ts > S.last) S.last = ts;
     }
+    if (seen.has(id)) continue;   // another message on a ticket already counted
+    seen.add(id);
+    S.tickets++;
     if (topic) S.topics[topic] = (S.topics[topic] || 0) + 1;
   }
+  S.messages = rows.length;
   if (S.tickets) markLoaded("Support Interactions");
 }
 
@@ -932,12 +961,20 @@ function parseWayfarer(text) {
     const prof = Array.isArray(profRaw) ? (profRaw[0] || null) : profRaw;
     const subs = root.OprSubmissionLog || [];
     const grabNum = (obj, keys) => { for (const k in obj) { if (keys.some((kk) => k.toLowerCase().includes(kk))) { const v = +obj[k]; if (!isNaN(v)) return v; } } return null; };
+    /* OprSubmissionLog is a LOG — a rolling record of submissions Niantic still
+     * holds, not a lifetime nomination count. It was labelled "Nominations
+     * submitted", which on the reference profile claimed 4 against a lifetime
+     * "Total Analyzed" of 7: a smaller number than the thing it supposedly
+     * contains. Name it for what it is and let the profile totals carry the
+     * lifetime story. */
     STATE.wayfarer = {
-      nominations: Array.isArray(subs) ? subs.length : null,
+      logged: Array.isArray(subs) ? subs.length : null,
       analyzed: prof ? grabNum(prof, ["analyzed"]) : null,
       created: prof ? grabNum(prof, ["created"]) : null,
+      rejected: prof ? grabNum(prof, ["rejected"]) : null,
     };
-    if (STATE.wayfarer.nominations || STATE.wayfarer.analyzed || STATE.wayfarer.created) markLoaded("Wayfarer Contributions");
+    const W = STATE.wayfarer;
+    if (W.logged || W.analyzed || W.created || W.rejected) markLoaded("Wayfarer Contributions");
   } catch (e) { /* ignore malformed */ }
 }
 
@@ -1415,6 +1452,7 @@ function downloadJourneyCard(btn) {
     ].slice(0, 8),
     monthLabels: months.map((mk) => (mk.endsWith("-01") ? "’" + mk.slice(2, 4) : "")),
     monthlyStacks: months.map((mk) => series.map((lab) => [SERIES_COLORS[lab], (e.byMonth[mk] || {})[lab] || 0])),
+    series: series.map((lab) => [lab, SERIES_COLORS[lab]]),
   }, btn);
 }
 
@@ -1514,7 +1552,14 @@ function renderTrainer() {
     }
   }
 
-  const subtitle = `Your lifetime trainer card${p.startYear ? `, playing since ${p.startYear}` : ""}${p.buddy ? ` · buddy ${esc(p.buddy)}` : ""}.`;
+  /* This card mixes two clocks. Level, XP, distance, stardust, eggs and medals
+   * are lifetime figures straight from Gameplay.txt; catches and spins are
+   * counted from Player_Journey, which Niantic only keeps about three years of.
+   * Both are right for their source, and calling the whole card "lifetime" made
+   * the second pair look wrong. Name the split instead of hiding it. */
+  const windowed = (caught ? 1 : 0) + (evT["Spins"] ? 1 : 0);
+  const subtitle = `Your trainer card${p.startYear ? `, playing since ${p.startYear}` : ""}${p.buddy ? ` · buddy ${esc(p.buddy)}` : ""}.`
+    + (windowed ? ` Level, XP, distance and medals are lifetime totals; catches and spins are counted from your event logs, which reach back about three years.` : "");
   return moduleHTML("🎮", (p.username ? esc(p.username) : "Your trainer") + " at a glance", subtitle, inner);
 }
 
@@ -1560,6 +1605,18 @@ function renderActivity() {
     <div>${chartWrap(cDonut)}</div>
     <div>${chartWrap(cClock)}</div>
   </div>`;
+  /* Niantic logs a catch in four separate files depending on how you met the
+   * Pokémon, so the breakdown above splits your catches across four wedges and
+   * never shows the one number a player actually wants. Everything here already
+   * adds them up (catchesOf) — this just says so on the page instead of leaving
+   * you to sum the chart by eye. */
+  const catchParts = ["GO Plus catches", "Encounters", "Incense", "Lures"].filter((k) => e.totals[k]);
+  if (catchParts.length > 1) {
+    inner += `<div class="hw-caption"><b>${fmt(catchesOf(e.totals))} Pokémon caught in total.</b>
+      Niantic files a catch by how you found it, so the breakdown above splits them across
+      ${catchParts.map((k) => `${esc(k.toLowerCase())} (${fmt(e.totals[k])})`).join(", ")} —
+      every chapter here counts the sum.</div>`;
+  }
   inner += `<div style="margin-top:22px">
     <div style="font-weight:700;margin-bottom:6px">When you play — hour of week</div>
     ${tzOff !== 0 ? `<div class="yoy-metrics" style="margin:0 0 10px" id="tz-${cMonthly}">
@@ -2165,6 +2222,7 @@ function buildYearData() {
       photos: sumMonths(STATE.photos.monthly, y),
       monthLabels: yMonths.map((m) => MON1[+m.slice(5) - 1]),
       monthlyStacks: yMonths.map((m) => seriesKeys.map((lab) => [SERIES_COLORS[lab], byMonth[m][lab] || 0])),
+      series: seriesKeys.map((lab) => [lab, SERIES_COLORS[lab]]),
     };
   });
   return { years, data };
@@ -2297,7 +2355,7 @@ function renderYearOverYear() {
           ...(w.coinsBought ? [[fmt(w.coinsBought), "PokéCoins bought"]] : []),
           ...(w.friendsAdded ? [[fmt(w.friendsAdded), "friends made"]] : []),
         ],
-        monthLabels: w.monthLabels, monthlyStacks: w.monthlyStacks,
+        monthLabels: w.monthLabels, monthlyStacks: w.monthlyStacks, series: w.series,
       }, btn));
     });
   });
@@ -2451,11 +2509,31 @@ async function downloadYearCard(o, btn) {
     });
   }
 
+  /* Legend layout, measured BEFORE the vertical centring below so the card can
+   * make room for it. The mini chart is a stacked bar per month in the series
+   * colours, and it shipped with no key at all — nine colours and nothing to
+   * say which was raids and which was berries. Wraps to as many rows as the
+   * series need. */
+  const LEG_SW = 15, LEG_GAP = 9, LEG_PAD = 28, LEG_LH = 31;
+  const legendRows = [];
+  if (o.series && o.series.length) {
+    ctx.font = "500 19px 'Outfit', sans-serif";
+    const maxW = W - 170;
+    let row = [], rw = 0;
+    o.series.forEach(([label, color]) => {
+      const w = LEG_SW + LEG_GAP + ctx.measureText(label).width + LEG_PAD;
+      if (rw + w > maxW && row.length) { legendRows.push(row); row = []; rw = 0; }
+      row.push({ label, color, w }); rw += w;
+    });
+    if (row.length) legendRows.push(row);
+  }
+  const legendH = legendRows.length ? legendRows.length * LEG_LH + 10 : 0;
+
   // headline number — centre the remaining content between the badges and the
   // footer so short cards (no badges, fewer stat tiles) don't leave a dead gap
   const gRows = Math.ceil(o.stats.length / 2);
   const hy0 = Math.max(by + 60, 470);
-  const gridEnd0 = hy0 + 250 + 96 + gRows * 124 - 20;
+  const gridEnd0 = hy0 + 250 + 96 + legendH + gRows * 124 - 20;
   const off = Math.max(0, Math.floor((H - 86 - gridEnd0) / 2));
   const hy = hy0 + off;
   ctx.fillStyle = "#fff"; ctx.font = "700 92px 'JetBrains Mono', monospace";
@@ -2480,13 +2558,29 @@ async function downloadYearCard(o, btn) {
     ctx.fillStyle = "#6b76a8"; ctx.font = "500 17px 'Outfit', sans-serif";
     ctx.fillText(o.monthLabels[i] || "", x + barW / 2, cBot + 24);
   });
+  // legend — centre each wrapped row under the chart it explains
+  let ly = cBot + 46;
+  legendRows.forEach((row) => {
+    const rowW = row.reduce((a, it) => a + it.w, 0) - LEG_PAD;
+    let lx = (W - rowW) / 2;
+    ctx.textAlign = "left";
+    row.forEach((it) => {
+      ctx.fillStyle = it.color;
+      roundRectPath(ctx, lx, ly - LEG_SW + 2, LEG_SW, LEG_SW, 4); ctx.fill();
+      ctx.fillStyle = "#c8cce6"; ctx.font = "500 19px 'Outfit', sans-serif";
+      ctx.fillText(it.label, lx + LEG_SW + LEG_GAP, ly);
+      lx += it.w;
+    });
+    ctx.textAlign = "center";
+    ly += LEG_LH;
+  });
   if (o.peakLabel) {
     ctx.fillStyle = "#9ba1c5"; ctx.font = "500 20px 'Outfit', sans-serif";
-    ctx.fillText("Month by month — " + o.peakLabel, W / 2, cBot + 56);
+    ctx.fillText("Month by month — " + o.peakLabel, W / 2, legendH ? ly + 2 : cBot + 56);
   }
 
   // stat grid, two columns
-  const gy = cBot + 96, gx = 90, gGap = 20;
+  const gy = cBot + 96 + legendH, gx = 90, gGap = 20;
   const tileW = (W - gx * 2 - gGap) / 2, tileH = 104;
   o.stats.forEach(([v, l], i) => {
     const col = i % 2, row = (i / 2) | 0;
@@ -3329,8 +3423,21 @@ function parseBag(text) {
 
 /* Niantic's internal item codes don't always tidy up into the name players
  * actually see in the shop, so override those by hand. Add a line here whenever
- * a code prettifies into something no trainer would recognise. */
+ * a code prettifies into something no trainer would recognise.
+ *
+ * Only add a mapping you are SURE of. A wrong shop name is worse than a raw
+ * code: the code at least looks like a code, so nobody trusts it. Some entries
+ * in a real export are internal names with no public equivalent at all — those
+ * are deliberately left to the fallback below. */
 const ITEM_NAMES = {
+  ITEM_LEADER_MAP: "Rocket Radar",
+  ITEM_LEADER_MAP_FRAGMENT: "Mysterious Component",
+  ITEM_GIOVANNI_MAP: "Super Rocket Radar",
+  ITEM_TROY_DISK_MAGNETIC: "Magnetic Lure Module",
+  ITEM_TROY_DISK_RAINY: "Rainy Lure Module",
+  ITEM_TROY_DISK_MOSSY: "Mossy Lure Module",
+  ITEM_TROY_DISK_GLACIAL: "Glacial Lure Module",
+  ITEM_TROY_DISK_SPARKLY: "Sparkly Lure Module",
   ITEM_ENHANCED_CURRENCY: "Link Charges",
   ITEM_ENHANCED_CURRENCY_HOLDER: "Link Holder", // the container; its count is how many charges you hold
   ITEM_XL_RARE_CANDY: "Rare Candy XL",
@@ -3346,7 +3453,10 @@ function prettyItem(n) {
   if (ITEM_NAMES[n]) return ITEM_NAMES[n];
   // Title-case both shapes so a coded name sits beside a friendly one without
   // looking like a different kind of thing ("Poke Balls" / "Shadow Gem").
-  return titleCase(n.replace(/^ITEM_/, ""));
+  // OTHER_ is Niantic's bucket prefix, not part of any name a player has seen —
+  // dropping it turns "Other Evolution Stone A" into "Evolution Stone A", which
+  // is still an internal code but stops reading like a rendering bug.
+  return titleCase(n.replace(/^ITEM_/, "").replace(/^OTHER_/, ""));
 }
 
 /* ── fitness (Adventure Sync) ── */
@@ -3464,9 +3574,11 @@ function renderSupport() {
     ? ` between ${fmtDate(T.first)} and ${fmtDate(T.last)}` : T.first ? ` on ${fmtDate(T.first)}` : "";
   // The export contains the ticket that asked for the export.
   const meta = topics.find(([t]) => /request my data/i.test(t));
+  const convo = T.messages > T.tickets
+    ? ` across <b>${fmt(T.messages)}</b> message${T.messages === 1 ? "" : "s"}` : "";
   let out = `<hr class="mod-divider"><div style="font-weight:700;margin-bottom:2px">Your support history</div>
     <div class="mod-sub" style="margin-bottom:10px">
-      <b>${fmt(T.tickets)}</b> ticket${T.tickets === 1 ? "" : "s"} with Niantic${span}.
+      <b>${fmt(T.tickets)}</b> ticket${T.tickets === 1 ? "" : "s"}${convo} with Niantic${span}.
       ${meta ? `${meta[1] === T.tickets ? "Every one of them was" : `<b>${fmt(meta[1])}</b> of them were`} a request for your data —
         including, somewhere in here, the one that produced the file you are reading this from.` : ""}
     </div>`;
@@ -3522,11 +3634,18 @@ function renderWayfarer() {
   const W = STATE.wayfarer;
   if (!W) return;
   const stats = [];
-  if (W.nominations != null) stats.push([fmt(W.nominations), "Nominations submitted"]);
-  if (W.created != null) stats.push([fmt(W.created), "Stops you helped create"]);
-  if (W.analyzed != null) stats.push([fmt(W.analyzed), "Reviews completed"]);
+  if (W.analyzed != null) stats.push([fmt(W.analyzed), "Nominations you reviewed", "candidates you voted on"]);
+  if (W.created != null) stats.push([fmt(W.created), "Stops you helped create", "reviews that became real places"]);
+  if (W.rejected != null) stats.push([fmt(W.rejected), "Candidates you rejected"]);
+  // Deliberately last and named for what it is: a rolling log Niantic still
+  // holds, not a lifetime nomination count.
+  if (W.logged) stats.push([fmt(W.logged), "Submissions on record", "in Niantic's current window"]);
   if (!stats.length) return;
-  return moduleHTML("🧭", "Your map-making", "How much you've given back to the map every trainer plays on.", statGrid(stats));
+  const hit = W.analyzed && W.created ? Math.round((W.created / W.analyzed) * 100) : null;
+  return moduleHTML("🧭", "Your map-making",
+    `How much you've given back to the map every trainer plays on.${
+      hit != null ? ` <b>${hit}%</b> of the candidates you reviewed went on to become real PokéStops.` : ""}`,
+    statGrid(stats));
 }
 
 /* ───────────────────────────── wiring ───────────────────────────── */
