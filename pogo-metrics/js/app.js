@@ -940,12 +940,14 @@ async function build() {
 
     res.insertAdjacentHTML("beforeend", resHero());
     // lead with the trainer card → adventure log → year-over-year → world → social → money → body → tech
+    // The globe is the most striking thing here, so it goes straight after the
+    // trainer card rather than six chapters down where people never reach it.
     safe(renderTrainer);
+    safe(renderWorld);
     safe(renderActivity);
     safe(renderRhythm);
     safe(renderRecords);
     safe(renderYearOverYear);
-    safe(renderWorld);
     safe(renderSocial);
     safe(renderSpending);
     safe(renderFitness);
