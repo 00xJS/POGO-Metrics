@@ -1030,32 +1030,92 @@ function themeCharts() {
   if (REDUCED_MOTION) Chart.defaults.animation = false;
 }
 
+/* ── making a canvas chart mean something without sight ──
+ * A canvas is a wall of silent pixels. This used to set role="img" with the
+ * chart's title as the name, then write every value into the canvas's fallback
+ * content — but role="img" makes an element's subtree PRESENTATIONAL, so that
+ * fallback was never exposed to anything. Thirteen charts, all of them mute.
+ *
+ * Two things do work, and this does both:
+ *   1. put the TAKEAWAY in the accessible name, so landing on the chart tells
+ *      you what it says rather than only what it is called, and
+ *   2. put the VALUES in a real table beside it, which a screen-reader user can
+ *      navigate cell by cell — a flattened aria-description could not be read
+ *      that way. */
+const A11Y_MAX_ROWS = 120;
+const cellNum = (v) => (typeof v === "number" ? v : v && typeof v.y === "number" ? v.y : Number(v));
+
+/* A screen-reader-only data table. Used by the canvas charts and by the two
+ * heat grids, which are otherwise hundreds of coloured divs carrying their
+ * values in data-* attributes — and data-* is not exposed to assistive tech,
+ * so every one of those numbers was unreachable.
+ *
+ * The .sr-only goes on a WRAPPER, never on the table. That class hides things
+ * with width:1px;height:1px;overflow:hidden, which a display:table box simply
+ * ignores — it sizes to its content regardless. Putting the class on the table
+ * gave 281x386 boxes and 1,091px of horizontal page overflow. A block wrapper
+ * collapses and clips properly, and leaves the table's semantics (and its role
+ * in the accessibility tree) untouched. */
+function srTable(caption, cols, rows) {
+  return `<div class="sr-only"><table class="chart-data"><caption>${esc(caption)}</caption>
+    <thead><tr>${cols.map((c) => `<th scope="col">${esc(String(c))}</th>`).join("")}</tr></thead>
+    <tbody>${rows.map((r) => `<tr><th scope="row">${esc(String(r[0]))}</th>${
+      r.slice(1).map((c) => `<td>${esc(String(c))}</td>`).join("")}</tr>`).join("")}</tbody></table></div>`;
+}
+
+function chartA11y(cv, data, options, fallback) {
+  const title = (options && options.plugins && options.plugins.title && options.plugins.title.text) || fallback;
+  const labels = (data && data.labels) || [];
+  const sets = ((data && data.datasets) || []).filter((d) => d && Array.isArray(d.data));
+
+  // 1 — accessible name: title, then per-series total and peak
+  const bits = [];
+  for (const ds of sets) {
+    const nums = ds.data.map(cellNum).filter((n) => isFinite(n));
+    if (!nums.length) continue;
+    // Diverging charts (friends gained vs lost) store one series negative.
+    const total = nums.reduce((a, b) => a + Math.abs(b), 0);
+    let hi = -Infinity, at = -1;
+    nums.forEach((v, i) => { if (Math.abs(v) > hi) { hi = Math.abs(v); at = i; } });
+    const when = labels[at] != null && labels[at] !== "" ? `, highest ${fmt(Math.round(hi))} at ${labels[at]}` : "";
+    bits.push(`${sets.length > 1 && ds.label ? ds.label + " " : ""}${fmt(Math.round(total))} total${when}`);
+  }
+  cv.setAttribute("role", "img");
+  cv.setAttribute("aria-label", bits.length
+    ? `${title}. ${bits.join(". ")}. Full values follow in a table.`
+    : String(title));
+
+  // 2 — the navigable table, replaced wholesale on every refresh
+  const host = cv.parentElement;
+  if (!host) return;
+  const old = host.querySelector("table.chart-data");
+  if (old) (old.closest(".sr-only") || old).remove();   // drop the wrapper too, not just the table
+  if (!labels.length || !sets.length) return;
+  const xTitle = (options && options.scales && options.scales.x && options.scales.x.title && options.scales.x.title.text) || "Category";
+  const shown = labels.slice(0, A11Y_MAX_ROWS);
+  const note = labels.length > shown.length ? ` First ${shown.length} of ${labels.length} rows.` : "";
+  const cols = [xTitle, ...sets.map((d, i) => d.label || "Series " + (i + 1))];
+  const rows = shown.map((l, i) => [l, ...sets.map((d) => fmt(Math.round(Math.abs(cellNum(d.data[i])) || 0)))]);
+  host.insertAdjacentHTML("beforeend", srTable(`${title} — data table.${note}`, cols, rows));
+}
+
 function newChart(id, cfg) {
-  const ctx = $(id);
-  if (!ctx) return;
+  const cv = $(id);
+  if (!cv) return;
   themeCharts();
   cfg.options = cfg.options || {};
   cfg.options.maintainAspectRatio = false;
-  // canvases are invisible to assistive tech without an explicit name
-  const label = (cfg.options.plugins && cfg.options.plugins.title && cfg.options.plugins.title.text)
-    || (cfg.data && cfg.data.datasets && cfg.data.datasets[0] && cfg.data.datasets[0].label) || "Data chart";
-  ctx.setAttribute("role", "img");
-  ctx.setAttribute("aria-label", label);
-  /* The label names the chart but carries none of its data. Put the actual
-   * numbers in the canvas fallback slot, which assistive tech reads and sighted
-   * users never see — the chart stops being a wall of silent pixels. */
-  try {
-    const labels = cfg.data && cfg.data.labels;
-    const sets = (cfg.data && cfg.data.datasets) || [];
-    if (Array.isArray(labels) && labels.length && labels.length <= 60 && sets.length) {
-      const lines = sets.map((ds) => {
-        const pairs = labels.map((l, i) => `${l}: ${fmt(ds.data[i] ?? 0)}`).join(", ");
-        return `${ds.label ? ds.label + " — " : ""}${pairs}`;
-      }).join(". ");
-      ctx.textContent = `${label}. ${lines}.`;
-    }
-  } catch (e) { /* a chart without simple labels just keeps its aria-label */ }
-  const ch = new Chart(ctx, cfg);
+  const fallback = (cfg.data && cfg.data.datasets && cfg.data.datasets[0] && cfg.data.datasets[0].label) || "Data chart";
+  const ch = new Chart(cv, cfg);
+  try { chartA11y(cv, ch.data, ch.options, fallback); } catch (e) { console.warn("chart a11y", e); }
+  /* Charts that change in place — the year-over-year metric switcher — would
+   * otherwise keep describing whichever metric happened to load first. */
+  const update = ch.update.bind(ch);
+  ch.update = (...a) => {
+    const r = update(...a);
+    try { chartA11y(cv, ch.data, ch.options, fallback); } catch (e) { console.warn("chart a11y", e); }
+    return r;
+  };
   CHARTS.push(ch);
   return ch;
 }
@@ -2140,6 +2200,13 @@ function renderHourWeek(host, grid) {
   let bd = 0, bh = 0, bn = 0;
   for (let d = 0; d < 7; d++) for (let h = 0; h < 24; h++) if (grid[d][h] > bn) { bn = grid[d][h]; bd = d; bh = h; }
   if (bn) html += `<div class="hw-caption">Busiest: <b>${DAY_FULL[bd]} around ${hourLabel(bh)}</b> — ${fmt(bn)} events. Tap any cell for its count.</div>`;
+  /* The grid itself is 168 background colours and nothing else. Ship the same
+   * numbers as a table so they can be read rather than only looked at. */
+  html += srTable(
+    "Events by day of week and hour of day" + (bn ? `. Busiest ${DAY_FULL[bd]} at ${hourLabel(bh)} with ${fmt(bn)} events.` : "."),
+    ["Day", ...Array.from({ length: 24 }, (_, h) => hourLabel(h))],
+    DAY_FULL.map((day, d) => [day, ...grid[d].map((n) => fmt(n))]),
+  );
   host.innerHTML = html;
   attachHourWeekTip(host);
 }
@@ -2195,8 +2262,17 @@ function renderCalendar(host, year, dayCounts) {
   }
   const played = Object.keys(dayCounts).filter((k) => k.startsWith(year)).length;
   const evDays = Object.keys(dayCounts).filter((k) => k.startsWith(year) && eventFor(k)).length;
+  /* Summarised BY MONTH rather than reproducing all 365 cells: a table with a
+   * row per day would be technically complete and miserable to move through,
+   * and most of its rows are zero. Twelve rows carry the same shape. */
+  const byMonth = MONTHS.map((m, i) => {
+    const pre = `${year}-${String(i + 1).padStart(2, "0")}`;
+    const keys = Object.keys(dayCounts).filter((k) => k.startsWith(pre));
+    return [m, fmt(keys.length), fmt(keys.reduce((a, k) => a + dayCounts[k], 0))];
+  });
   host.innerHTML = `<div class="cal-grid">${cells}</div>
-    <div class="hw-caption">${fmt(played)} days played in ${year}${evDays ? ` — including <b>${evDays} GO Fest day${evDays > 1 ? "s" : ""}</b> (gold ring)` : ""}. Tap a day for details.</div>`;
+    <div class="hw-caption">${fmt(played)} days played in ${year}${evDays ? ` — including <b>${evDays} GO Fest day${evDays > 1 ? "s" : ""}</b> (gold ring)` : ""}. Tap a day for details.</div>
+    ${srTable(`${year} by month: ${fmt(played)} days played in total.`, ["Month", "Days played", "Actions"], byMonth)}`;
   attachHourWeekTip(host);
 }
 
