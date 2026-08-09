@@ -117,6 +117,10 @@ function makeContext() {
     requestAnimationFrame: noop, setTimeout, clearTimeout, setInterval, clearInterval,
     performance: { now: () => 0 }, navigator: { userAgent: "node", platform: "node", maxTouchPoints: 0 },
     location: { search: "", protocol: "https:", hostname: "test" },
+    // The streaming parsers yield with this. A vm context gets V8's globals but
+    // not Node's, so without it every chunk boundary would throw ReferenceError
+    // — and the demo fixture is too small to cross one, so nothing would notice.
+    MessageChannel,
     document: doc, console,
   };
   win.window = win;
@@ -149,7 +153,10 @@ for (const rel of manifest.files) {
   const name = rel.split("/").pop();
   ctx.__name = name;
   ctx.__text = fs.readFileSync(full, "utf8");
-  vm.runInContext("routeFile(__name, __text)", ctx);
+  // routeFile is async now — the high-volume parsers yield mid-file so a real
+  // export cannot freeze the page. Awaiting here keeps this harness honest:
+  // without it the assertions would run against half-parsed state.
+  await vm.runInContext("routeFile(__name, __text)", ctx);
   routed++;
 }
 
@@ -279,6 +286,44 @@ const invariants = [
     !S.recent || S.recent.first <= S.recent.last],
 ];
 
+/* ---------- streaming across chunk boundaries ----------
+ * The big parsers yield to the main thread every PARSE_CHUNK rows. The demo's
+ * largest file is ~2,600 rows, so nothing in the fixture above ever reaches a
+ * boundary — a bug in resuming after a yield would sail straight through this
+ * suite. Feed a synthetic file big enough to cross several, in a FRESH context
+ * so it cannot disturb the numbers already asserted, and check nothing is
+ * dropped or double-counted at the seams. */
+const ROWS = 47_000;   // crosses the 15k boundary three times, and not on it
+const streamCtx = makeContext();
+load(streamCtx, "js/pokedex.js");
+load(streamCtx, "js/catalog.js");
+load(streamCtx, "js/app.js");
+const chunkSize = vm.runInContext("PARSE_CHUNK", streamCtx);
+{
+  let csv = "Player_Latitude,Player_Longitude,Fort_Latitude,Fort_Longitude,Timestamp\n";
+  for (let i = 0; i < ROWS; i++) {
+    // one distinct fort per 1000 rows, and a timestamp that walks forward
+    const d = new Date(Date.UTC(2024, 0, 1, 0, 0, 0) + i * 60000).toISOString().replace("T", " ").replace(/\.\d+Z$/, " UTC");
+    // e.geo bins player positions to 3 decimals, so step by a whole 0.001 to
+    // get 1000 genuinely distinct bins rather than ~100 that round together.
+    const off = ((i % 1000) / 1000).toFixed(3);
+    csv += `${(34 + +off).toFixed(6)},${(-118 - +off).toFixed(6)},34.05,-118.24,${d}\n`;
+  }
+  streamCtx.__name = "Pokestop_spin1.csv";
+  streamCtx.__text = csv;
+  await vm.runInContext("routeFile(__name, __text)", streamCtx);
+}
+const S2 = vm.runInContext("STATE", streamCtx);
+const streamTests = [
+  [`yield boundary is actually crossed (${ROWS.toLocaleString()} rows / chunk ${chunkSize})`, ROWS > chunkSize],
+  ["every streamed row counted exactly once", S2.ev.totals["Spins"] === ROWS],
+  ["no timestamps lost at a seam", S2.ev.stamps.length === ROWS],
+  ["day counts still sum to the row count", Object.values(S2.ev.dayCounts).reduce((a, b) => a + b, 0) === ROWS],
+  ["hour-of-week still sums to the row count", S2.ev.hourweek.flat().reduce((a, b) => a + b, 0) === ROWS],
+  ["distinct forts survive streaming", S2.ev.forts.size === 1],
+  ["distinct player positions survive streaming", S2.ev.geo.size === 1000],
+];
+
 /* ---------- report ---------- */
 let failed = 0;
 console.log(`\n  parsed ${routed} demo files\n`);
@@ -293,6 +338,11 @@ for (const [k, ok] of invariants) {
   if (!ok) failed++;
   console.log(`  ${ok ? "PASS" : "FAIL"}  ${k}`);
 }
-const total = Object.keys(GOLDEN).length + invariants.length;
+console.log("");
+for (const [k, ok] of streamTests) {
+  if (!ok) failed++;
+  console.log(`  ${ok ? "PASS" : "FAIL"}  ${k}`);
+}
+const total = Object.keys(GOLDEN).length + invariants.length + streamTests.length;
 console.log(`\n  ${total - failed}/${total} passed\n`);
 process.exit(failed ? 1 : 0);
