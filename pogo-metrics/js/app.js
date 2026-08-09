@@ -3022,7 +3022,14 @@ function initGlobe({ P, points, maxCount, arcs, home, paths }) {
 
   const world = Globe({ rendererConfig: { preserveDrawingBuffer: true, antialias: true } })(el)
     .width(el.clientWidth).height(el.clientHeight || 560)
-    .globeImageUrl("vendor/img/earth-night.jpg")
+    /* 2560x1280, down from 4096x2048 — 351 KB instead of 715 KB, and the
+     * biggest single asset on the site. Chosen by rendering all three at the
+     * same locked camera and comparing: at 2048 the city lights visibly thin
+     * out (the LA basin, Vegas, Phoenix speckle goes soft), at 2560 nearly all
+     * of it survives. Re-encoding at 4096 was a dead end — the source is
+     * already near its quality floor, and anything above q45 came out LARGER.
+     * Resolution is in the filename because /vendor/* ships immutable. */
+    .globeImageUrl("vendor/img/earth-night-2560.jpg")
     /* JPEG, not PNG. This is an 8-bit grayscale heightfield that only perturbs
      * surface normals, so lossy encoding is invisible here and PNG was costing
      * 192 KB for nothing. The extension change gives it a fresh URL, which
