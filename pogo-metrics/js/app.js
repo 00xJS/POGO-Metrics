@@ -142,30 +142,78 @@ function haversine(la1, lo1, la2, lo2) {
   return 2 * R * Math.asin(Math.sqrt(a));
 }
 
+/* Yield the main thread. MessageChannel, never setTimeout: a background tab
+ * clamps timers to as little as once a minute, which would turn a paused build
+ * into a stalled one. */
+function nextTick() {
+  return new Promise((res) => { const mc = new MessageChannel(); mc.port1.onmessage = () => res(); mc.port2.postMessage(0); });
+}
+
 /* delimited parser: quote-aware for CSV, plain split for TSV */
+function splitLines(text) {
+  return text.replace(/^﻿/, "").replace(/\r\n/g, "\n").replace(/\r/g, "\n").split("\n").filter((l) => l.length);
+}
+function lineSplitter(name) {
+  if (/\.tsv$/i.test(name)) return (l) => l.split("\t");
+  return (l) => {
+    const out = []; let cur = "", q = false;
+    for (let i = 0; i < l.length; i++) {
+      const ch = l[i];
+      if (q) { if (ch === '"') { if (l[i + 1] === '"') { cur += '"'; i++; } else q = false; } else cur += ch; }
+      else if (ch === '"') q = true;
+      else if (ch === ",") { out.push(cur); cur = ""; }
+      else cur += ch;
+    }
+    out.push(cur); return out;
+  };
+}
+
+/* ── streaming rows, for the files that are actually big ──
+ * parseRows below materialises EVERY row before returning, so one 8.9 MB
+ * Sfida_capture was a single uninterruptible task — 458,944 row objects for a
+ * real export, and a page frozen solid while they were built. Measured at 4x
+ * CPU throttle the demo alone (4% the size of a real export) blocked for
+ * 1,789 ms in one unbroken task.
+ *
+ * eachRow hands rows to a callback and yields every PARSE_CHUNK of them, so the
+ * same work becomes many short tasks the browser can paint between. It also
+ * stops early if the user hits Clear: DATA_GEN moves, and continuing to parse
+ * into a STATE that has already been thrown away is pure waste. */
+/* 5,000 rows per slice. Measured on a 450,000-row parse at 4x CPU throttle
+ * (mid-range phone), longest single task: 15,000 rows -> 132ms, 8,000 -> 75ms,
+ * 5,000 -> under the 50ms long-task threshold entirely, with total parse time
+ * unchanged. Yield overhead is real but sits inside the noise; task length is
+ * what a user feels. */
+const PARSE_CHUNK = 5000;
+async function eachRow(text, name, onRow, keepCells) {
+  const lines = splitLines(text);
+  if (!lines.length) return [];
+  const splitLine = lineSplitter(name);
+  const header = splitLine(lines[0]).map((h) => h.trim());
+  const gen = DATA_GEN;
+  for (let i = 1; i < lines.length; i++) {
+    const cells = splitLine(lines[i]);
+    const row = {};
+    header.forEach((h, j) => (row[h] = (cells[j] || "").trim()));
+    if (keepCells) row.__cells = cells;
+    onRow(row, header);
+    if (i % PARSE_CHUNK === 0) {
+      await nextTick();
+      if (gen !== DATA_GEN) return header;   // cleared mid-file — stop working
+    }
+  }
+  return header;
+}
+
 /* keepCells: attach the raw positional cells to each row. Only the four
  * small-file parsers that fall back to positions when a header is missing or
  * renamed need it. The two parsers that see real volume (Player_Journey at
  * ~446k rows, and the GPS history) never read it, and attaching it there cost
  * ~37 MB of pointer arrays on a real export for nothing. */
 function parseRows(text, name, keepCells) {
-  const tab = /\.tsv$/i.test(name);
-  const delim = tab ? "\t" : ",";
-  const lines = text.replace(/^﻿/, "").replace(/\r\n/g, "\n").replace(/\r/g, "\n").split("\n").filter((l) => l.length);
+  const lines = splitLines(text);
   if (!lines.length) return { header: [], rows: [] };
-  const splitLine = tab
-    ? (l) => l.split("\t")
-    : (l) => {
-        const out = []; let cur = "", q = false;
-        for (let i = 0; i < l.length; i++) {
-          const ch = l[i];
-          if (q) { if (ch === '"') { if (l[i + 1] === '"') { cur += '"'; i++; } else q = false; } else cur += ch; }
-          else if (ch === '"') q = true;
-          else if (ch === ",") { out.push(cur); cur = ""; }
-          else cur += ch;
-        }
-        out.push(cur); return out;
-      };
+  const splitLine = lineSplitter(name);
   const header = splitLine(lines[0]).map((h) => h.trim());
   const rows = [];
   for (let i = 1; i < lines.length; i++) {
@@ -426,22 +474,26 @@ function renderDetected() {
 }
 
 /* ───────────────────────────── routing ───────────────────────────── */
-function routeFile(name, text) {
+/* Async because the three high-volume parsers stream and yield. Everything
+ * else stays synchronous — awaiting a value that isn't a promise is free, and
+ * making a 400-row file pay for scheduling would be noise. */
+async function routeFile(name, text) {
   const n = name.toLowerCase();
   try {
     if (/gameplay\.txt$/i.test(n)) return parseGameplay(text);
     if (PJ_EVENTS.some(([re]) => re.test(n)) || /^(pokestop_spin|sfida_capture|map_pokemon_encounter|join_raid_lobby|gym_battle|feed_pokemon|deploy_pokemon|incense_encounter|lure_encounter)\d*\.csv$/i.test(n)) {
       const hit = PJ_EVENTS.find(([re]) => re.test(n));
-      if (hit) return parsePlayerJourney(hit[1], text);
+      // awaited, not just returned, so a rejection lands in the catch below
+      if (hit) return await parsePlayerJourney(hit[1], text);
     }
-    if (/gameplaylocationhistory\.tsv$/i.test(n)) return parseLocation(text);
+    if (/gameplaylocationhistory\.tsv$/i.test(n)) return await parseLocation(text);
     if (/friendlist\.tsv$/i.test(n)) return parseFriends(text);
     if (/recentlyunfriended\.tsv$/i.test(n)) return parseUnfriended(text);
     if (/recentinviteactions\.tsv$/i.test(n)) return parseInvites(text);
     if (/activityinvites(received|sent)\.tsv$/i.test(n)) return parseParty(text, /sent/i.test(n));
     if (/inapppurchases\.tsv$/i.test(n)) return parsePurchases(text);
     if (/fitnessdata\.tsv$/i.test(n)) return parseFitness(text);
-    if (/app_sessions\.csv$/i.test(n)) return parseSessions(text);
+    if (/app_sessions\.csv$/i.test(n)) return await parseSessions(text);
     if (/app_installs\.csv$/i.test(n)) return parseInstalls(text);
     if (/liveeventregistrationhistory_aspurchaser\.tsv$/i.test(n)) return parseLiveEvents(text);
     if (/wayfarer_player_data\.json$/i.test(n)) return parseWayfarer(text);
@@ -616,13 +668,14 @@ function parseRecentLog(text) {
   if (R.rows) STATE.recent = R;
 }
 
-function parsePlayerJourney(label, text) {
-  const { rows } = parseRows(text, "x.csv");
+/* The single biggest parse in the app — ~446k rows across the Player_Journey
+ * files, and the reason a build used to lock the page. Streams and yields. */
+async function parsePlayerJourney(label, text) {
   const e = STATE.ev;
   let n = 0;
-  for (const row of rows) {
+  await eachRow(text, "x.csv", (row) => {
     const ts = parseTS(row.Timestamp);
-    if (!ts) continue;
+    if (!ts) return;
     n++;
     if (!e.first || ts < e.first) e.first = ts;
     if (!e.last || ts > e.last) e.last = ts;
@@ -676,7 +729,7 @@ function parsePlayerJourney(label, text) {
         }
       }
     }
-  }
+  });
   e.totals[label] = (e.totals[label] || 0) + n;
   if (n) markLoaded("Player Journey events");
 }
@@ -701,16 +754,18 @@ function pushTrailPoint(pt) {
   }
 }
 
-function parseLocation(text) {
-  const { header, rows } = parseRows(text, "x.tsv");
-  const latKey = header.find((h) => /lat/i.test(h)) || header[1];
-  const lonKey = header.find((h) => /lon/i.test(h)) || header[2];
-  const tsKey = header.find((h) => /date|time/i.test(h)) || header[0];
-  for (const row of rows) {
+async function parseLocation(text) {
+  let latKey, lonKey, tsKey;
+  await eachRow(text, "x.tsv", (row, header) => {
+    if (latKey === undefined) {
+      latKey = header.find((h) => /lat/i.test(h)) || header[1];
+      lonKey = header.find((h) => /lon/i.test(h)) || header[2];
+      tsKey = header.find((h) => /date|time/i.test(h)) || header[0];
+    }
     const lat = parseFloat(row[latKey]), lon = parseFloat(row[lonKey]);
     const ts = parseTS(row[tsKey]);
     if (!isNaN(lat) && !isNaN(lon) && (lat || lon)) pushTrailPoint({ lat, lon, ts });
-  }
+  });
   if (STATE.trail.length) markLoaded("Location History");
 }
 
@@ -839,10 +894,11 @@ function parseFitness(text) {
   if (any) markLoaded("Adventure Sync Fitness");
 }
 
-function parseSessions(text) {
-  const { rows } = parseRows(text, "x.csv", true);
+/* 20,771 rows and 32 columns on a real export — big enough to be worth
+ * streaming alongside Player_Journey. */
+async function parseSessions(text) {
   const S = STATE.sessions;
-  for (const row of rows) {
+  await eachRow(text, "x.csv", (row) => {
     const ts = parseTS(row.Event_time || row.__cells[0]);
     if (ts) S.monthly[monthKey(ts)] = (S.monthly[monthKey(ts)] || 0) + 1;
     const dev = ((row.Device_model || "") + "").split("::").pop().trim();
@@ -868,7 +924,7 @@ function parseSessions(text) {
       }
     }
     S.total++;
-  }
+  }, true);
   if (S.total) markLoaded("App Sessions");
 }
 
@@ -1162,10 +1218,8 @@ async function build() {
     // Kick off the libraries this build will need while we parse.
     const libWaits = [ensureScript("vendor/chart.umd.min.js")];
 
-    // Yield between files via MessageChannel, NOT setTimeout — background tabs
-    // clamp timers to as little as once per minute, which would turn a 22-file
-    // build into a 20-minute crawl if the user switches tabs mid-build.
-    const nextTick = () => new Promise((res) => { const mc = new MessageChannel(); mc.port1.onmessage = () => res(); mc.port2.postMessage(0); });
+    // Yields between files; the big parsers additionally yield WITHIN a file
+    // (see eachRow), which is what stops one 8.9MB CSV freezing the page.
     const prog = $("build-progress");
     const unreadable = [];
     for (const r of RAW) {
@@ -1181,7 +1235,8 @@ async function build() {
       }
       if (text == null) continue;
       if (stale()) return abort(); // cleared during the read
-      routeFile(r.name, text);
+      await routeFile(r.name, text);
+      if (stale()) return abort(); // cleared while this file was being parsed
       // Release immediately: the parsed aggregates in STATE are all we need,
       // and holding every file's text is the single largest retention in the app.
       if (r.file) r.text = null;
