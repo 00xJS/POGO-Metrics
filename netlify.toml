@@ -37,3 +37,12 @@
   [headers.values]
     Cache-Control = "public, max-age=3600"
     X-Robots-Tag = "noindex"
+
+# The Trainer Model cohort data — same reasoning and same pattern as /demo/*:
+# crawlers may fetch it (trainer-model.html builds itself from these files),
+# but the raw JSON should never surface in search results itself.
+[[headers]]
+  for = "/data/*"
+  [headers.values]
+    Cache-Control = "public, max-age=3600"
+    X-Robots-Tag = "noindex"

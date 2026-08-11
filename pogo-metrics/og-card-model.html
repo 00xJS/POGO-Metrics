@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>og-image-model render source — POGO Metrics (internal)</title>
+<meta name="robots" content="noindex, nofollow">
+<meta name="viewport" content="width=1200">
+<link rel="stylesheet" href="vendor/fonts/fonts.css">
+<link rel="stylesheet" href="css/style.css">
+<style>
+  html, body { margin:0; padding:0; }
+  body {
+    width:1200px; height:630px; overflow:hidden; position:relative;
+    background:
+      radial-gradient(760px 520px at 15% -10%, rgba(65,216,198,.20), transparent 62%),
+      radial-gradient(700px 480px at 90% 0%, rgba(194,62,140,.22), transparent 62%),
+      var(--bg);
+    display:flex; flex-direction:column; justify-content:center;
+    padding:0 68px; box-sizing:border-box;
+  }
+  .wordmark { position:absolute; top:52px; left:68px; display:flex; align-items:center; gap:12px;
+    font-weight:800; font-size:30px; color:var(--ink); }
+  .kicker { font-family:var(--mono); font-size:20px; letter-spacing:.22em; text-transform:uppercase;
+    color:var(--accent); margin:0 0 18px; }
+  h1 { font-size:72px; font-weight:800; letter-spacing:-.025em; line-height:1.08; margin:0 0 26px; }
+  h1 .w { color:#fff; }
+  h1 .t { color:var(--accent); }
+  h1 .y { background:linear-gradient(96deg,var(--accent2),var(--orange));
+          -webkit-background-clip:text; background-clip:text; color:transparent; }
+  p { font-size:27px; color:var(--ink-dim); margin:0 0 34px; max-width:900px; line-height:1.45; }
+  .chip { display:inline-flex; align-items:center; gap:11px; align-self:flex-start;
+    background:rgba(65,216,198,.10); border:1px solid rgba(65,216,198,.42);
+    color:var(--accent); border-radius:999px; padding:13px 24px;
+    font-family:var(--mono); font-size:19px; font-weight:700; letter-spacing:.06em; }
+  .dot { width:9px; height:9px; border-radius:50%; background:var(--accent); }
+  .url { position:absolute; bottom:52px; right:68px; font-family:var(--mono);
+    font-size:21px; font-weight:600; color:var(--ink-faint); }
+</style>
+</head>
+<body>
+  <div class="wordmark"><span class="pokeball-dot"></span> POGO Metrics</div>
+  <div class="kicker">The Trainer Model</div>
+  <h1><span class="w">One friends list,</span><br><span class="t">two</span> <span class="y">level caps.</span></h1>
+  <p>A real cohort of Pokémon GO trainers, plotted against the level-50 wall — and re-recorded under today's cap of 80.</p>
+  <div class="chip"><span class="dot"></span>390 TRAINERS · CAP 50&nbsp;&nbsp;→&nbsp;&nbsp;493 TRAINERS · CAP 80</div>
+  <div class="url">pogo-metrics.netlify.app/trainer-model</div>
+</body>
+</html>

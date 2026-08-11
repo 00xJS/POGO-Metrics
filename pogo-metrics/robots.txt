@@ -2,6 +2,7 @@ User-agent: *
 Allow: /
 Disallow: /og-card.html
 Disallow: /og-card-demo.html
+Disallow: /og-card-model.html
 
 # /demo/ is deliberately NOT disallowed. Blocking it here stopped crawlers
 # fetching the sample export that demo.html builds itself from, so the indexed
