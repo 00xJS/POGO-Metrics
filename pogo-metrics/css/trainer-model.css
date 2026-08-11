@@ -99,13 +99,13 @@
 .tmodel .swatch--median { background: var(--accent2); }
 .tmodel .swatch--mean   { background: var(--purple); }
 
-.tmodel input[type="number"], .tmodel input[type="text"], .tmodel select {
+.tmodel input[type="number"] {
   font-family: var(--sans); font-size: 14px; color: var(--ink);
   background: var(--bg-raised); border: 1px solid var(--line);
   border-radius: var(--radius-control); padding: 8px 10px; width: 100%;
   font-variant-numeric: tabular-nums;
 }
-.tmodel input:focus, .tmodel select:focus {
+.tmodel input:focus {
   outline: none; border-color: var(--accent);
   box-shadow: 0 0 0 3px rgba(65, 216, 198, .18);
 }

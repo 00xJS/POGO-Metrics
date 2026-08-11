@@ -6,9 +6,8 @@
 
 /* ── palette (matches js/app.js) ──────────────────────────────────────── */
 const C = {
-  teal: "#41d8c6", yellow: "#ffcb05", red: "#ff5350", blue: "#3b6cff",
-  purple: "#a06bff", pink: "#ff6bb3", orange: "#ff9d42", green: "#5ad469",
-  down: "#ff6b6b", dim: "#9ba1c5", faint: "#848ab0", grid: "rgba(255,255,255,.06)",
+  teal: "#41d8c6", yellow: "#ffcb05", blue: "#3b6cff",
+  purple: "#a06bff", pink: "#ff6bb3", down: "#ff6b6b", dim: "#9ba1c5", faint: "#848ab0", grid: "rgba(255,255,255,.06)",
   raised: "#10142e",
 };
 const REDUCED_MOTION = matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -16,9 +15,9 @@ const REDUCED_MOTION = matchMedia("(prefers-reduced-motion: reduce)").matches;
 /* `lower` is written out rather than derived with toLowerCase() — that would
    produce "pokémon caught", and the P in Pokémon is always capitalised. */
 const METRICS = {
-  caught:   { key: "caught",   label: "Pokémon caught",  lower: "Pokémon caught",  short: "Caught",   unit: "",    color: C.teal },
-  battles:  { key: "battles",  label: "Battles won",     lower: "battles won",     short: "Battles",  unit: "",    color: C.yellow },
-  distance: { key: "distance", label: "Distance walked", lower: "distance walked", short: "Distance", unit: " km", color: C.blue },
+  caught:   { key: "caught",   label: "Pokémon caught",  lower: "Pokémon caught",  unit: "",    dp: 0, color: C.teal },
+  battles:  { key: "battles",  label: "Battles won",     lower: "battles won",     unit: "",    dp: 0, color: C.yellow },
+  distance: { key: "distance", label: "Distance walked", lower: "distance walked", unit: " km", dp: 1, color: C.blue },
 };
 
 /* Level → colour for the playstyle scatter, and the key rendered beside it. */
@@ -32,6 +31,33 @@ const LEVEL_BANDS = [
 const shadeForLevel = (lv) => LEVEL_BANDS.find((b) => lv >= b.lo).color;
 
 const $ = (id) => document.getElementById(id);
+
+/* One stat tile, from [label, value, sub, cls] rows. Three chapters render the
+   same tile; keeping one template means they can't drift apart. */
+const statTiles = (rows) => rows.filter(Boolean).map(([label, value, sub, cls = ""]) =>
+  `<div class="stat"><span class="label">${label}</span><div class="value ${cls}">${value}</div><div class="sub">${sub}</div></div>`
+).join("");
+
+/* A per-level series across the FULL integer range, null wherever the level is
+   missing or withheld. This is the page's withholding promise expressed as
+   code: a null breaks the line, so no stroke ever crosses a level whose
+   statistics were held back. It was written out three times before this, which
+   is exactly where a promise like that quietly stops being kept.
+     rows   — a perLevel array, ascending
+     pick   — row => value, returning null to withhold
+     asXY   — true for {x, y} points (linear axes), false for a bare array
+                aligned to the returned labels */
+function levelSeries(rows, pick, { asXY = false } = {}) {
+  const at = new Map(rows.map((r) => [r.level, r]));
+  const labels = [];
+  for (let lv = rows[0].level; lv <= rows.at(-1).level; lv++) labels.push(lv);
+  const data = labels.map((lv) => {
+    const r = at.get(lv);
+    const v = r ? pick(r) : null;
+    return asXY ? { x: lv, y: v ?? null } : (v ?? null);
+  });
+  return { labels, data };
+}
 const fmt = (n, d = 0) => n == null || !isFinite(n) ? "—" : n.toLocaleString(undefined, { minimumFractionDigits: d, maximumFractionDigits: d });
 const fmtCompact = (n) => n == null || !isFinite(n) ? "—"
   : Math.abs(n) >= 1e6 ? (n / 1e6).toFixed(1).replace(/\.0$/, "") + "M"
@@ -202,16 +228,14 @@ function renderCohort() {
   const max = (f) => Math.max(...t.map((r) => r[f]));
   const capped = t.filter((r) => r.level === m.levelCap).length;
 
-  $("cohort-stats").innerHTML = [
+  $("cohort-stats").innerHTML = statTiles([
     ["Trainers", fmt(m.n), "one friends-list snapshot", "teal"],
     ["Median level", fmt(quantile(t.map((r) => r.level).sort((a, z) => a - z), 0.5), 0), `${capped} of them at the cap`, ""],
     ["Median caught", fmt(med("caught")), `most caught: ${fmt(max("caught"))}`, ""],
     ["Median battles won", fmt(med("battles")), `most: ${fmt(max("battles"))}`, ""],
     ["Median distance", fmt(med("distance")) + " km", `furthest: ${fmt(max("distance"))} km`, ""],
     ["Total caught", fmtCompact(t.reduce((s, r) => s + r.caught, 0)), "across the whole cohort", "yellow"],
-  ].map(([label, value, sub, cls]) =>
-    `<div class="stat"><span class="label">${label}</span><div class="value ${cls}">${value}</div><div class="sub">${sub}</div></div>`
-  ).join("");
+  ]);
 
   $("hist-n").textContent = fmt(m.n);
   $("lim-cap").textContent = `${Math.round((100 * capped) / m.n)}%`;
@@ -318,7 +342,7 @@ function renderExplorer() {
           callbacks: {
             title: (i) => (i[0].raw.name ? i[0].raw.name : `Level ${fmt(i[0].parsed.x, 1)}`),
             label: (i) => i.raw.name
-              ? [`Level ${i.parsed.x}`, `${M.label}: ${fmt(i.parsed.y, M.key === "distance" ? 1 : 0)}${M.unit}`]
+              ? [`Level ${i.parsed.x}`, `${M.label}: ${fmt(i.parsed.y, M.dp)}${M.unit}`]
               : `${i.dataset.label}: ${fmt(i.parsed.y)}${M.unit}`,
           },
         },
@@ -421,8 +445,8 @@ function renderRank(writeBack = false) {
       <div class="note">percentile — ahead of ${fmt(beats)} of ${fmt(peers.length)} trainers in your band</div>
       <div class="bar"><span style="width:${Math.max(2, Math.min(100, pct)).toFixed(1)}%"></span></div>
       <div class="note" style="margin-top:9px">
-        You: <b style="color:var(--ink)">${fmt(mine, M.key === "distance" ? 1 : 0)}${M.unit}</b> ·
-        band median: ${fmt(median, M.key === "distance" ? 1 : 0)}${M.unit}${vs}
+        You: <b style="color:var(--ink)">${fmt(mine, M.dp)}${M.unit}</b> ·
+        band median: ${fmt(median, M.dp)}${M.unit}${vs}
       </div>
     </div>`;
   }).join("");
@@ -484,7 +508,7 @@ function renderWall() {
 
   const rows = Object.values(METRICS).map((M) => {
     const v = capped.map((r) => r[M.key]).sort((a, z) => a - z);
-    const d = M.key === "distance" ? 1 : 0;
+    const d = M.dp;
     return `<tr>
       <td>${M.label}</td>
       <td class="num">${fmt(v[0], d)}</td>
@@ -550,7 +574,7 @@ function renderReport() {
     const a = actualFor(p.level);
     if (!a) return null;
     const ratio = a.median[M.key] / p[M.key];
-    const d = M.key === "distance" ? 1 : 0;
+    const d = M.dp;
     const off = Math.abs(Math.log(ratio)) > Math.log(2);
     return { level: p.level, n: a.n, pred: p[M.key], actual: a.median[M.key], ratio, d, off };
   }).filter(Boolean);
@@ -664,16 +688,14 @@ function renderPlaystyle() {
   const battler = [...pts].sort((a, z) => z.y - a.y)[0];
   const walker = [...pts].sort((a, z) => a.x - z.x)[0];
 
-  $("playstyle-stats").innerHTML = [
+  $("playstyle-stats").innerHTML = statTiles([
     ["Median catches / km", quantile(xs, .5).toFixed(1), "typical trainer in this cohort", "teal"],
     ["Median battles / 1k catches", quantile(ys, .5).toFixed(1), "how much battling per catching", ""],
     ["Densest catcher", grinder.x.toFixed(1) + " /km", `${grinder.name} · level ${grinder.level}`, "yellow"],
     ["Most battle-heavy", battler.y.toFixed(1) + " /1k", `${battler.name} · level ${battler.level}`, ""],
     ["Purest walker", walker.x.toFixed(1) + " /km", `${walker.name} · level ${walker.level}`, ""],
     ["Off the visible range", fmt(offView), "extreme ratios, still in the data", ""],
-  ].map(([label, value, sub, cls]) =>
-    `<div class="stat"><span class="label">${label}</span><div class="value ${cls}">${value}</div><div class="sub">${sub}</div></div>`
-  ).join("");
+  ]);
 }
 
 /* ═══════════════════════ 6 · the new era (cap 80) ═══════════════════════ */
@@ -690,15 +712,12 @@ function renderEra2() {
   // Full integer axis: levels nobody currently holds still occupy a slot, so
   // the curve isn't quietly compressed where the ladder is empty — the sparse
   // bottom of the range is where that category-axis distortion was worst.
-  const rowAt = new Map(ERA2.perLevel.map((l) => [l.level, l]));
-  const lo = ERA2.perLevel[0].level, hi = ERA2.perLevel.at(-1).level;
-  const labels = [];
-  for (let lv = lo; lv <= hi; lv++) labels.push(lv);
-  const stat = (lv, f) => rowAt.get(lv)?.[M.key][f] ?? null;
-  const d = M.key === "distance" ? 1 : 0;
+  const series = (f) => levelSeries(ERA2.perLevel, (r) => r[M.key][f]);
+  const labels = series("median").labels;
+  const d = M.dp;
 
   $("era2-date").textContent = ERA2.meta.latestCapture ?? "—";
-  const capped = rowAt.get(ERA2.meta.levelCap);
+  const capped = ERA2.perLevel.find((l) => l.level === ERA2.meta.levelCap);
   const sparseCount = ERA2.perLevel.filter((l) => l.sparse).length;
   $("era2-chips").innerHTML = [
     `<span class="chip ok"><span class="dot"></span><b>${fmt(ERA2.meta.n)}</b> trainers</span>`,
@@ -718,20 +737,20 @@ function renderEra2() {
         // Levels below the minimum-n threshold carry null stats from the build,
         // so the line simply breaks there — an honest gap rather than a
         // confident stroke through a level backed by one person.
-        { type: "line", label: `Median ${M.lower}`, data: labels.map((lv) => stat(lv, "median")),
+        { type: "line", label: `Median ${M.lower}`, data: series("median").data,
           borderColor: M.color, backgroundColor: M.color, borderWidth: 2.5,
           pointRadius: 3, spanGaps: false, tension: .25, yAxisID: "y", order: 1 },
         // The mean rides above the median wherever a few heavy grinders pull the
         // average up — that gap is the point of showing both. Same n>=5 masking:
         // sparse levels carry null means from the build, so the dash breaks too.
-        { type: "line", label: `Mean ${M.lower} (average)`, data: labels.map((lv) => stat(lv, "mean")),
+        { type: "line", label: `Mean ${M.lower} (average)`, data: series("mean").data,
           borderColor: M.color, borderDash: [6, 5], borderWidth: 1.5,
           pointRadius: 0, spanGaps: false, tension: .25, yAxisID: "y", order: 1 },
-        { type: "line", label: "75th percentile", data: labels.map((lv) => stat(lv, "p75")),
+        { type: "line", label: "75th percentile", data: series("p75").data,
           borderColor: "transparent", backgroundColor: M.color + "24", pointRadius: 0, fill: "+1", tension: .25, yAxisID: "y", order: 2 },
-        { type: "line", label: "25th percentile", data: labels.map((lv) => stat(lv, "p25")),
+        { type: "line", label: "25th percentile", data: series("p25").data,
           borderColor: "transparent", pointRadius: 0, tension: .25, yAxisID: "y", order: 2 },
-        { type: "bar", label: "Trainers at level", data: labels.map((lv) => rowAt.get(lv)?.n ?? null),
+        { type: "bar", label: "Trainers at level", data: levelSeries(ERA2.perLevel, (r) => r.n).data,
           backgroundColor: "rgba(155,161,197,.25)", borderRadius: 2, yAxisID: "yn", order: 3 },
       ],
     },
@@ -791,13 +810,10 @@ function renderEra2Scatter() {
   const pts = ERA2.trainers.map((t) => ({ x: t.level, y: t[M.key], id: t.id }));
   // Null-masked over the full level range so the median line BREAKS at
   // withheld or empty levels instead of bridging them with a stroke.
-  const rowAt = new Map(ERA2.perLevel.map((l) => [l.level, l]));
-  const med = [];
-  for (let lv = ERA2.perLevel[0].level; lv <= ERA2.perLevel.at(-1).level; lv++)
-    med.push({ x: lv, y: rowAt.get(lv)?.[M.key].median ?? null });
+  const med = levelSeries(ERA2.perLevel, (r) => r[M.key].median, { asXY: true }).data;
   $("era2-all-n").textContent = fmt(pts.length);
   const logScale = $("era2-scale-log")?.checked ?? false;
-  const d = M.key === "distance" ? 1 : 0;
+  const d = M.dp;
 
   mount("chart-era2-scatter", {
     data: { datasets: [
@@ -845,16 +861,9 @@ function renderCompare() {
   // Null-masked full ranges: a level that is withheld (n < MIN_N) or simply
   // empty breaks the line, exactly as the caption promises — the stroke never
   // bridges a level the page refuses to publish.
-  const e1At = new Map(DATA.perLevel.map((l) => [l.level, l]));
-  const era1 = [];
-  for (let lv = DATA.perLevel[0].level; lv <= DATA.perLevel.at(-1).level; lv++) {
-    const r = e1At.get(lv);
-    era1.push({ x: lv, y: r && r.n >= MIN_N ? r.median[M.key] : null });
-  }
-  const e2At = new Map(ERA2.perLevel.map((l) => [l.level, l]));
-  const era2 = [];
-  for (let lv = ERA2.perLevel[0].level; lv <= ERA2.perLevel.at(-1).level; lv++)
-    era2.push({ x: lv, y: e2At.get(lv)?.[M.key].median ?? null });
+  // Era 1 masks here (its build predates the rule); era 2 arrives pre-masked.
+  const era1 = levelSeries(DATA.perLevel, (r) => (r.n >= MIN_N ? r.median[M.key] : null), { asXY: true }).data;
+  const era2 = levelSeries(ERA2.perLevel, (r) => r[M.key].median, { asXY: true }).data;
 
   mount("chart-compare", {
     type: "line",
@@ -871,7 +880,7 @@ function renderCompare() {
         legend: { position: "top", align: "start" },
         tooltip: { callbacks: {
           title: (i) => `Level ${i[0].parsed.x}`,
-          label: (i) => `${i.dataset.label}: ${fmt(i.parsed.y, M.key === "distance" ? 1 : 0)}${M.unit} median`,
+          label: (i) => `${i.dataset.label}: ${fmt(i.parsed.y, M.dp)}${M.unit} median`,
         } },
       },
       scales: {
@@ -943,6 +952,90 @@ function renderLadder() {
     </tbody>`;
 }
 
+/* ── what each level costs ─────────────────────────────────────────────────
+   The one figure on a profile that describes the game rather than the player:
+   the XP needed for the next level is identical for everyone, so it carries no
+   privacy weight and needs no withholding. It is also the mechanism behind
+   every other finding on this page — the reason the top of the ladder barely
+   moves is printed right here. */
+function renderCost() {
+  const cost = ERA2?.levelCost;
+  if (!cost?.length) return;
+  $("cost-panel").hidden = false;
+  const at = (lv) => cost.find((c) => c.level === lv);
+  const first = cost[0], last = cost.at(-1);
+  $("cost-range").textContent = `${fmt(cost.length)} levels shown`;
+
+  // Headline comparison uses two fixed, well-attested rungs rather than the
+  // cheapest and dearest on show. Min and max are decided by whoever happens to
+  // be on the friends list — the lowest level here is held by one person, and
+  // leaning on it would let a single friend swing the number several-fold.
+  const anchorLo = at(50) ?? first, anchorHi = at(ERA2.meta.levelCap - 1) ?? last;
+  const ratio = anchorHi.xpToNext / anchorLo.xpToNext;
+  const thin = cost.filter((c) => c.readings < 2).length;
+
+  $("cost-stats").innerHTML = statTiles([
+    [`Leaving level ${anchorLo.level}`, fmtCompact(anchorLo.xpToNext) + " XP", "the old cap, for scale", "teal"],
+    [`Leaving level ${anchorHi.level}`, fmtCompact(anchorHi.xpToNext) + " XP", "the last rung before the cap", "yellow"],
+    ["The step got", "×" + ratio.toFixed(1) + " dearer", `between those two rungs`, ""],
+    ["Levels shown", fmt(cost.length), "levels someone on the list occupies", ""],
+  ]);
+
+  // Full integer axis and log scale. The axis spans every level in range, not
+  // just the ones on show, so the levels nobody occupies read as the gaps they
+  // are — a category axis would stand level 13 flush against 27 and imply a
+  // continuous ladder. Log, because a 1,000× range flattens the early game to
+  // nothing on a linear axis.
+  const lo = first.level, hi = last.level;
+  const labels = [];
+  for (let lv = lo; lv <= hi; lv++) labels.push(lv);
+  const byLevel = new Map(cost.map((c) => [c.level, c]));
+  mount("chart-cost", {
+    type: "bar",
+    data: {
+      labels,
+      datasets: [{
+        label: "XP for the next level",
+        data: labels.map((lv) => byLevel.get(lv)?.xpToNext ?? null),
+        backgroundColor: labels.map((lv) => (lv >= 71 ? C.yellow : C.teal)),
+        borderRadius: 2,
+      }],
+    },
+    options: {
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false },
+        title: { display: true, text: "XP to reach the next level — yellow is the endgame, 71 and up (log scale)", color: C.faint, font: { size: 11 } },
+        tooltip: { callbacks: {
+          title: (i) => `Level ${i[0].label} → ${Number(i[0].label) + 1}`,
+          label: (i) => {
+            const c = byLevel.get(Number(i.label));
+            return [`${fmt(i.parsed.y)} XP`, c && c.readings < 2 ? "read once" : `read ${c?.readings} times`];
+          },
+        } },
+      },
+      scales: {
+        x: { title: { display: true, text: "Leaving this level (gaps: nobody on the list is here)", color: C.faint, font: { size: 11 } }, grid: { display: false } },
+        y: { ...axis("XP required", true) },
+      },
+    },
+  });
+
+  $("cost-note").innerHTML = `
+    <b>The XP figures here are the game's, not anyone's.</b> The cost of a level is the same for
+    every player, so these numbers describe no individual — the only quantities on this page that
+    don't. Leaving level ${anchorHi.level}, the last rung before the cap, costs
+    <b>${fmt(anchorHi.xpToNext)} XP</b>; leaving level ${anchorLo.level} costs
+    <b>${fmt(anchorLo.xpToNext)}</b>. The ladder steepens the whole way up.
+    <br><br>
+    <b>Which levels appear, though, is this friends list's doing.</b> A level is on the chart when
+    someone on the list stands there — the gaps are levels nobody currently occupies, not levels
+    that were checked and rejected.${thin ? ` ${fmt(thin)} of the ${fmt(cost.length)} rest on a single
+    reading; hover any bar to see how many times it was read.` : ""}
+    The rungs shown span ${lo}–${hi}: the cap itself is absent because there is no level after it
+    to pay for.`;
+}
+
 /* ── the pace panel: the only place a clock touches this data ──────────────
    Every other number on this page is a lifetime total. A trainer recorded in
    two rounds gives one measured interval, and that interval is worth exactly
@@ -956,75 +1049,44 @@ function renderPace() {
   $("pace-window").textContent = `${fmt(p.nObserved)} seen twice · ~${p.meanWindowDays} days`;
 
   const pct = (100 * p.nLeveled) / p.nObserved;
-  const withData = p.byBand.filter((b) => b.xpPerDay.median !== null);
-  const busiest = withData.length ? withData.reduce((m, b) => (b.xpPerDay.median > m.xpPerDay.median ? b : m)) : null;
+  const climbing = p.byBand.filter((b) => b.lo < ERA2.meta.levelCap);
+  const stillClimbing = climbing.reduce((s, b) => s + b.n, 0);
+  const moved = climbing.filter((b) => b.leveled > 0);
+  const everyoneGainedOne = p.nLeveled > 0 && p.levelsGained === p.nLeveled;
 
-  $("pace-stats").innerHTML = [
+  $("pace-stats").innerHTML = statTiles([
     ["Recorded twice", fmt(p.nObserved), `over about ${p.meanWindowDays} days`, "teal"],
     ["Gained a level", fmt(p.nLeveled), `${pct.toFixed(1)}% of them, in that whole window`, ""],
-    ["Levels gained", fmt(p.levelsGained), "across every trainer, combined", ""],
-    busiest ? ["Busiest band", "level " + busiest.band, `${fmtCompact(busiest.xpPerDay.median)} XP a day, typical`, "yellow"] : null,
-  ].filter(Boolean).map(([label, value, sub, cls]) =>
-    `<div class="stat"><span class="label">${label}</span><div class="value ${cls}">${value}</div><div class="sub">${sub}</div></div>`
-  ).join("");
-
-  // A band with no XP readings at all is left off the axis rather than drawn as
-  // an empty slot: a measured zero and an absent measurement look identical as
-  // a missing bar, and only one of them is a finding. (At the cap there is no
-  // next level to earn toward, so no XP reading exists there.)
-  const plotted = p.byBand.filter((b) => b.xpPerDay.n > 0);
-  const unmeasured = p.byBand.filter((b) => b.xpPerDay.n === 0);
-  mount("chart-pace", {
-    type: "bar",
-    data: {
-      labels: plotted.map((b) => b.band),
-      datasets: [{
-        label: "Median XP per day",
-        data: plotted.map((b) => b.xpPerDay.median),
-        backgroundColor: plotted.map((b) => (b === busiest ? C.yellow : C.teal)),
-        borderRadius: 3,
-      }],
-    },
-    options: {
-      maintainAspectRatio: false,
-      plugins: {
-        legend: { display: false },
-        title: { display: true, text: "How much XP each band earned per day, during the window", color: C.faint, font: { size: 11 } },
-        tooltip: { callbacks: {
-          title: (i) => `Level ${i[0].label}`,
-          label: (i) => {
-            const b = plotted[i.dataIndex];
-            return [`${fmt(i.parsed.y)} XP/day (median)`,
-                    `middle half: ${fmtCompact(b.xpPerDay.p25)}–${fmtCompact(b.xpPerDay.p75)}`,
-                    `${b.n} trainer${b.n === 1 ? "" : "s"} in band`];
-          },
-        } },
-      },
-      scales: {
-        x: { title: { display: true, text: "Trainer level at the start of the window", color: C.faint, font: { size: 11 } }, grid: { display: false } },
-        y: { ...axis("XP per day"), beginAtZero: true },
-      },
-    },
-  });
+    ["Still had one to gain", fmt(stillClimbing), "the rest were already at the cap", ""],
+    everyoneGainedOne
+      ? ["Nobody gained two", "exactly 1 each", `${fmt(p.levelsGained)} levels across ${fmt(p.nLeveled)} trainers`, ""]
+      : ["Levels gained", fmt(p.levelsGained), "across every trainer, combined", ""],
+  ]);
 
   const capBand = p.byBand.find((b) => b.lo === ERA2.meta.levelCap);
+  const costShown = !$("cost-panel")?.hidden;
+  // Where the movement actually was, stated as rates so bands of different
+  // sizes are comparable. This is the part that resists a tidy story: the
+  // dearest band moved the most, not the least.
+  const rate = (b) => (b.n ? (100 * b.leveled) / b.n : 0);
+  const busiest = moved.length ? moved.reduce((m, b) => (rate(b) > rate(m) ? b : m)) : null;
+
   $("pace-note").innerHTML = `
     <b>This is why the page won't tell you how long it takes to reach ${ERA2.meta.levelCap}.</b>
     Across about ${p.meanWindowDays} days, <b>${fmt(p.nObserved)} of these trainers gave a usable
     second reading — and ${p.nLeveled === 0 ? "none" : "only <b>" + fmt(p.nLeveled) + "</b>"} of them
-    gained a single level</b>. Near the top the ladder barely moves: a week of ordinary play is, for
-    most people at this end, no levels at all.
+    gained a single level</b>.
     ${capBand ? `${fmt(capBand.n)} of them were already at ${ERA2.meta.levelCap}, with nowhere left to climb.` : ""}
     ${p.nExcludedForCorrection ? `(A further ${fmt(p.nExcludedForCorrection)} were set aside: their level
       changed between rounds because the record was corrected, not because they played.)` : ""}
-    And read the bars as <em>engagement, not effort</em> — the bands earning the most per day are the
-    ones still pushing, while quieter accounts sit near zero, so this measures how much these
-    players played, not what a level costs.
-    ${unmeasured.length ? `Level ${unmeasured.map((b) => b.band).join(" and ")} ${unmeasured.length === 1 ? "is" : "are"}
-      absent from the chart rather than empty on it: at the cap there is no next level to earn
-      toward, so no XP figure exists to plot.` : ""}
+    <br><br>
+    ${busiest ? `<b>And it is not simply that the dear levels move slowest.</b> The busiest band was
+      <b>level ${busiest.band}</b>, where ${fmt(busiest.leveled)} of ${fmt(busiest.n)}
+      (${rate(busiest).toFixed(0)}%) gained one — ${costShown ? "and those are among the most expensive rungs on the chart above" : "and those are among the most expensive rungs of all"}.
+      Cost sets the size of the task; whether anyone finishes it in a week is about how hard they
+      are playing, and the people near the top are the ones still pushing. ` : ""}
     One window, one cohort, whatever happened to be running that week. It is a real measurement,
-    and it is not a forecast.`;
+    and it is not a forecast — ${p.nLeveled === 1 ? "a single level-up" : fmt(p.nLeveled) + " level-ups"} cannot carry one.`;
   $("pace-xref").hidden = false;
 }
 
@@ -1190,6 +1252,7 @@ async function initEra2() {
   renderEra2();
   renderCompare();
   renderLadder();
+  renderCost();
   renderPace();
 }
 
