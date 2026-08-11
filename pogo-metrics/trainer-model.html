@@ -28,8 +28,8 @@
   <link rel="preload" href="vendor/fonts/c8e7a734b1.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="preload" href="vendor/fonts/1cd702cd25.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="stylesheet" href="vendor/fonts/fonts.css" />
-  <link rel="stylesheet" href="css/style.css?v=20260811c" />
-  <link rel="stylesheet" href="css/trainer-model.css?v=20260811c" />
+  <link rel="stylesheet" href="css/style.css?v=20260811d" />
+  <link rel="stylesheet" href="css/trainer-model.css?v=20260811d" />
 </head>
 <body>
   <nav id="topnav" data-active="model"></nav>
@@ -401,8 +401,9 @@
         <div class="eyebrow">08 — The story</div>
         <h2>The ladder, in plain numbers</h2>
         <p>
-          What does a level actually cost? Rung by rung, here is what the median trainer at
-          each milestone has done in their Pokémon GO lifetime — as a table, and as a
+          What does a level actually cost? Rung by rung: what the median trainer at each
+          milestone has done in their Pokémon GO lifetime, what the game charges in XP to
+          climb each step, and the one week where we watched to see who moved — plus a
           tappable full-screen story.
         </p>
       </div>
@@ -425,6 +426,18 @@
         </div>
       </div>
 
+      <div class="panel" id="cost-panel" hidden>
+        <div class="panel-chrome">
+          <span class="panel-title">What each level costs</span>
+          <span class="chip teal"><span class="dot"></span><b id="cost-range">—</b></span>
+        </div>
+        <div class="panel-body">
+          <div class="stat-grid" id="cost-stats"></div>
+          <div class="chart-wrap" style="margin-top:18px"><canvas id="chart-cost" role="img" aria-label="Bar chart: the XP required to reach each next level, on a logarithmic scale"></canvas></div>
+          <div class="callout teal" style="margin-top:16px" id="cost-note"></div>
+        </div>
+      </div>
+
       <div class="panel" id="pace-panel" hidden>
         <div class="panel-chrome">
           <span class="panel-title">The only clock in the data</span>
@@ -432,7 +445,6 @@
         </div>
         <div class="panel-body">
           <div class="stat-grid" id="pace-stats"></div>
-          <div class="chart-wrap short" style="margin-top:18px"><canvas id="chart-pace" role="img" aria-label="Bar chart: median XP earned per day by level band during the observed window"></canvas></div>
           <div class="callout red" style="margin-top:16px" id="pace-note"></div>
         </div>
       </div>
@@ -461,10 +473,10 @@
     </p>
   </footer>
 
-  <script defer src="js/nav.js?v=20260811c"></script>
+  <script defer src="js/nav.js?v=20260811d"></script>
   <!-- Chart.js loads up front here (unlike metrics.html's on-demand injection):
        this page is nothing but charts, and the file is already precached. -->
   <script defer src="vendor/chart.umd.min.js"></script>
-  <script defer src="js/trainer-model.js?v=20260811c"></script>
+  <script defer src="js/trainer-model.js?v=20260811d"></script>
 </body>
 </html>
