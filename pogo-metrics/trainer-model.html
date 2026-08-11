@@ -28,8 +28,8 @@
   <link rel="preload" href="vendor/fonts/c8e7a734b1.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="preload" href="vendor/fonts/1cd702cd25.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="stylesheet" href="vendor/fonts/fonts.css" />
-  <link rel="stylesheet" href="css/style.css?v=20260811" />
-  <link rel="stylesheet" href="css/trainer-model.css?v=20260811" />
+  <link rel="stylesheet" href="css/style.css?v=20260811b" />
+  <link rel="stylesheet" href="css/trainer-model.css?v=20260811b" />
 </head>
 <body>
   <nav id="topnav" data-active="model"></nav>
@@ -44,7 +44,8 @@
         <p class="section-desc" style="margin:10px auto 16px">
           Everything else on this site is <b>your</b> story, built from your own export. This page
           zooms out: one real friends list, recorded twice — <b>390 trainers in February 2025</b>,
-          when the cap was 50, and <b>493 of its 497 friends in August 2026</b>, under today's cap
+          when the cap was 50, and <b><span id="led-n">493</span> of its <span id="led-total">497</span>
+          friends in August 2026</b>, under today's cap
           of 80 — every level, every catch, every kilometre walked, plotted to show what the level
           cap does to trainer numbers. Find out where your own stats land, and see why the tidy
           straight-line model this project started with falls apart exactly where most players live.
@@ -299,8 +300,9 @@
           </div>
           <div class="chart-wrap"><canvas id="chart-era2-scatter"></canvas></div>
           <div class="callout" style="margin-top:16px">
-            <b>Every recorded trainer is on this chart</b> — 493 of the 497 friends on the
-            list at the latest snapshot; the remaining four aren't recorded. Each dot is
+            <b>Every recorded trainer is on this chart</b> — <span id="led-n2">493</span> of the
+            <span id="led-total2">497</span> friends on the list at the latest snapshot;
+            <span id="led-missing">the remaining four aren't recorded</span>. Each dot is
             one trainer's lifetime total; the metric buttons below switch this chart too.
             The dashed line is the median at each level, drawn only where five or more
             trainers share a level — it breaks over thinner levels, because a "typical
@@ -446,10 +448,10 @@
     </p>
   </footer>
 
-  <script defer src="js/nav.js?v=20260811"></script>
+  <script defer src="js/nav.js?v=20260811b"></script>
   <!-- Chart.js loads up front here (unlike metrics.html's on-demand injection):
        this page is nothing but charts, and the file is already precached. -->
   <script defer src="vendor/chart.umd.min.js"></script>
-  <script defer src="js/trainer-model.js?v=20260811"></script>
+  <script defer src="js/trainer-model.js?v=20260811b"></script>
 </body>
 </html>

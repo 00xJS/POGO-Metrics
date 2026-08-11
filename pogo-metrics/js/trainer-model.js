@@ -705,11 +705,9 @@ function renderEra2() {
     `<span class="chip"><span class="dot"></span>levels <b>${labels[0]}–${labels.at(-1)}</b></span>`,
     capped ? `<span class="chip teal"><span class="dot"></span><b>${capped.n}</b> at the level-80 cap</span>` : "",
     ERA2.meta.captures.length > 1 ? `<span class="chip"><span class="dot"></span><b>${ERA2.meta.captures.length}</b> snapshots</span>` : "",
-    // What's missing is stated in the scatter panel's callout (493 of 497,
-    // four not recorded). meta.nExcludedPendingReview is NOT shown: it counts
-    // leftover review-queue rows from the recording rounds — mostly duplicates
-    // of trainers already in the data — not absent friends, and rendering it
-    // next to the 493-of-497 ledger read as a contradiction.
+    // What's missing is stated once, in the scatter panel's callout, from
+    // meta.nFriendsTotal / nNotRecorded (see renderLedger). Repeating it as a
+    // chip here read as a second, competing ledger.
     sparseCount ? `<span class="chip warn"><span class="dot"></span><b>${sparseCount}</b> thin levels (n&lt;${ERA2.meta.minNForQuartiles ?? 5})</span>` : "",
   ].join("");
 
@@ -759,6 +757,27 @@ function renderEra2() {
       },
     },
   });
+}
+
+// "N of M friends, the remaining K aren't recorded" — read from era2.json's
+// meta rather than written into the page, so a future recording round updates
+// the sentence by shipping data. The markup carries the current numbers as
+// static fallbacks, so the prose still reads correctly before this runs (or if
+// the data never loads).
+const SMALL_WORDS = ["none", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten"];
+
+function renderLedger() {
+  const m = ERA2?.meta;
+  if (!m?.nFriendsTotal) return;
+  const set = (id, text) => { const el = $(id); if (el) el.textContent = text; };
+  set("led-n", fmt(m.n));
+  set("led-total", fmt(m.nFriendsTotal));
+  set("led-n2", fmt(m.n));
+  set("led-total2", fmt(m.nFriendsTotal));
+  const k = m.nNotRecorded ?? 0;
+  set("led-missing", k === 0
+    ? "everyone on it is recorded"
+    : `the remaining ${SMALL_WORDS[k] ?? fmt(k)} ${k === 1 ? "isn't" : "aren't"} recorded`);
 }
 
 // Every recorded trainer in the cap-80 era as one dot, with the published
@@ -1036,8 +1055,9 @@ async function initEra2() {
   // position, so unhiding keeps the 01–08 sequence intact — appending here
   // would put 06 after 07 in the row.
   for (const chip of document.querySelectorAll("#chapter-nav [data-era2]")) chip.hidden = false;
-  // Fill in the 2026 column of the era-summary table.
+  // Fill in the 2026 column of the era-summary table, and state the ledger.
   renderHero();
+  renderLedger();
   // The benchmark defaults to today's game now that its cohort exists.
   RANK.era = "era2";
   $("rank-era-ctl").hidden = false;
