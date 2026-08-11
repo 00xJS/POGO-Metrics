@@ -444,6 +444,7 @@ function renderRank(writeBack = false) {
       percentile to mean much. ${band.lo === cap && band.hi === cap
         ? "At the cap everyone shares one level, so this band is a straight comparison against every cap trainer in the cohort."
         : `Your band spans levels ${band.lo === 1 ? "up to " + band.hi : band.lo + "–" + band.hi}.`}
+      ${level < band.lo ? `Level ${level} is below this cohort's recorded floor (${band.lo}), so you're measured against its lowest band.` : ""}
       ${eraNote}
     </div>`;
 }
@@ -704,9 +705,11 @@ function renderEra2() {
     `<span class="chip"><span class="dot"></span>levels <b>${labels[0]}–${labels.at(-1)}</b></span>`,
     capped ? `<span class="chip teal"><span class="dot"></span><b>${capped.n}</b> at the level-80 cap</span>` : "",
     ERA2.meta.captures.length > 1 ? `<span class="chip"><span class="dot"></span><b>${ERA2.meta.captures.length}</b> snapshots</span>` : "",
-    // Say what's missing, not just what's here — same honesty as the era-1 limitations row.
-    ERA2.meta.nExcludedPendingReview
-      ? `<span class="chip warn"><span class="dot"></span><b>${fmt(ERA2.meta.nExcludedPendingReview)}</b> excluded pending review</span>` : "",
+    // What's missing is stated in the scatter panel's callout (493 of 497,
+    // four not recorded). meta.nExcludedPendingReview is NOT shown: it counts
+    // leftover review-queue rows from the recording rounds — mostly duplicates
+    // of trainers already in the data — not absent friends, and rendering it
+    // next to the 493-of-497 ledger read as a contradiction.
     sparseCount ? `<span class="chip warn"><span class="dot"></span><b>${sparseCount}</b> thin levels (n&lt;${ERA2.meta.minNForQuartiles ?? 5})</span>` : "",
   ].join("");
 

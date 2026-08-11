@@ -94,11 +94,12 @@ This is the whole point, so it should be checkable rather than promised:
   WebSocket or beacon your data off-origin. (Precisely that: `connect-src` governs those APIs, not
   navigation. Nothing here navigates with parsed data, but this section invites you to check it,
   so it should survive the check.)
-- **It works in airplane mode.** A service worker caches the pages, the stylesheet, every app
-  script and the chart library, so once you've visited, the app loads and parses an export with no
-  network at all. The 3D globe's assets are large and cache on first use instead, so the globe
-  chapter needs one online build before it too works offline.
-- **You can audit all of it** — it's ~4,500 lines of vanilla JavaScript in this repo, no build step.
+- **It works in airplane mode.** A service worker caches the pages, both stylesheets, every app
+  script, the chart library and the Trainer Model's cohort data, so once you've visited, the app
+  loads and parses an export — and the research layer draws — with no network at all. The 3D
+  globe's assets are large and cache on first use instead, so the globe chapter needs one online
+  build before it too works offline.
+- **You can audit all of it** — it's ~6,000 lines of vanilla JavaScript in this repo, no build step.
 
 ## Getting your data from Niantic
 
@@ -139,13 +140,15 @@ pogo-metrics/          the deployed site (netlify.toml publishes this folder as-
 ├── demo/              anonymized sample export
 ├── data/trainer-model/    the anonymized cohort JSONs behind the Trainer Model page
 ├── tools/scrub-demo.mjs   regenerates demo/ from a real export
+├── tools/test-parsers.mjs runs every parser against demo/ as a regression check
 ├── og-card.html       source for the share image; render it to regenerate og-image.png
 │                      (og-card-demo.html / og-card-model.html do the same for their pages)
 ├── og-image.png       1200×630 Open Graph / Twitter card (+ -demo and -model variants)
 ├── 404.html           branded not-found page (Netlify serves it automatically)
 ├── sw.js              service worker: installable + fully offline-capable
 ├── site.webmanifest   PWA manifest (+ favicon-32 / apple-touch-icon / icon-192 / icon-512)
-├── robots.txt         keeps demo data + og-card out of search; sitemap.xml alongside
+├── robots.txt         keeps the og-card pages out of search (demo + cohort data are
+│                      excluded via noindex headers instead — see netlify.toml); sitemap.xml alongside
 ├── static-server.mjs  tiny dependency-free static server for local preview
 └── vendor/            Chart.js, Leaflet, globe.gl, fonts, geo — all vendored, lazy-loaded
 ```
