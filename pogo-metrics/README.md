@@ -60,8 +60,9 @@ friends-list cohort behind the Trainer Model page.)
   location field; if you add a stat to it, keep that split intact and update the `note` string it
   embeds.
 - **`js/catalog-ui.js`** — The "Filter Deck" that renders the catalog on the landing page.
-  Every file is on screen with **nothing nested** — no `<details>` anywhere. Four stat tiles
-  double as filters, three chip rails slice by sensitivity / what-we-do / group, a
+  Every file is on screen with **nothing nested** — no `<details>` anywhere. Three of the four
+  stat tiles double as filters (the file-count tile is a plain stat), three chip rails slice by
+  sensitivity / what-we-do / group, a
   LIST · CARDS · FULL density switch controls how much of each entry shows, and the search box
   indexes the raw Niantic column names and echoes the matching fragment back (typing `latitude`
   surfaces the two files that carry it, quoting `Player_Latitude`). Filter state round-trips
