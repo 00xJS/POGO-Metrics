@@ -1027,6 +1027,9 @@ function renderCost() {
     don't. Leaving level ${anchorHi.level}, the last rung before the cap, costs
     <b>${fmt(anchorHi.xpToNext)} XP</b>; leaving level ${anchorLo.level} costs
     <b>${fmt(anchorLo.xpToNext)}</b>. The ladder steepens the whole way up.
+    <b>Read the bars for shape, not size:</b> the axis is logarithmic, so each gridline is ten
+    times the one below it and a bar only a little taller is worth several times as much. The
+    numbers above carry the real gap; the chart carries the fact that it never stops growing.
     <br><br>
     <b>Which levels appear, though, is this friends list's doing.</b> A level is on the chart when
     someone on the list stands there — the gaps are levels nobody currently occupies, not levels
