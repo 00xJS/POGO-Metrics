@@ -1,0 +1,173 @@
+/* Trainer Model research layer — page-only styles for trainer-model.html.
+   Loaded AFTER css/style.css, and every rule is scoped under .tmodel (the page's
+   <main>), so nothing here can reach the rest of the site. Where a class name
+   also exists in style.css with a different meaning (.chip, .callout,
+   .stat-grid, .chart-wrap, .ctl), the scoped rule below redefines every
+   property the page relies on — including explicit resets of the site
+   version's border/background/cursor — rather than trusting inheritance.
+   Component vocabulary and values come from the pogo-trainer-model dashboard,
+   which was itself built on this site's theme, so the tokens already match. */
+
+/* ── chapters ──────────────────────────────────────────────────────────── */
+.tmodel { padding-bottom: 40px; }
+.tmodel .chapter { padding-top: 56px; }
+.tmodel .sec-head { margin-bottom: 18px; }
+.tmodel .sec-head h2 { font-size: 25px; font-weight: 700; margin: 7px 0 7px; letter-spacing: -.01em; }
+.tmodel .sec-head p { color: var(--ink-dim); max-width: 72ch; font-size: 15px; }
+.tmodel .faint { color: var(--ink-faint); }
+
+/* ── status chips (static, with a live dot — NOT the catalog's filter chips) */
+@keyframes deck-pulse { 0%, 100% { opacity: 1; } 50% { opacity: .35; } }
+.tmodel .chip-row { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 22px; }
+.tmodel .chip {
+  display: inline-flex; align-items: center; gap: 7px;
+  padding: 6px 12px; cursor: default;
+  border: 1px solid var(--line); border-radius: var(--radius-pill);
+  background: var(--bg-raised); color: var(--ink-dim);
+  font-family: var(--mono); font-size: 11px; letter-spacing: .08em;
+  text-transform: uppercase; white-space: nowrap;
+}
+/* the site stylesheet's .chip is a button and glows on hover — these don't */
+.tmodel .chip:hover { color: var(--ink-dim); border-color: var(--line); background: var(--bg-raised); }
+.tmodel .chip .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--ink-faint); flex: none; }
+.tmodel .chip b { color: var(--ink); font-weight: 700; }
+.tmodel .chip.ok, .tmodel .chip.ok:hover { color: var(--live); }
+.tmodel .chip.ok .dot { background: var(--live); box-shadow: 0 0 8px var(--live); animation: deck-pulse 2.4s ease-in-out infinite; }
+.tmodel .chip.warn, .tmodel .chip.warn:hover { color: var(--warn); }
+.tmodel .chip.warn .dot { background: var(--warn); box-shadow: 0 0 8px var(--warn); }
+.tmodel .chip.down, .tmodel .chip.down:hover { color: var(--down); }
+.tmodel .chip.down .dot { background: var(--down); box-shadow: 0 0 8px var(--down); }
+.tmodel .chip.teal, .tmodel .chip.teal:hover { color: var(--accent); }
+.tmodel .chip.teal .dot { background: var(--accent); box-shadow: 0 0 8px var(--accent); }
+
+/* ── panels ────────────────────────────────────────────────────────────── */
+.tmodel .panel {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow);
+  overflow: hidden;
+}
+.tmodel .panel + .panel { margin-top: 16px; }
+.tmodel .panel-chrome {
+  background: var(--card-chrome); border-bottom: 1px solid var(--line);
+  padding: 12px 18px; display: flex; flex-wrap: wrap; gap: 12px;
+  align-items: center; justify-content: space-between;
+}
+.tmodel .panel-title { font-family: var(--mono); font-size: 10.5px; letter-spacing: .08em; text-transform: uppercase; color: var(--ink-faint); }
+.tmodel .panel-body { padding: 18px; }
+
+/* ── stat tiles (a grid of labelled values — NOT the landing page's flex cards) */
+.tmodel .stat-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(158px, 1fr)); gap: 12px; }
+.tmodel .stat {
+  background: var(--bg-raised); border: 1px solid var(--line);
+  border-radius: var(--radius-control); padding: 12px 14px;
+}
+.tmodel .stat .label {
+  font-family: var(--mono); font-size: 10px; letter-spacing: .08em;
+  text-transform: uppercase; color: var(--ink-faint); display: block; margin-bottom: 4px;
+}
+.tmodel .stat .value { font-size: 21px; font-weight: 700; color: var(--ink); font-variant-numeric: tabular-nums; line-height: 1.25; }
+.tmodel .stat .value.teal { color: var(--accent); }
+.tmodel .stat .value.yellow { color: var(--accent2); }
+.tmodel .stat .sub { font-size: 12px; color: var(--ink-dim); margin-top: 2px; }
+
+/* ── controls ──────────────────────────────────────────────────────────── */
+.tmodel .ctl { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.tmodel .ctl-label {
+  font-family: var(--mono); font-size: 10px; letter-spacing: .08em;
+  text-transform: uppercase; color: var(--ink-faint);
+}
+.tmodel .seg { display: inline-flex; background: var(--bg-raised); border: 1px solid var(--line); border-radius: var(--radius-pill); padding: 3px; gap: 2px; }
+.tmodel .seg button {
+  font-family: var(--sans); font-size: 12.5px; font-weight: 600;
+  color: var(--ink-dim); background: none; border: none; cursor: pointer;
+  padding: 5px 13px; border-radius: var(--radius-pill);
+  transition: background .2s, color .2s;
+}
+.tmodel .seg button:hover { color: var(--ink); }
+.tmodel .seg button[aria-pressed="true"] { background: var(--accent); color: var(--btn-ink); }
+
+.tmodel .toggles { display: flex; gap: 14px; flex-wrap: wrap; }
+.tmodel .toggles label { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--ink-dim); cursor: pointer; }
+.tmodel .toggles input[type="checkbox"] { accent-color: var(--accent); width: 15px; height: 15px; cursor: pointer; }
+/* These must stay in lockstep with the chart line colours in js/trainer-model.js:
+   linear → C.down, log-linear → C.teal, median → C.yellow, mean → C.purple. */
+.tmodel .swatch { width: 11px; height: 3px; border-radius: 2px; display: inline-block; }
+.tmodel .swatch--linear { background: var(--down); }
+.tmodel .swatch--log    { background: var(--accent); }
+.tmodel .swatch--median { background: var(--accent2); }
+.tmodel .swatch--mean   { background: var(--purple); }
+
+.tmodel input[type="number"], .tmodel input[type="text"], .tmodel select {
+  font-family: var(--sans); font-size: 14px; color: var(--ink);
+  background: var(--bg-raised); border: 1px solid var(--line);
+  border-radius: var(--radius-control); padding: 8px 10px; width: 100%;
+  font-variant-numeric: tabular-nums;
+}
+.tmodel input:focus, .tmodel select:focus {
+  outline: none; border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(65, 216, 198, .18);
+}
+.tmodel .field label {
+  display: block; font-family: var(--mono); font-size: 10px; letter-spacing: .08em;
+  text-transform: uppercase; color: var(--ink-faint); margin-bottom: 5px;
+}
+.tmodel .form-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; align-items: end; }
+
+/* ── charts (bare canvases inside panels — the site's bordered .chart-wrap
+      card would double-frame them, so reset it to a plain sized box) ────── */
+.tmodel .chart-wrap {
+  position: relative; height: 380px;
+  background: none; border: 0; border-radius: 0; padding: 0;
+}
+.tmodel .chart-wrap.short { height: 260px; }
+.tmodel .readout { display: flex; gap: 8px; flex-wrap: wrap; }
+
+/* ── tables ────────────────────────────────────────────────────────────── */
+.tmodel .table-scroll { overflow-x: auto; }
+.tmodel table { border-collapse: collapse; width: 100%; font-size: 13.5px; }
+.tmodel thead th {
+  font-family: var(--mono); font-size: 10px; letter-spacing: .08em;
+  text-transform: uppercase; color: var(--ink-faint); font-weight: 400;
+  text-align: left; padding: 9px 12px; border-bottom: 1px solid var(--line); white-space: nowrap;
+}
+.tmodel tbody td { padding: 9px 12px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+.tmodel tbody tr:last-child td { border-bottom: none; }
+.tmodel tbody tr:hover { background: var(--bg-raised); }
+.tmodel td.num, .tmodel th.num { text-align: right; font-variant-numeric: tabular-nums; }
+.tmodel tr.highlight td { background: rgba(255, 203, 5, .07); }
+.tmodel tr.highlight td:first-child { box-shadow: inset 3px 0 0 var(--accent2); }
+.tmodel .ratio-bad { color: var(--down); font-weight: 700; }
+.tmodel .ratio-ok { color: var(--live); }
+
+/* ── callouts (left-border note blocks — NOT the site's small stat pills) ── */
+.tmodel .callout {
+  border: 0; border-left: 3px solid var(--accent2);
+  background: rgba(255, 203, 5, .06);
+  padding: 13px 16px; border-radius: 0 var(--radius-control) var(--radius-control) 0;
+  font-size: 14px; color: var(--ink-dim);
+}
+.tmodel .callout b, .tmodel .callout strong { color: var(--ink); font-family: inherit; }
+.tmodel .callout.teal { border-left-color: var(--accent); background: rgba(65, 216, 198, .06); }
+.tmodel .callout.red { border-left-color: var(--down); background: rgba(255, 107, 107, .06); }
+
+/* ── percentile cards (Where you stand) ────────────────────────────────── */
+.tmodel .pct-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 12px; }
+.tmodel .pct {
+  background: var(--bg-raised); border: 1px solid var(--line);
+  border-radius: var(--radius-control); padding: 14px 16px;
+}
+.tmodel .pct .label { font-family: var(--mono); font-size: 10px; letter-spacing: .08em; text-transform: uppercase; color: var(--ink-faint); }
+.tmodel .pct .big { font-size: 30px; font-weight: 800; font-variant-numeric: tabular-nums; line-height: 1.15; margin: 4px 0 2px; }
+.tmodel .pct .note { font-size: 12.5px; color: var(--ink-dim); }
+.tmodel .bar { height: 6px; border-radius: 3px; background: rgba(255, 255, 255, .07); margin-top: 10px; overflow: hidden; }
+.tmodel .bar > span { display: block; height: 100%; border-radius: 3px; background: linear-gradient(90deg, var(--accent), var(--accent2)); }
+
+/* ── responsive ────────────────────────────────────────────────────────── */
+@media (max-width: 820px) {
+  .tmodel .chart-wrap { height: 320px; }
+}
+@media (max-width: 560px) {
+  .tmodel .chart-wrap { height: 290px; }
+}

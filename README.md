@@ -126,17 +126,22 @@ pogo-metrics/          the deployed site (netlify.toml publishes this folder as-
 ├── index.html         landing page + the file-by-file data catalog
 ├── metrics.html       the app: drag in your export, get your chapters
 ├── demo.html          live example, rendered from an anonymized sample
+├── trainer-model.html the Trainer Model: a friends-list cohort vs. the level cap
 ├── js/
 │   ├── app.js         the engine — parsers + every chapter
 │   ├── catalog.js     knowledge base: one entry per file in a Niantic export
 │   ├── catalog-ui.js  the filterable catalog on the landing page
 │   ├── nav.js         shared top navigation
-│   └── pokedex.js     name → National Dex map (gens 1–3)
-├── css/style.css      the whole stylesheet — one file, no preprocessor
+│   ├── pokedex.js     name → National Dex map (gens 1–3)
+│   └── trainer-model.js   the Trainer Model dashboard engine
+├── css/style.css      the site-wide stylesheet — no preprocessor
+├── css/trainer-model.css  page-only styles for the Trainer Model, scoped under .tmodel
 ├── demo/              anonymized sample export
+├── data/trainer-model/    the anonymized cohort JSONs behind the Trainer Model page
 ├── tools/scrub-demo.mjs   regenerates demo/ from a real export
 ├── og-card.html       source for the share image; render it to regenerate og-image.png
-├── og-image.png       1200×630 Open Graph / Twitter card
+│                      (og-card-demo.html / og-card-model.html do the same for their pages)
+├── og-image.png       1200×630 Open Graph / Twitter card (+ -demo and -model variants)
 ├── 404.html           branded not-found page (Netlify serves it automatically)
 ├── sw.js              service worker: installable + fully offline-capable
 ├── site.webmanifest   PWA manifest (+ favicon-32 / apple-touch-icon / icon-192 / icon-512)
@@ -170,6 +175,23 @@ asserted.
 ```sh
 node pogo-metrics/tools/scrub-demo.mjs "<path to an unzipped export>"
 ```
+
+## The Trainer Model layer
+
+Everything above is one player's story, told from their own export. `trainer-model.html` is the
+population view: a real friends-list cohort — 390 trainers in a single snapshot from February
+2025 (when the level cap was 50) and 493 trainers re-recorded in August 2026 (under the new cap
+of 80) — plotted to show what the level cap does to trainer stats. It marks the project's
+original straight-line level model honestly against reality, lets visitors benchmark their own
+numbers against their level band, and keeps the two eras strictly separate, because the XP
+rebalance made levels incomparable across them.
+
+The data ships in `data/trainer-model/` as two JSONs. Handles are replaced with placeholder IDs
+before the data ever enters this repo; every stat is real and unmodified. Per-level statistics
+are withheld wherever fewer than five trainers share a level — at that size a "median" is just
+one person's numbers, so publishing it would be neither an average nor anonymous. Like `/demo/*`,
+the raw files are crawlable but carry an `X-Robots-Tag: noindex` header (see `netlify.toml`) so
+they never surface in search results themselves.
 
 ## Part of the Observation Deck
 

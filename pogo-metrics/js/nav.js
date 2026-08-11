@@ -1,5 +1,5 @@
 /* nav.js — shared top navigation, rendered into <nav id="topnav"> on each page.
- * The page sets data-active="home|guide|app" to highlight the current tab. */
+ * The page sets data-active="home|guide|demo|model|app" to highlight the current tab. */
 (function () {
   const nav = document.getElementById("topnav");
   if (!nav) return;
@@ -8,6 +8,7 @@
     { id: "home", href: "index.html", icon: "🏠", label: "Home" },
     { id: "guide", href: "index.html#datasets", icon: "📚", label: "Your Data Explained" },
     { id: "demo", href: "demo.html", icon: "🎬", label: "Live Example" },
+    { id: "model", href: "trainer-model.html", icon: "📈", label: "Trainer Model" },
     { id: "app", href: "metrics.html", icon: "📊", label: "Visualize my journey", cta: true },
   ];
   nav.innerHTML = `

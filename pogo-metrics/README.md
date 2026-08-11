@@ -3,8 +3,9 @@
 A privacy-first, **bring-your-own-data** web app: drop your official Niantic Pokémon GO
 data export into the browser and get a beautiful, digestible summary & dashboard
 of your trainer journey. Nothing is uploaded — every file is parsed locally with JavaScript,
-and the site ships **none of your data**. (The only dataset in the repo is `demo/`, a fully
-anonymized sample used by the Live Example page.)
+and the site ships **none of your data**. (The only datasets in the repo are `demo/`, a fully
+anonymized sample used by the Live Example page, and `data/trainer-model/`, the anonymized
+friends-list cohort behind the Trainer Model page.)
 
 ## Pages
 
@@ -19,6 +20,13 @@ anonymized sample used by the Live Example page.)
 - **`demo.html`** — The **Live Example**: a permanent reference build that auto-runs the
   parser over the bundled anonymized sample export, so visitors can preview every chart
   before requesting their own data. (`metrics.html?demo=1` still works as a shortcut.)
+- **`trainer-model.html`** — The **Trainer Model**: the research layer. A real friends-list
+  cohort (390 trainers, February 2025, cap 50; 493 trainers, August 2026, cap 80) plotted as a
+  population — what the level cap does to trainer numbers, why the project's original
+  straight-line model fails at the level-50 wall, and a benchmark for where your own stats
+  land. Data ships in `data/trainer-model/` with placeholder handles; per-level stats are
+  withheld below five trainers per level. The two eras are never mixed — the XP rebalance
+  made levels incomparable across them.
 
 ## Code
 
@@ -60,7 +68,16 @@ anonymized sample used by the Live Example page.)
   through the URL hash — no storage, no requests.
 - **`js/pokedex.js`** — Name → National Dex map for gens 1–3, recovering region-of-origin
   info for older Pokémon that exports list by plain display name.
-- **`js/nav.js`** — Shared top nav (`data-active="home|guide|demo|app"`).
+- **`js/trainer-model.js`** — The Trainer Model dashboard engine: loads the two cohort JSONs
+  from `data/trainer-model/`, computes the fits (OLS, log-linear, median- and mean-per-level)
+  and percentile ranks client-side, and renders the eight chapters — including the every-trainer
+  scatter of the cap-80 era, a single "where you stand" benchmark with an era toggle (2026
+  cap-80 cohort by default, banded ≤55 / 56–65 / 66–75 / 76–79 / 80; 2025 cohort one tap away),
+  the milestone ladder table, and a full-screen tappable "ladder story" that reuses the site's
+  story-mode styles. The story never converts totals into
+  time-to-level — the data has no timestamps, and it says so. Its page-only styles live in
+  `css/trainer-model.css`, scoped under `.tmodel` so they can't leak into the rest of the site.
+- **`js/nav.js`** — Shared top nav (`data-active="home|guide|demo|model|app"`).
 
 The world chapter prefers a 3D globe (vendored globe.gl); when WebGL isn't available it
 falls back to a flat Leaflet heatmap with the same data.

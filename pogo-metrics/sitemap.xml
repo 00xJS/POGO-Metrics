@@ -2,5 +2,6 @@
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
   <url><loc>https://pogo-metrics.netlify.app/</loc></url>
   <url><loc>https://pogo-metrics.netlify.app/demo.html</loc></url>
+  <url><loc>https://pogo-metrics.netlify.app/trainer-model.html</loc></url>
   <url><loc>https://pogo-metrics.netlify.app/metrics.html</loc></url>
 </urlset>
