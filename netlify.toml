@@ -46,3 +46,27 @@
   [headers.values]
     Cache-Control = "public, max-age=3600"
     X-Robots-Tag = "noindex"
+
+# Everything else that lives in the publish folder without being part of the
+# site: the share-card render sources, the repo README, the local dev server and
+# the build tools. All are deliberately readable — this project invites people to
+# check its work — they just shouldn't turn up as search results.
+[[headers]]
+  for = "/og-card*.html"
+  [headers.values]
+    X-Robots-Tag = "noindex"
+
+[[headers]]
+  for = "/tools/*"
+  [headers.values]
+    X-Robots-Tag = "noindex"
+
+[[headers]]
+  for = "/README.md"
+  [headers.values]
+    X-Robots-Tag = "noindex"
+
+[[headers]]
+  for = "/static-server.mjs"
+  [headers.values]
+    X-Robots-Tag = "noindex"

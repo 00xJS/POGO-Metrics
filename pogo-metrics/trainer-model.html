@@ -28,8 +28,8 @@
   <link rel="preload" href="vendor/fonts/c8e7a734b1.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="preload" href="vendor/fonts/1cd702cd25.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="stylesheet" href="vendor/fonts/fonts.css" />
-  <link rel="stylesheet" href="css/style.css?v=20260811b" />
-  <link rel="stylesheet" href="css/trainer-model.css?v=20260811b" />
+  <link rel="stylesheet" href="css/style.css?v=20260811c" />
+  <link rel="stylesheet" href="css/trainer-model.css?v=20260811c" />
 </head>
 <body>
   <nav id="topnav" data-active="model"></nav>
@@ -96,7 +96,7 @@
           <span class="chip"><span class="dot"></span>n = <b id="hist-n">—</b></span>
         </div>
         <div class="panel-body">
-          <div class="chart-wrap short"><canvas id="chart-levels"></canvas></div>
+          <div class="chart-wrap short"><canvas id="chart-levels" role="img" aria-label="Bar chart: how many trainers sit at each level in the 2025 cohort"></canvas></div>
           <div class="callout" style="margin-top:16px">
             The shape here drives everything else: <b>the sample is top-heavy.</b> Nearly
             one trainer in five sits at level 50, and only a handful are below level 33.
@@ -145,7 +145,7 @@
         <div class="panel-chrome">
           <div class="ctl">
             <span class="ctl-label">Metric</span>
-            <div class="seg" id="seg-metric" role="group" aria-label="Choose metric">
+            <div class="seg" id="seg-metric" role="group" aria-label="Choose metric for the explorer chart">
               <button data-metric="caught" aria-pressed="true">Pokémon caught</button>
               <button data-metric="battles" aria-pressed="false">Battles won</button>
               <button data-metric="distance" aria-pressed="false">Distance walked</button>
@@ -168,7 +168,7 @@
             <label><input type="checkbox" id="fit-mean"><span class="swatch swatch--mean"></span> Mean per level</label>
             <label><input type="checkbox" id="scale-log"> Log scale (y-axis)</label>
           </div>
-          <div class="chart-wrap"><canvas id="chart-scatter"></canvas></div>
+          <div class="chart-wrap"><canvas id="chart-scatter" role="img" aria-label="Scatter chart: each 2025 trainer's level against the chosen metric, with fitted models"></canvas></div>
           <div class="readout" id="explorer-readout" style="margin-top:16px"></div>
           <div class="callout red" id="explorer-note" style="margin-top:14px"></div>
         </div>
@@ -193,7 +193,7 @@
           <span class="chip teal"><span class="dot"></span><b id="wall-n">—</b> trainers at the cap</span>
         </div>
         <div class="panel-body">
-          <div class="chart-wrap short"><canvas id="chart-wall"></canvas></div>
+          <div class="chart-wrap short"><canvas id="chart-wall" role="img" aria-label="Bar chart: Pokémon caught by each trainer at the level-50 cap"></canvas></div>
           <div class="table-scroll" style="margin-top:18px"><table id="tbl-wall"></table></div>
           <div class="callout" style="margin-top:16px" id="wall-note"></div>
         </div>
@@ -229,7 +229,7 @@
         <div class="panel-chrome">
           <span class="panel-title">The original predictions vs. reality</span>
           <div class="ctl">
-            <div class="seg" id="seg-report" role="group" aria-label="Choose metric">
+            <div class="seg" id="seg-report" role="group" aria-label="Choose metric for the prediction chart">
               <button data-metric="caught" aria-pressed="true">Caught</button>
               <button data-metric="battles" aria-pressed="false">Battles</button>
               <button data-metric="distance" aria-pressed="false">Distance</button>
@@ -237,7 +237,7 @@
           </div>
         </div>
         <div class="panel-body">
-          <div class="chart-wrap short"><canvas id="chart-report"></canvas></div>
+          <div class="chart-wrap short"><canvas id="chart-report" role="img" aria-label="Line chart: the original model's predictions against the real median at each level"></canvas></div>
           <div class="table-scroll" style="margin-top:18px"><table id="tbl-report"></table></div>
           <div class="callout red" style="margin-top:16px" id="report-note"></div>
         </div>
@@ -263,14 +263,15 @@
         </div>
         <div class="panel-body">
           <div class="chip-row" id="playstyle-key" style="margin:0 0 14px"></div>
-          <div class="chart-wrap"><canvas id="chart-playstyle"></canvas></div>
+          <div class="chart-wrap"><canvas id="chart-playstyle" role="img" aria-label="Scatter chart: catches per kilometre against battles per thousand catches"></canvas></div>
           <div class="stat-grid" id="playstyle-stats" style="margin-top:18px"></div>
           <div class="callout" style="margin-top:16px">
             <b>Reading this:</b> far right = catches a lot per kilometre walked (lures,
             incense, dense city play). Far top = battles heavily relative to catching
             (raiders and PvP players). Bottom left = walkers who cover ground without
-            farming it. A third axis — catches per PokéStop — may join in a future
-            snapshot.
+            farming it. There is no third axis here for a plain reason: a trainer's
+            public profile shows these three numbers and no more, so anything else
+            would have to come from somewhere this project doesn't look.
           </div>
         </div>
       </div>
@@ -298,7 +299,7 @@
           <div class="toggles" style="margin-bottom:14px">
             <label><input type="checkbox" id="era2-scale-log"> Log scale (y-axis)</label>
           </div>
-          <div class="chart-wrap"><canvas id="chart-era2-scatter"></canvas></div>
+          <div class="chart-wrap"><canvas id="chart-era2-scatter" role="img" aria-label="Scatter chart: every recorded cap-80 trainer's level against the chosen metric"></canvas></div>
           <div class="callout" style="margin-top:16px">
             <b>Every recorded trainer is on this chart</b> — <span id="led-n2">493</span> of the
             <span id="led-total2">497</span> friends on the list at the latest snapshot;
@@ -315,7 +316,7 @@
         <div class="panel-chrome">
           <div class="ctl">
             <span class="ctl-label">Metric</span>
-            <div class="seg" id="seg-era2" role="group" aria-label="Choose metric">
+            <div class="seg" id="seg-era2" role="group" aria-label="Choose metric for the cap-80 charts">
               <button data-metric="caught" aria-pressed="true">Pokémon caught</button>
               <button data-metric="battles" aria-pressed="false">Battles won</button>
               <button data-metric="distance" aria-pressed="false">Distance walked</button>
@@ -325,7 +326,7 @@
         </div>
         <div class="panel-body">
           <div class="chip-row" id="era2-chips" style="margin:0 0 14px"></div>
-          <div class="chart-wrap"><canvas id="chart-era2"></canvas></div>
+          <div class="chart-wrap"><canvas id="chart-era2" role="img" aria-label="Line chart: median and mean of the chosen metric at each cap-80 level, with trainer counts"></canvas></div>
           <div class="callout" style="margin-top:16px">
             <b>Reading this:</b> the solid line is the median trainer at each level; the
             dashed line is the <b>mean</b> — the same levels averaged, which rides higher
@@ -344,7 +345,7 @@
           <span class="chip"><span class="dot"></span>same friends list, two eras</span>
         </div>
         <div class="panel-body">
-          <div class="chart-wrap"><canvas id="chart-compare"></canvas></div>
+          <div class="chart-wrap"><canvas id="chart-compare" role="img" aria-label="Line chart: the median level curve of both eras on one axis"></canvas></div>
           <div class="callout" style="margin-top:16px">
             <b>Reading this:</b> both lines are the median trainer at each level — teal for the
             2025 game (cap 50), yellow for the rebalanced game (cap 80). The rebalance re-mapped
@@ -414,13 +415,25 @@
         <div class="panel-body">
           <div class="table-scroll"><table id="tbl-ladder"></table></div>
           <div class="callout" style="margin-top:16px">
-            <b>How long does the climb take?</b> This data can't say — totals are lifetime
-            and carry no timestamps, so turning them into months would be a guess dressed as
-            a fact. What it can do is weigh the climb: the rows above are what reaching each
+            <b>How long does the climb take?</b> Lifetime totals carry no clock, so this
+            table can't say — it weighs the climb instead: each row is what reaching that
             rung has actually involved for the trainers who got there. The mean column runs
             above the median wherever a few heavy grinders drag the average up — that gap is
-            why this page leads with medians.
+            why this page leads with medians.<span id="pace-xref" hidden> For the one thing here
+            that <em>does</em> have a clock on it, see the pace panel below.</span>
           </div>
+        </div>
+      </div>
+
+      <div class="panel" id="pace-panel" hidden>
+        <div class="panel-chrome">
+          <span class="panel-title">The only clock in the data</span>
+          <span class="chip"><span class="dot"></span><b id="pace-window">—</b></span>
+        </div>
+        <div class="panel-body">
+          <div class="stat-grid" id="pace-stats"></div>
+          <div class="chart-wrap short" style="margin-top:18px"><canvas id="chart-pace" role="img" aria-label="Bar chart: median XP earned per day by level band during the observed window"></canvas></div>
+          <div class="callout red" style="margin-top:16px" id="pace-note"></div>
         </div>
       </div>
     </section>
@@ -448,10 +461,10 @@
     </p>
   </footer>
 
-  <script defer src="js/nav.js?v=20260811b"></script>
+  <script defer src="js/nav.js?v=20260811c"></script>
   <!-- Chart.js loads up front here (unlike metrics.html's on-demand injection):
        this page is nothing but charts, and the file is already precached. -->
   <script defer src="vendor/chart.umd.min.js"></script>
-  <script defer src="js/trainer-model.js?v=20260811b"></script>
+  <script defer src="js/trainer-model.js?v=20260811c"></script>
 </body>
 </html>

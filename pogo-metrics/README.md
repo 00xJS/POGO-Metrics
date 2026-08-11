@@ -21,8 +21,8 @@ friends-list cohort behind the Trainer Model page.)
   parser over the bundled anonymized sample export, so visitors can preview every chart
   before requesting their own data. (`metrics.html?demo=1` still works as a shortcut.)
 - **`trainer-model.html`** — The **Trainer Model**: the research layer. A real friends-list
-  cohort (390 trainers, February 2025, cap 50; 493 trainers, August 2026, cap 80) plotted as a
-  population — what the level cap does to trainer numbers, why the project's original
+  cohort (390 trainers in a single February 2025 snapshot, cap 50; 493 trainers recorded across
+  three sessions in August 2026, cap 80) plotted as a population — what the level cap does to trainer numbers, why the project's original
   straight-line model fails at the level-50 wall, and a benchmark for where your own stats
   land. Data ships in `data/trainer-model/` with placeholder handles; per-level stats are
   withheld below five trainers per level. The two eras are never mixed — the XP rebalance
