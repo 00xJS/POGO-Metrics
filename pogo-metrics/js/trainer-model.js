@@ -704,7 +704,7 @@ function renderEra2() {
     `<span class="chip ok"><span class="dot"></span><b>${fmt(ERA2.meta.n)}</b> trainers</span>`,
     `<span class="chip"><span class="dot"></span>levels <b>${labels[0]}–${labels.at(-1)}</b></span>`,
     capped ? `<span class="chip teal"><span class="dot"></span><b>${capped.n}</b> at the level-80 cap</span>` : "",
-    ERA2.meta.captures.length > 1 ? `<span class="chip"><span class="dot"></span><b>${ERA2.meta.captures.length}</b> snapshots</span>` : "",
+    (ERA2.meta.captures?.length ?? 0) > 1 ? `<span class="chip"><span class="dot"></span><b>${ERA2.meta.captures.length}</b> snapshots</span>` : "",
     // What's missing is stated once, in the scatter panel's callout, from
     // meta.nFriendsTotal / nNotRecorded (see renderLedger). Repeating it as a
     // chip here read as a second, competing ledger.
@@ -824,7 +824,9 @@ function renderEra2Scatter() {
         },
       },
       scales: {
-        x: { type: "linear", min: 10, max: 82,
+        // Derived, not literal: the callout promises every trainer is plotted,
+        // so the axis has to follow the data rather than a number typed once.
+        x: { type: "linear", min: Math.min(10, ERA2.perLevel[0].level), max: ERA2.meta.levelCap + 2,
              title: { display: true, text: "Trainer level", color: C.faint, font: { size: 11 } },
              grid: { color: C.grid }, ticks: { stepSize: 10 } },
         y: { ...axis(M.label + (M.unit ? ` (${M.unit.trim()})` : ""), logScale), beginAtZero: !logScale },
@@ -873,7 +875,7 @@ function renderCompare() {
         } },
       },
       scales: {
-        x: { type: "linear", min: 0, max: 82,
+        x: { type: "linear", min: 0, max: ERA2.meta.levelCap + 2,
              title: { display: true, text: "Trainer level (meaning differs between eras — that's the point)", color: C.faint, font: { size: 11 } },
              grid: { color: C.grid }, ticks: { stepSize: 10 } },
         y: { ...axis(`Median ${M.lower}` + (M.unit ? ` (${M.unit.trim()})` : "")), beginAtZero: true },
@@ -941,6 +943,91 @@ function renderLadder() {
     </tbody>`;
 }
 
+/* ── the pace panel: the only place a clock touches this data ──────────────
+   Every other number on this page is a lifetime total. A trainer recorded in
+   two rounds gives one measured interval, and that interval is worth exactly
+   what it is: one short window, of one cohort, during whatever was running
+   that week. It is reported as what happened, never extrapolated into a
+   time-to-80 — 8 level-ups across 213 trainers cannot carry that weight. */
+function renderPace() {
+  const p = ERA2?.pace;
+  if (!p?.nObserved) return;
+  $("pace-panel").hidden = false;
+  $("pace-window").textContent = `${fmt(p.nObserved)} seen twice · ~${p.meanWindowDays} days`;
+
+  const pct = (100 * p.nLeveled) / p.nObserved;
+  const withData = p.byBand.filter((b) => b.xpPerDay.median !== null);
+  const busiest = withData.length ? withData.reduce((m, b) => (b.xpPerDay.median > m.xpPerDay.median ? b : m)) : null;
+
+  $("pace-stats").innerHTML = [
+    ["Recorded twice", fmt(p.nObserved), `over about ${p.meanWindowDays} days`, "teal"],
+    ["Gained a level", fmt(p.nLeveled), `${pct.toFixed(1)}% of them, in that whole window`, ""],
+    ["Levels gained", fmt(p.levelsGained), "across every trainer, combined", ""],
+    busiest ? ["Busiest band", "level " + busiest.band, `${fmtCompact(busiest.xpPerDay.median)} XP a day, typical`, "yellow"] : null,
+  ].filter(Boolean).map(([label, value, sub, cls]) =>
+    `<div class="stat"><span class="label">${label}</span><div class="value ${cls}">${value}</div><div class="sub">${sub}</div></div>`
+  ).join("");
+
+  // A band with no XP readings at all is left off the axis rather than drawn as
+  // an empty slot: a measured zero and an absent measurement look identical as
+  // a missing bar, and only one of them is a finding. (At the cap there is no
+  // next level to earn toward, so no XP reading exists there.)
+  const plotted = p.byBand.filter((b) => b.xpPerDay.n > 0);
+  const unmeasured = p.byBand.filter((b) => b.xpPerDay.n === 0);
+  mount("chart-pace", {
+    type: "bar",
+    data: {
+      labels: plotted.map((b) => b.band),
+      datasets: [{
+        label: "Median XP per day",
+        data: plotted.map((b) => b.xpPerDay.median),
+        backgroundColor: plotted.map((b) => (b === busiest ? C.yellow : C.teal)),
+        borderRadius: 3,
+      }],
+    },
+    options: {
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false },
+        title: { display: true, text: "How much XP each band earned per day, during the window", color: C.faint, font: { size: 11 } },
+        tooltip: { callbacks: {
+          title: (i) => `Level ${i[0].label}`,
+          label: (i) => {
+            const b = plotted[i.dataIndex];
+            return [`${fmt(i.parsed.y)} XP/day (median)`,
+                    `middle half: ${fmtCompact(b.xpPerDay.p25)}–${fmtCompact(b.xpPerDay.p75)}`,
+                    `${b.n} trainer${b.n === 1 ? "" : "s"} in band`];
+          },
+        } },
+      },
+      scales: {
+        x: { title: { display: true, text: "Trainer level at the start of the window", color: C.faint, font: { size: 11 } }, grid: { display: false } },
+        y: { ...axis("XP per day"), beginAtZero: true },
+      },
+    },
+  });
+
+  const capBand = p.byBand.find((b) => b.lo === ERA2.meta.levelCap);
+  $("pace-note").innerHTML = `
+    <b>This is why the page won't tell you how long it takes to reach ${ERA2.meta.levelCap}.</b>
+    Across about ${p.meanWindowDays} days, <b>${fmt(p.nObserved)} of these trainers gave a usable
+    second reading — and ${p.nLeveled === 0 ? "none" : "only <b>" + fmt(p.nLeveled) + "</b>"} of them
+    gained a single level</b>. Near the top the ladder barely moves: a week of ordinary play is, for
+    most people at this end, no levels at all.
+    ${capBand ? `${fmt(capBand.n)} of them were already at ${ERA2.meta.levelCap}, with nowhere left to climb.` : ""}
+    ${p.nExcludedForCorrection ? `(A further ${fmt(p.nExcludedForCorrection)} were set aside: their level
+      changed between rounds because the record was corrected, not because they played.)` : ""}
+    And read the bars as <em>engagement, not effort</em> — the bands earning the most per day are the
+    ones still pushing, while quieter accounts sit near zero, so this measures how much these
+    players played, not what a level costs.
+    ${unmeasured.length ? `Level ${unmeasured.map((b) => b.band).join(" and ")} ${unmeasured.length === 1 ? "is" : "are"}
+      absent from the chart rather than empty on it: at the cap there is no next level to earn
+      toward, so no XP figure exists to plot.` : ""}
+    One window, one cohort, whatever happened to be running that week. It is a real measurement,
+    and it is not a forecast.`;
+  $("pace-xref").hidden = false;
+}
+
 // A full-screen, tappable recap in the site's story-mode dress (the .story-*
 // classes come from css/style.css). Every number is computed from the loaded
 // data at open time — nothing on the slides is hardcoded. The one thing the
@@ -970,8 +1057,12 @@ function storySlides() {
   if (cap) slides.push({ kicker: `Level ${ERA2.meta.levelCap} · the cap`, big: `${fmtCompact(cap.caught.median)} caught`,
     label: `The median trainer at the cap: ${fmt(cap.battles.median)} battles won, ${fmt(cap.distance.median, 1)} km walked — across ${cap.n} trainers. On average (the mean) it's ${fmt(cap.caught.mean)} catches; the grinders pull it up.` });
 
-  if (cap) slides.push({ kicker: "How long does that take?", big: "Time isn't<br>in the data.",
-    label: `Totals are lifetime and carry no timestamps, so this page won't guess in months. But it can weigh the climb: the median level-${ERA2.meta.levelCap} has walked ${fmt(cap.distance.median, 1)} km — ${Math.round((100 * cap.distance.median) / EARTH_KM)}% of the way around the Earth, on foot.` });
+  const p = ERA2.pace;
+  if (p?.nObserved) slides.push({ kicker: "How long does that take?", big: `${p.nLeveled} of ${fmt(p.nObserved)}`,
+    label: `That's how many trainers gained a level while we watched — ${fmt(p.nObserved)} of them, recorded twice about ${p.meanWindowDays} days apart. Near the top, a week of ordinary play moves the number next to your name by nothing at all.` });
+
+  if (cap) slides.push({ kicker: "So the honest answer is", big: "A very<br>long time.",
+    label: `Lifetime totals carry no clock, so this page won't guess in months. What it can do is weigh the climb: the median level-${ERA2.meta.levelCap} has walked ${fmt(cap.distance.median, 1)} km — ${Math.round((100 * cap.distance.median) / EARTH_KM)}% of the way around the Earth, on foot.` });
 
   slides.push({ kicker: "Two eras, one friends list", big: "50 → 80",
     label: "The rebalance re-mapped everyone onto a longer ladder, so a level now means less lifetime play than it used to. The chapters above hold the full picture — every trainer, every fit, every caveat.",
@@ -988,15 +1079,27 @@ function openStory() {
   const ov = document.createElement("div");
   ov.className = "story-ov";
   ov.setAttribute("role", "dialog");
+  ov.setAttribute("aria-modal", "true");
   ov.setAttribute("aria-label", "The ladder story");
+  ov.tabIndex = -1;                    // focusable, so the dialog can hold focus
   document.body.appendChild(ov);
   document.body.style.overflow = "hidden";
+  // A fixed opaque overlay isn't a modal on its own — without this, Tab walks
+  // straight out to the nav and footer behind the story. Same mechanism the
+  // site's own story mode uses (js/app.js).
+  const inerted = [...document.body.children].filter((el) => el !== ov && !el.inert);
+  inerted.forEach((el) => (el.inert = true));
+  // Whatever opened this gets focus back when it closes — otherwise a keyboard
+  // user lands at the top of the document with no idea where they were.
+  const opener = document.activeElement;
 
   const close = () => {
     document.removeEventListener("keydown", onKey);
     ov.remove();
+    inerted.forEach((el) => (el.inert = false));
     document.body.style.overflow = "";
     STORY = null;
+    if (opener && document.contains(opener)) opener.focus();
   };
 
   const render = () => {
@@ -1020,6 +1123,9 @@ function openStory() {
     if (ghost) ghost.addEventListener("click", (e) => { e.stopPropagation(); close(); });
     const cta = ov.querySelector(".story-cta .btn-teal");
     if (cta) cta.addEventListener("click", () => close());
+    // Each slide replaces the dialog's contents, which destroys whatever held
+    // focus; put it back on the dialog itself so Tab still starts from inside.
+    if (!ov.contains(document.activeElement)) ov.focus();
   };
 
   const step = (dir) => {
@@ -1033,9 +1139,13 @@ function openStory() {
     step(1);
   });
   const onKey = (e) => {
-    if (e.key === "Escape") close();
-    else if (e.key === "ArrowLeft") step(-1);
-    else if (e.key === "ArrowRight" || e.key === " " || e.key === "Enter") step(1);
+    if (e.key === "Escape") { close(); return; }
+    // Enter/Space belong to whichever control has focus; only advance the story
+    // when nothing in the dialog is focused, or the dialog itself is.
+    const onControl = document.activeElement !== ov && ov.contains(document.activeElement);
+    if (e.key === "ArrowLeft") step(-1);
+    else if (e.key === "ArrowRight") step(1);
+    else if ((e.key === " " || e.key === "Enter") && !onControl) { e.preventDefault(); step(1); }
   };
   document.addEventListener("keydown", onKey);
 
@@ -1055,22 +1165,32 @@ async function initEra2() {
   // position, so unhiding keeps the 01–08 sequence intact — appending here
   // would put 06 after 07 in the row.
   for (const chip of document.querySelectorAll("#chapter-nav [data-era2]")) chip.hidden = false;
-  // Fill in the 2026 column of the era-summary table, and state the ledger.
-  renderHero();
-  renderLedger();
   // The benchmark defaults to today's game now that its cohort exists.
   RANK.era = "era2";
   $("rank-era-ctl").hidden = false;
   syncRankForm({ resetValues: true });
+
+  // Wire the controls BEFORE drawing anything. These chapters are already
+  // visible by now, so a render that throws on an unexpected artifact would
+  // otherwise leave the reader with dead toggles and no story button —
+  // failing loudly in the console but silently on the page.
+  $("btn-story").addEventListener("click", openStory);
+  $("era2-scale-log").addEventListener("change", renderEra2Scatter);
+  // writeBack on an era flip: the caps differ, so a level valid in one cohort
+  // can be out of range in the other. Leaving the old number in the field while
+  // ranking against the clamped one shows two different levels at once.
+  segment("seg-rank-era", "era", RANK, () => { syncRankForm(); renderRank(true); });
+  segment("seg-era2", "metric", ERA2_STATE, () => { renderEra2Scatter(); renderEra2(); renderCompare(); });
+
+  // Fill in the 2026 column of the era-summary table, and state the ledger.
+  renderHero();
+  renderLedger();
   renderRank();
   renderEra2Scatter();
   renderEra2();
   renderCompare();
   renderLadder();
-  $("btn-story").addEventListener("click", openStory);
-  $("era2-scale-log").addEventListener("change", renderEra2Scatter);
-  segment("seg-rank-era", "era", RANK, () => { syncRankForm(); renderRank(); });
-  segment("seg-era2", "metric", ERA2_STATE, () => { renderEra2Scatter(); renderEra2(); renderCompare(); });
+  renderPace();
 }
 
 /* ═══════════════════════ wiring ═══════════════════════ */
@@ -1106,7 +1226,10 @@ async function init() {
   renderR2Table();
   renderReport();
   renderPlaystyle();
-  initEra2();
+  // Era-2 is optional and self-activating; a failure there must never take the
+  // 2025 chapters down with it, and must not surface only as an unhandled
+  // rejection. Nothing is awaited here — the era-1 page is already complete.
+  initEra2().catch((err) => console.error("era-2 chapters could not be built:", err));
 
   segment("seg-metric", "metric", EXPLORER, renderExplorer);
   segment("seg-outlier", "mode", EXPLORER, renderExplorer);

@@ -790,9 +790,13 @@ footer .deck-line .sep { margin: 0 9px; opacity: .55; }
 /* ═══════════════ 2026-08 data-viz layer: story mode, calendar, records, time-lapse ═══════════════ */
 
 /* story mode — full-screen tappable recap */
+/* overflow-y + safe centering: a slide taller than the viewport (a phone turned
+   landscape mid-story) otherwise overflows in both directions with no way to
+   reach it, putting the closing slide's buttons permanently below the fold. */
 .story-ov {
   position: fixed; inset: 0; z-index: 2000; background: var(--bg);
-  display: flex; align-items: center; justify-content: center;
+  display: flex; align-items: safe center; justify-content: center;
+  overflow-y: auto; padding: 56px 0;
   cursor: pointer; user-select: none;
 }
 .story-prog {

@@ -1,8 +1,11 @@
 User-agent: *
 Allow: /
-Disallow: /og-card.html
-Disallow: /og-card-demo.html
-Disallow: /og-card-model.html
+
+# The og-card render sources are NOT disallowed here, for the same reason /demo/
+# isn't (below): each one already declares <meta name="robots" content="noindex">,
+# and a Disallow would stop a crawler reading the very tag that excludes it. They
+# are kept out of results by X-Robots-Tag headers in netlify.toml, which also
+# cover the dev files that ship inside the publish folder.
 
 # /demo/ is deliberately NOT disallowed. Blocking it here stopped crawlers
 # fetching the sample export that demo.html builds itself from, so the indexed

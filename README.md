@@ -183,11 +183,16 @@ node pogo-metrics/tools/scrub-demo.mjs "<path to an unzipped export>"
 
 Everything above is one player's story, told from their own export. `trainer-model.html` is the
 population view: a real friends-list cohort — 390 trainers in a single snapshot from February
-2025 (when the level cap was 50) and 493 trainers re-recorded in August 2026 (under the new cap
-of 80) — plotted to show what the level cap does to trainer stats. It marks the project's
+2025 (when the level cap was 50) and 493 trainers re-recorded across three sessions in August
+2026 (under the new cap of 80) — plotted to show what the level cap does to trainer stats. It marks the project's
 original straight-line level model honestly against reality, lets visitors benchmark their own
 numbers against their level band, and keeps the two eras strictly separate, because the XP
 rebalance made levels incomparable across them.
+
+Because that second era was recorded more than once, it is also the only place a clock touches
+this data: trainers seen in two sessions give a measured interval, published as an aggregate
+`pace` block. It is reported as what happened in one short window — 8 of 213 re-recorded
+trainers gained a level — and deliberately never extrapolated into a time-to-80.
 
 The data ships in `data/trainer-model/` as two JSONs. Handles are replaced with placeholder IDs
 before the data ever enters this repo; every stat is real and unmodified. Per-level statistics
