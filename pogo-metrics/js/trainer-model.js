@@ -32,6 +32,13 @@ const shadeForLevel = (lv) => LEVEL_BANDS.find((b) => lv >= b.lo).color;
 
 const $ = (id) => document.getElementById(id);
 
+/* Everything on this page is built with innerHTML, so any string that came from
+   a data file goes through here first. The task text is the only free prose in
+   the artifact; the rest is numbers, but the rule is cheaper to keep than to
+   remember the exception to. */
+const esc = (s) => String(s).replace(/[&<>"']/g, (c) =>
+  ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+
 /* One stat tile, from [label, value, sub, cls] rows. Three chapters render the
    same tile; keeping one template means they can't drift apart. */
 const statTiles = (rows) => rows.filter(Boolean).map(([label, value, sub, cls = ""]) =>
@@ -992,30 +999,41 @@ function renderCost() {
   for (let lv = lo; lv <= hi; lv++) labels.push(lv);
   const byLevel = new Map(cost.map((c) => [c.level, c]));
   mount("chart-cost", {
-    type: "bar",
     data: {
       labels,
       datasets: [{
+        type: "bar",
         label: "XP for the next level",
         data: labels.map((lv) => byLevel.get(lv)?.xpToNext ?? null),
         backgroundColor: labels.map((lv) => (lv >= 71 ? C.yellow : C.yellow + "66")),
         borderRadius: 2,
+        order: 2,
+      }, {
+        // The whole climb behind each rung, on the same axis: one bar is what
+        // the next level costs, the line is everything paid to stand there.
+        type: "line",
+        label: "Total XP to reach that level",
+        data: labels.map((lv) => byLevel.get(lv)?.cumulativeXp ?? null),
+        borderColor: C.teal, backgroundColor: C.teal,
+        borderWidth: 2, pointRadius: 0, tension: .25, order: 1,
       }],
     },
     options: {
       maintainAspectRatio: false,
+      interaction: { mode: "index", intersect: false },
       plugins: {
-        legend: { display: false },
-        title: { display: true, text: "XP to reach the next level — brightest bars are the endgame, 71 and up (log scale)", color: C.faint, font: { size: 11 } },
+        legend: { position: "top", align: "start" },
+        title: { display: true, text: "Cost of the next rung, and the whole climb behind it — brightest bars are the endgame (log scale)", color: C.faint, font: { size: 11 } },
         tooltip: { callbacks: {
           title: (i) => `Level ${i[0].label} → ${Number(i[0].label) + 1}`,
-          label: (i) => {
-            const c = byLevel.get(Number(i.label));
-            const prov = !c ? "" : c.source === "confirmed"
+          label: (i) => `${i.dataset.label}: ${fmt(i.parsed.y)} XP`,
+          afterBody: (i) => {
+            const c = byLevel.get(Number(i[0].label));
+            if (!c) return "";
+            return c.source === "confirmed"
               ? `published, and matched on ${c.readings} real profile${c.readings === 1 ? "" : "s"}`
               : c.source === "published" ? "published figure — nobody here holds this level"
               : "read from profiles";
-            return [`${fmt(i.parsed.y)} XP`, prov];
           },
         } },
       },
@@ -1045,8 +1063,61 @@ function renderCost() {
       rather than quietly resolved; there are currently none.` : ""}
     ${meta.tasksRequiredFromLevel ? `<br><br><b>Above level ${meta.tasksRequiredFromLevel}, XP is not
       the whole price.</b> The last stretch also gates on Level-Up Research tasks, so those final
-      rungs cost the numbers above <em>and</em> a set of things you have to go and do. This chart
-      shows the XP half.` : ""}`;
+      rungs cost the numbers above <em>and</em> a set of things you have to go and do — listed in
+      the panel below. This chart shows the XP half.` : ""}`;
+
+  renderLegacyLadder();
+  renderTasks();
+}
+
+/* The rebalance, in the only currency that crosses both eras. Levels can't be
+   compared between them — that is chapter 06's whole subject — but XP can: the
+   same rung had a price then and has one now. */
+function renderLegacyLadder() {
+  const L = ERA2?.legacyLadder;
+  if (!L?.compare?.length || !L.capThen || !L.capNow) return;
+  const at50 = L.compare.find((c) => c.level === 50);
+  const capRatio = L.capNow / L.capThen;
+  $("legacy-note").hidden = false;
+  $("legacy-note").innerHTML = `
+    <b>What the rebalance actually did.</b> Chapters 01–05 describe trainers climbing a different
+    ladder, and comparing their levels to today's is meaningless — but the XP behind those levels
+    is comparable, and it moved enormously.
+    ${at50 ? `Reaching <b>level ${at50.level}</b> used to take <b>${fmt(at50.then)} XP</b>; today it
+      takes <b>${fmt(at50.now)}</b>, about <b>${(at50.then / at50.now).toFixed(0)}× less</b>.` : ""}
+    ${L.compare.filter((c) => c.level !== 50).map((c) =>
+      `Level ${c.level} fell from ${fmtCompact(c.then)} to ${fmtCompact(c.now)}.`).join(" ")}
+    <br><br>
+    And yet the whole climb is barely longer: the old summit at level 50 cost <b>${fmt(L.capThen)} XP</b>,
+    while today's cap of ${ERA2.meta.levelCap} costs <b>${fmt(L.capNow)}</b> — only
+    <b>${capRatio.toFixed(2)}×</b> more. The ladder wasn't made taller so much as cut into more
+    rungs, which is exactly why the same friends who once piled up at 50 now spread across the 60s
+    and 70s. Figures below level ${L.completeFromLevel} were only available as milestones, so the
+    old ladder is quoted at those points rather than drawn as a curve.`;
+}
+
+/* What the last rungs ask for beyond XP. Published game requirements, not
+   anyone's data — the same footing as the cost table. */
+function renderTasks() {
+  const tasks = ERA2?.levelUpTasks;
+  if (!tasks || !Object.keys(tasks).length) return;
+  const levels = Object.keys(tasks).map(Number).sort((a, z) => a - z);
+  $("tasks-panel").hidden = false;
+  $("tasks-range").textContent = `levels ${levels[0]}–${levels.at(-1)}`;
+  $("tbl-tasks").innerHTML = `
+    <thead><tr><th>Level</th><th>Also required, on top of the XP</th></tr></thead>
+    <tbody>${levels.map((lv) => `
+      <tr${lv === ERA2.meta.levelCap ? ' class="highlight"' : ""}>
+        <td>${lv}${lv === ERA2.meta.levelCap ? " <span class='faint'>(cap)</span>" : ""}</td>
+        <td style="white-space:normal">${tasks[lv].map((t) => esc(t)).join(" · ")}</td>
+      </tr>`).join("")}</tbody>`;
+  $("tasks-note").innerHTML = `
+    <b>This is why the top of the ladder is slow in a way XP alone doesn't explain.</b> Reaching
+    level ${ERA2.meta.levelCap} asks for ${fmt(tasks[ERA2.meta.levelCap]?.length ?? 4)} specific
+    achievements as well as the ${fmtCompact(ERA2.levelCost.at(-1).xpToNext)} XP of the final rung —
+    and several of them, like 999 Excellent Throws or 50 platinum medals, are the work of months on
+    their own. The ${fmt(ERA2.pace?.nLeveled ?? 0)} trainers who moved during our window were
+    climbing against both.`;
 }
 
 /* ── the pace panel: the only place a clock touches this data ──────────────
