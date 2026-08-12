@@ -13,11 +13,12 @@
 .tmodel .chapter { padding-top: 56px; }
 .tmodel .sec-head { margin-bottom: 18px; }
 .tmodel .sec-head h2 { font-size: 25px; font-weight: 700; margin: 7px 0 7px; letter-spacing: -.01em; }
-/* 900px to match .section-desc, not the 72ch (~708px) this started with. The
-   panels below run the full 1052px content width, so a 708px intro stopped
-   ~240px short of everything under it and read as cut off — the same problem
-   style.css already solved for .section-desc, with the same answer. */
-.tmodel .sec-head p { color: var(--ink-dim); max-width: 900px; font-size: 15px; }
+/* No max-width: the chapter heading above and the panel below both run the full
+   1052px content width, so any cap here leaves the intro ending short of the
+   column everything else shares. It started at 72ch (~708px), went to 900px,
+   and both still read as cut off next to the panel edge. Matches .section-desc,
+   which made the same move for the same reason. */
+.tmodel .sec-head p { color: var(--ink-dim); font-size: 15px; }
 .tmodel .faint { color: var(--ink-faint); }
 
 /* ── status chips (static, with a live dot — NOT the catalog's filter chips) */

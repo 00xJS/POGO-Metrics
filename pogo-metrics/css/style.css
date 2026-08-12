@@ -194,10 +194,18 @@ main { max-width: 1100px; margin: 0 auto; padding: 0 24px; }
   color: var(--accent); font-family: var(--mono); font-size: .55em;
   vertical-align: .35em; margin-right: 12px;
 }
-/* 900px, not 740px: at 740 these paragraphs wrapped ~300px short of the section
-   edge and read as cut off. 900 reclaims most of that while staying under the
-   full 1052px content width, where lines get too long to track comfortably. */
-.section-desc { color: var(--ink-dim); margin: 10px 0 28px; max-width: 900px; font-size: 16.5px; }
+/* Full content width, after two goes at a narrower measure. 740px wrapped ~300px
+   short of the section edge; 900px still left 152px, and because the heading
+   above and the cards below both run the full 1052px, that shortfall showed up
+   as a ragged right edge with visible empty space beside wrapping text. Reading
+   measure lost to alignment here on purpose: these are short intro paragraphs
+   under a heading, not body copy someone reads for minutes. */
+.section-desc { color: var(--ink-dim); margin: 10px 0 28px; font-size: 16.5px; }
+/* …except the centred ones. On metrics, demo and the Trainer Model intro this
+   paragraph sits under a big centred h1 with nothing full-width beneath it, so
+   there is no edge to line up with — and centred text is exactly where a long
+   measure hurts most, since every line starts in a different place. */
+.center .section-desc { max-width: 900px; margin-inline: auto; }
 
 /* ---------- step cards (how it works) ---------- */
 .steps { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
