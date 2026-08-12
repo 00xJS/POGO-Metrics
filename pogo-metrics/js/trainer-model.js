@@ -964,28 +964,29 @@ function renderCost() {
   $("cost-panel").hidden = false;
   const at = (lv) => cost.find((c) => c.level === lv);
   const first = cost[0], last = cost.at(-1);
-  $("cost-range").textContent = `${fmt(cost.length)} levels shown`;
+  const meta = ERA2.levelCostMeta || {};
+  $("cost-range").textContent = `levels ${first.level}–${last.level}`;
 
-  // Headline comparison uses two fixed, well-attested rungs rather than the
-  // cheapest and dearest on show. Min and max are decided by whoever happens to
-  // be on the friends list — the lowest level here is held by one person, and
-  // leaning on it would let a single friend swing the number several-fold.
   const anchorLo = at(50) ?? first, anchorHi = at(ERA2.meta.levelCap - 1) ?? last;
   const ratio = anchorHi.xpToNext / anchorLo.xpToNext;
-  const thin = cost.filter((c) => c.readings < 2).length;
+  const wholeLadder = last.xpToNext / first.xpToNext;
 
+  // fmtCompact rounds to whole thousands, which turns the first rung's 2,500
+  // into a wrong-looking "3k" — small values are shown in full.
+  const xp = (n) => (n < 10000 ? fmt(n) : fmtCompact(n)) + " XP";
   $("cost-stats").innerHTML = statTiles([
-    [`Leaving level ${anchorLo.level}`, fmtCompact(anchorLo.xpToNext) + " XP", "the old cap, for scale", "teal"],
-    [`Leaving level ${anchorHi.level}`, fmtCompact(anchorHi.xpToNext) + " XP", "the last rung before the cap", "yellow"],
-    ["The step got", "×" + ratio.toFixed(1) + " dearer", `between those two rungs`, ""],
-    ["Levels shown", fmt(cost.length), "levels someone on the list occupies", ""],
+    [`Leaving level ${first.level}`, xp(first.xpToNext), "the very first rung", "teal"],
+    [`Leaving level ${anchorHi.level}`, xp(anchorHi.xpToNext), "the last rung before the cap", "yellow"],
+    ["End to end", "×" + fmt(Math.round(wholeLadder)), "dearer, first rung to last", ""],
+    meta.confirmed
+      ? ["Checked against the game", fmt(meta.confirmed) + " of " + fmt(cost.length), "rungs we also read on real profiles", ""]
+      : ["Levels shown", fmt(cost.length), "the full ladder", ""],
   ]);
 
-  // Full integer axis and log scale. The axis spans every level in range, not
-  // just the ones on show, so the levels nobody occupies read as the gaps they
-  // are — a category axis would stand level 13 flush against 27 and imply a
-  // continuous ladder. Log, because a 1,000× range flattens the early game to
-  // nothing on a linear axis.
+  // The ladder is complete now that the published table fills the rungs nobody
+  // on the list occupies, so there are no gaps to preserve — but the axis stays
+  // a full integer span anyway, so a future round that loses a level shows it.
+  // Log scale, because a 6,400× range flattens the early game to nothing.
   const lo = first.level, hi = last.level;
   const labels = [];
   for (let lv = lo; lv <= hi; lv++) labels.push(lv);
@@ -1010,12 +1011,16 @@ function renderCost() {
           title: (i) => `Level ${i[0].label} → ${Number(i[0].label) + 1}`,
           label: (i) => {
             const c = byLevel.get(Number(i.label));
-            return [`${fmt(i.parsed.y)} XP`, c && c.readings < 2 ? "read once" : `read ${c?.readings} times`];
+            const prov = !c ? "" : c.source === "confirmed"
+              ? `published, and matched on ${c.readings} real profile${c.readings === 1 ? "" : "s"}`
+              : c.source === "published" ? "published figure — nobody here holds this level"
+              : "read from profiles";
+            return [`${fmt(i.parsed.y)} XP`, prov];
           },
         } },
       },
       scales: {
-        x: { title: { display: true, text: "Leaving this level (gaps: nobody on the list is here)", color: C.faint, font: { size: 11 } }, grid: { display: false } },
+        x: { title: { display: true, text: "Leaving this level", color: C.faint, font: { size: 11 } }, grid: { display: false } },
         y: { ...axis("XP required", true) },
       },
     },
@@ -1026,17 +1031,22 @@ function renderCost() {
     every player, so these numbers describe no individual — the only quantities on this page that
     don't. Leaving level ${anchorHi.level}, the last rung before the cap, costs
     <b>${fmt(anchorHi.xpToNext)} XP</b>; leaving level ${anchorLo.level} costs
-    <b>${fmt(anchorLo.xpToNext)}</b>. The ladder steepens the whole way up.
+    <b>${fmt(anchorLo.xpToNext)}</b>, and the very first rung costs <b>${fmt(first.xpToNext)}</b>.
+    The ladder steepens the whole way up.
     <b>Read the bars for shape, not size:</b> the axis is logarithmic, so each gridline is ten
-    times the one below it and a bar only a little taller is worth several times as much. The
-    numbers above carry the real gap; the chart carries the fact that it never stops growing.
+    times the one below it and a bar only a little taller is worth several times as much.
     <br><br>
-    <b>Which levels appear, though, is this friends list's doing.</b> A level is on the chart when
-    someone on the list stands there — the gaps are levels nobody currently occupies, not levels
-    that were checked and rejected.${thin ? ` ${fmt(thin)} of the ${fmt(cost.length)} rest on a single
-    reading; hover any bar to see how many times it was read.` : ""}
-    The rungs shown span ${lo}–${hi}: the cap itself is absent because there is no level after it
-    to pay for.`;
+    ${meta.confirmed ? `<b>Where the table comes from.</b> These are the game's published
+      thresholds. They are worth trusting here for a specific reason: <b>${fmt(meta.confirmed)} of
+      the ${fmt(cost.length)} rungs also appear in our own readings of real trainer profiles, and
+      every one of them matches to the XP</b> — including the ten we only ever saw once. The
+      remaining ${fmt(meta.published)} are levels nobody on this friends list happens to occupy, so
+      the published figure stands alone there. Any disagreement between the two would be shown
+      rather than quietly resolved; there are currently none.` : ""}
+    ${meta.tasksRequiredFromLevel ? `<br><br><b>Above level ${meta.tasksRequiredFromLevel}, XP is not
+      the whole price.</b> The last stretch also gates on Level-Up Research tasks, so those final
+      rungs cost the numbers above <em>and</em> a set of things you have to go and do. This chart
+      shows the XP half.` : ""}`;
 }
 
 /* ── the pace panel: the only place a clock touches this data ──────────────
