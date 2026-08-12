@@ -7,12 +7,12 @@
  *     cached copy when offline
  *   • vendor/ (pinned libs, textures, fonts, geojson) → cache-first
  * Bump VERSION on any release to sweep old caches. */
-const VERSION = "pogo-metrics-v20260811h";
+const VERSION = "pogo-metrics-v20260811i";
 const CORE = [
   "/", "favicon.ico", "index.html", "metrics.html", "demo.html", "trainer-model.html", "404.html",
-  "css/style.css?v=20260811h", "css/trainer-model.css?v=20260811h",
-  "js/nav.js?v=20260811h", "js/catalog.js?v=20260811h", "js/catalog-ui.js?v=20260811h",
-  "js/pokedex.js?v=20260811h", "js/app.js?v=20260811h", "js/trainer-model.js?v=20260811h",
+  "css/style.css?v=20260811i", "css/trainer-model.css?v=20260811i",
+  "js/nav.js?v=20260811i", "js/catalog.js?v=20260811i", "js/catalog-ui.js?v=20260811i",
+  "js/pokedex.js?v=20260811i", "js/app.js?v=20260811i", "js/trainer-model.js?v=20260811i",
   // The Trainer Model page draws entirely from these two files, so an installed
   // app opened offline still gets the full research layer.
   "data/trainer-model/trainers.json", "data/trainer-model/era2.json",
