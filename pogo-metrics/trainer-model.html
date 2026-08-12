@@ -28,8 +28,8 @@
   <link rel="preload" href="vendor/fonts/c8e7a734b1.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="preload" href="vendor/fonts/1cd702cd25.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="stylesheet" href="vendor/fonts/fonts.css" />
-  <link rel="stylesheet" href="css/style.css?v=20260811e" />
-  <link rel="stylesheet" href="css/trainer-model.css?v=20260811e" />
+  <link rel="stylesheet" href="css/style.css?v=20260811f" />
+  <link rel="stylesheet" href="css/trainer-model.css?v=20260811f" />
 </head>
 <body>
   <nav id="topnav" data-active="model"></nav>
@@ -47,17 +47,15 @@
           when the cap was 50, and <b><span id="led-n">493</span> of its <span id="led-total">497</span>
           friends in August 2026</b>, under today's cap
           of 80 — every level, every catch, every kilometre walked, plotted to show what the level
-          cap does to trainer numbers. Find out where your own stats land, and see why the tidy
-          straight-line model this project started with falls apart exactly where most players live.
+          cap does to the number next to a trainer's name. Find out where your own stats land, and
+          see why the tidy straight-line model this project started with falls apart exactly where
+          most players live.
         </p>
-        <div class="notice" style="margin:0 auto 10px;max-width:900px;text-align:left">
-          <b>Two eras, never mixed.</b> Chapters 01–05 describe the 2025 game, when the level cap
-          was 50. Pokémon GO has since rebalanced XP and raised the cap to 80, so those levels are
-          <i>not</i> comparable to the current game — chapter 06 starts the record over with a
-          fresh snapshot of the same friends list under the new cap.
+        <div class="hero-cta" style="justify-content:center;margin-bottom:18px">
+          <a class="btn btn-teal" href="#era2">Today's game →</a>
+          <a class="btn btn-ghost" href="#standing">Where do I stand? →</a>
         </div>
-        <div id="era-summary" style="max-width:620px;margin:22px auto 0;text-align:left"></div>
-        <nav class="chapter-nav" id="chapter-nav" aria-label="Chapters" style="margin-top:18px">
+        <nav class="chapter-nav" id="chapter-nav" aria-label="Chapters">
           <a class="ch-chip" href="#cohort">01 · Cohort</a>
           <a class="ch-chip" href="#explorer">02 · Explorer</a>
           <a class="ch-chip" href="#wall">03 · The 50 wall</a>
@@ -67,6 +65,23 @@
           <a class="ch-chip" href="#standing">07 · Where you stand</a>
           <a class="ch-chip" href="#story" hidden data-era2>08 · The story</a>
         </nav>
+        <div class="notice" style="margin:20px auto 0;max-width:900px;text-align:left">
+          <b>Two eras, never mixed.</b> Chapters 01–05 describe the 2025 game, when the level cap
+          was 50. Pokémon GO has since rebalanced XP and raised the cap to 80, so those levels are
+          <i>not</i> comparable to the current game — chapter 06 starts the record over with a
+          fresh snapshot of the same friends list under the new cap.
+        </div>
+        <div class="notice" style="margin:12px auto 0;max-width:900px;text-align:left">
+          <b>Where these numbers come from.</b> Nothing here is anyone's data export. Every figure
+          on this page is what a trainer's public profile already shows their friends — level,
+          catches, battles won, distance walked, and nothing else. Handles are replaced with
+          placeholders before the data reaches this site, and any level with fewer than five
+          trainers has its statistics withheld, because at that size an average is just one
+          person's numbers. The mirror of that promise is
+          <a href="/#privacy">chapter 03 on the landing page</a>: your own export never leaves
+          your device.
+        </div>
+        <div id="era-summary" style="max-width:620px;margin:22px auto 0;text-align:left"></div>
       </div>
     </section>
 
@@ -111,7 +126,7 @@
           <div class="stat-grid">
             <div class="stat">
               <span class="label">Sampling</span>
-              <div class="sub">A friends list, not a random sample. Skewed toward active, social players who add friends — the least active players are largely invisible here.</div>
+              <div class="sub">A friends list, not a random sample. It skews toward active, social players who add friends, so the least active are largely invisible here.</div>
             </div>
             <div class="stat">
               <span class="label">Level cap censoring</span>
@@ -119,7 +134,7 @@
             </div>
             <div class="stat">
               <span class="label">Single snapshot</span>
-              <div class="sub">One snapshot, no timestamps per row. Totals are cumulative and lifetime — there's no way to tell a five-year casual from a one-year grinder.</div>
+              <div class="sub">One snapshot, no timestamps per row. Totals are cumulative and lifetime, so a five-year casual and a one-year grinder look alike.</div>
             </div>
             <div class="stat">
               <span class="label">Assumed units</span>
@@ -136,8 +151,8 @@
         <div class="eyebrow">02 — The explorer</div>
         <h2>Level vs. everything else</h2>
         <p>
-          Each dot is one trainer. Switch the metric, add fitted models, and — this is the
-          interesting part — change how outliers get handled and watch the fit move.
+          Each dot is one trainer. Switch the metric, add fitted models, and then change how
+          outliers get handled and watch the fit move. That last control is the interesting one.
         </p>
       </div>
 
@@ -251,7 +266,7 @@
         <h2>Ratios don't care what level you are</h2>
         <p>
           Catches per kilometre and battles per catch describe <em>how</em> someone plays
-          rather than how far along they are — so they sail straight past the level-cap
+          rather than how far along they are, so they sail straight past the level-cap
           problem. This is where the dataset is at its most useful.
         </p>
       </div>
@@ -270,8 +285,7 @@
             incense, dense city play). Far top = battles heavily relative to catching
             (raiders and PvP players). Bottom left = walkers who cover ground without
             farming it. There is no third axis here for a plain reason: a trainer's
-            public profile shows these three numbers and no more, so anything else
-            would have to come from somewhere this project doesn't look.
+            public profile shows these three numbers and no more.
           </div>
         </div>
       </div>
@@ -287,6 +301,7 @@
           since rebalanced XP and raised the cap to 80 — so levels aren't comparable across
           the eras, and this chapter starts the record over with a fresh snapshot of the same
           friends list. Typical catches, battles and distance at every level, post-rebalance.
+          From here on the colours carry the era: <b>teal is 2025</b>, <b>yellow is 2026</b>.
         </p>
       </div>
 
@@ -297,7 +312,9 @@
         </div>
         <div class="panel-body">
           <div class="toggles" style="margin-bottom:14px">
-            <label><input type="checkbox" id="era2-scale-log"> Log scale (y-axis)</label>
+            <!-- log by default: catches span 1k to 1.5M here, and on a linear axis the median
+                 line this panel is about sits a few pixels off the floor. -->
+            <label><input type="checkbox" id="era2-scale-log" checked> Log scale (y-axis)</label>
           </div>
           <div class="chart-wrap"><canvas id="chart-era2-scatter" role="img" aria-label="Scatter chart: every recorded cap-80 trainer's level against the chosen metric"></canvas></div>
           <div class="callout" style="margin-top:16px">
@@ -347,8 +364,9 @@
         <div class="panel-body">
           <div class="chart-wrap"><canvas id="chart-compare" role="img" aria-label="Line chart: the median level curve of both eras on one axis"></canvas></div>
           <div class="callout" style="margin-top:16px">
-            <b>Reading this:</b> both lines are the median trainer at each level — teal for the
-            2025 game (cap 50), yellow for the rebalanced game (cap 80). The rebalance re-mapped
+            <b>Reading this:</b> both lines are the median trainer at each level, in the same
+            colours as everywhere else in this chapter — teal for the 2025 game (cap 50), yellow
+            for the rebalanced game (cap 80). The rebalance re-mapped
             everyone onto a longer ladder: the same population that once piled up at 50 now
             spreads across the 60s and 70s, so a given level means <em>less</em> lifetime play
             than it used to. Levels with fewer than five trainers are left blank in both eras —
@@ -367,7 +385,9 @@
           Enter your own numbers. You'll be ranked against the trainers in your level band
           — comparing a level 50 to a level 35 tells you nothing, so we don't. The toggle
           picks the cohort: today's cap-80 record, or the 2025 era for numbers from the old
-          game.
+          game. All four numbers are on your in-game profile; if you've already
+          <a href="metrics.html">built your dashboard</a>, your trainer card has your level and
+          distance waiting.
         </p>
       </div>
 
@@ -450,12 +470,29 @@
       </div>
     </section>
 
+    <!-- ── closing ─────────────────────────────────────────────────────── -->
+    <section class="section" id="ready" style="padding-bottom:20px">
+      <h2><span class="num">09</span>Your turn</h2>
+      <p class="section-desc">
+        That's 883 trainers across two versions of the same game, and the clearest thing in all of
+        it is how little a level tells you on its own. Your own export says far more — every catch,
+        every raid, every kilometre, every friendship — and it never has to leave your device to
+        do it.
+      </p>
+      <div class="hero-cta">
+        <a class="btn btn-primary" href="metrics.html">Visualize my journey</a>
+        <a class="btn btn-teal" href="demo.html">▶ Watch the example story</a>
+        <a class="btn btn-ghost" href="/#datasets">What's in your export?</a>
+      </div>
+    </section>
+
   </main>
 
   <footer>
     <p>
-      <b>POGO Metrics</b> is an independent fan project, not affiliated with Niantic, Scopely,
-      or The Pokémon Company. Pokémon and Pokémon GO are trademarks of their respective owners.
+      <b>POGO Metrics</b> is an independent fan project, not affiliated with, endorsed by, or
+      sponsored by Niantic, Scopely, or The Pokémon Company. Pokémon and Pokémon GO are trademarks
+      of their respective owners.
     </p>
     <p>
       The Trainer Model is built from personal friends-list snapshots — 390 trainers
@@ -463,7 +500,7 @@
       with placeholders; every stat is real and unmodified. Nothing on this page comes from
       anyone's data export.
     </p>
-    <p><a href="demo.html">← Live example</a> · <a href="metrics.html">Visualize my journey →</a></p>
+    <p><a href="/#datasets">What's in your export</a> · <a href="demo.html">Live example</a> · <a href="metrics.html">Visualize my journey →</a></p>
     <p class="deck-line">
       <a href="https://observation-deck.netlify.app/">Observation Deck</a>
       <span class="sep" aria-hidden="true">·</span>
@@ -473,10 +510,10 @@
     </p>
   </footer>
 
-  <script defer src="js/nav.js?v=20260811e"></script>
+  <script defer src="js/nav.js?v=20260811f"></script>
   <!-- Chart.js loads up front here (unlike metrics.html's on-demand injection):
        this page is nothing but charts, and the file is already precached. -->
   <script defer src="vendor/chart.umd.min.js"></script>
-  <script defer src="js/trainer-model.js?v=20260811e"></script>
+  <script defer src="js/trainer-model.js?v=20260811f"></script>
 </body>
 </html>

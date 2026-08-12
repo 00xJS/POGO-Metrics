@@ -18,7 +18,7 @@
 
   const ORDER = [
     "Your Profile", "Your Activity", "Your Social World", "Your Spending",
-    "Your Fitness", "Events", "Technical & Device", "Identity (not visualised)",
+    "Your Fitness", "Events", "Technical & Device", "Identity (not visualized)",
   ];
   const SENS = [
     { k: "high", label: "High", color: "var(--red)" },
