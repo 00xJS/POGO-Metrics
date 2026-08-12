@@ -28,7 +28,7 @@
   <link rel="preload" href="vendor/fonts/c8e7a734b1.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="preload" href="vendor/fonts/1cd702cd25.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="stylesheet" href="vendor/fonts/fonts.css" />
-  <link rel="stylesheet" href="css/style.css?v=20260811e" />
+  <link rel="stylesheet" href="css/style.css?v=20260811f" />
 </head>
 <body>
   <nav id="topnav" data-active="home"></nav>
@@ -73,7 +73,7 @@
         <div class="step">
           <span class="n">STEP 2</span>
           <h3>Drop in your files</h3>
-          <p>Unzip the export and drag in the whole folder — or just the one file you're curious about, like <code>FriendList.tsv</code>. Upload one, some, or all of them.</p>
+          <p>Unzip the export and drag in the whole folder — or just the one file you're curious about, like <code>FriendList.tsv</code>. Add one, some, or all of them.</p>
         </div>
         <div class="step">
           <span class="n">STEP 3</span>
@@ -132,7 +132,7 @@
         <div class="priv-card">
           <div class="pi">🙈</div>
           <h3>We ignore the scary bits</h3>
-          <p>Your export also holds your email, IP addresses and advertising IDs. Nothing here ever shows them, charts them, or writes them to a file — the visualisations only touch the parts that tell a story.</p>
+          <p>Your export also holds your email, IP addresses and advertising IDs. Nothing here ever shows them, charts them, or writes them to a file — the visualizations only touch the parts that tell a story.</p>
         </div>
         <div class="priv-card">
           <div class="pi">📤</div>
@@ -142,20 +142,9 @@
       </div>
     </section>
 
-    <!-- ───────────────────────── dataset catalog ───────────────────────── -->
-    <section class="section" id="datasets">
-      <h2><span class="num">04</span>What Niantic keeps — file by file</h2>
-      <p class="section-desc">
-        Your export is a stack of plainly-named files. Here's what each one actually contains,
-        how revealing it is, and the story this site can build from it. Upload only the ones you're
-        comfortable with.
-      </p>
-      <div id="catalog" class="deck" data-density="cards"></div>
-    </section>
-
     <!-- ───────────────────────── trainer model ───────────────────────── -->
     <section class="section" id="research">
-      <h2><span class="num">05</span>Zoom out: the Trainer Model</h2>
+      <h2><span class="num">04</span>Zoom out: the Trainer Model</h2>
       <p class="section-desc">
         Everything above is <b>your</b> story, one export at a time. The Trainer Model is the
         other lens — a real friends-list cohort plotted as a population, showing what the
@@ -164,19 +153,19 @@
       </p>
       <div class="stat-grid">
         <div class="stat-card">
-          <div class="v">390</div>
-          <div class="l">trainers · February 2025</div>
-          <div class="s">the level-50 era</div>
+          <div class="v">306,606</div>
+          <div class="l">catches for a median level 50</div>
+          <div class="s">back when 50 was the ceiling</div>
         </div>
         <div class="stat-card">
-          <div class="v">493</div>
-          <div class="l">trainers · August 2026</div>
-          <div class="s">the cap-80 era</div>
+          <div class="v">9,338</div>
+          <div class="l">catches for a median level 50 today</div>
+          <div class="s">same level, a much longer ladder</div>
         </div>
         <div class="stat-card">
-          <div class="v">50 → 80</div>
-          <div class="l">the level cap, then and now</div>
-          <div class="s">same friends list, two eras</div>
+          <div class="v">8 of 213</div>
+          <div class="l">trainers gained a level in a week</div>
+          <div class="s">near the top, the ladder barely moves</div>
         </div>
       </div>
       <div class="hero-cta" style="margin-top:22px">
@@ -184,11 +173,26 @@
       </div>
     </section>
 
+    <!-- ───────────────────────── dataset catalog ───────────────────────── -->
+    <section class="section" id="datasets">
+      <h2><span class="num">05</span>What Niantic keeps — file by file</h2>
+      <p class="section-desc">
+        Your export is a stack of plainly-named files. Here's what each one actually contains,
+        how revealing it is, and the story this site can build from it. Add only the ones you're
+        comfortable with.
+      </p>
+      <div id="catalog" class="deck" data-density="cards"></div>
+      <p class="section-desc" style="margin-top:26px">
+        That's your export, file by file. When you're ready, the app turns whichever of them you
+        choose into your own chapters — <a href="metrics.html">visualize my journey →</a>
+      </p>
+    </section>
+
     <!-- ───────────────────────── final CTA ───────────────────────── -->
     <section class="section" id="ready">
       <h2><span class="num">06</span>Ready when you are</h2>
       <p class="section-desc">
-        Upload as little as a single file or your whole export — it all stays on your device.
+        Add as little as a single file or your whole export — it all stays on your device.
         Curious first? Play the example story and see exactly what you'd get.
       </p>
       <div class="hero-cta">
@@ -200,12 +204,12 @@
 
   <footer>
     <p>
-      <b>POGO Metrics</b> is an independent fan project and is not affiliated with, endorsed by, or
-      sponsored by Niantic, Scopely, or The Pokémon Company. Pokémon and Pokémon GO are trademarks of
-      their respective owners.
+      <b>POGO Metrics</b> is an independent fan project, not affiliated with, endorsed by, or
+      sponsored by Niantic, Scopely, or The Pokémon Company. Pokémon and Pokémon GO are trademarks
+      of their respective owners.
     </p>
-    <p>Built from your own official data export — and processed entirely on your device.</p>
-    <p style="margin-top:14px"><a href="metrics.html">Visualize my journey →</a></p>
+    <p>Your export is read and charted entirely on your device, and never leaves it.</p>
+    <p><a href="/#datasets">What's in your export</a> · <a href="demo.html">Live example</a> · <a href="trainer-model.html">The Trainer Model</a> · <a href="metrics.html">Visualize my journey →</a></p>
     <p class="deck-line">
       <a href="https://observation-deck.netlify.app/">Observation Deck</a>
       <span class="sep" aria-hidden="true">·</span>
@@ -215,9 +219,9 @@
     </p>
   </footer>
 
-  <script defer src="js/nav.js?v=20260811e"></script>
-  <script defer src="js/catalog.js?v=20260811e"></script>
-  <script defer src="js/catalog-ui.js?v=20260811e"></script>
+  <script defer src="js/nav.js?v=20260811f"></script>
+  <script defer src="js/catalog.js?v=20260811f"></script>
+  <script defer src="js/catalog-ui.js?v=20260811f"></script>
   <script>
     // "Check for my Niantic export" — a 7-days-from-now reminder, generated on
     // the device as a plain .ics download. No calendar service, no request.

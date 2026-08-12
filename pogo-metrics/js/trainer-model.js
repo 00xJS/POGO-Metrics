@@ -738,16 +738,16 @@ function renderEra2() {
         // so the line simply breaks there — an honest gap rather than a
         // confident stroke through a level backed by one person.
         { type: "line", label: `Median ${M.lower}`, data: series("median").data,
-          borderColor: M.color, backgroundColor: M.color, borderWidth: 2.5,
+          borderColor: C.yellow, backgroundColor: C.yellow, borderWidth: 2.5,
           pointRadius: 3, spanGaps: false, tension: .25, yAxisID: "y", order: 1 },
         // The mean rides above the median wherever a few heavy grinders pull the
         // average up — that gap is the point of showing both. Same n>=5 masking:
         // sparse levels carry null means from the build, so the dash breaks too.
         { type: "line", label: `Mean ${M.lower} (average)`, data: series("mean").data,
-          borderColor: M.color, borderDash: [6, 5], borderWidth: 1.5,
+          borderColor: C.yellow, borderDash: [6, 5], borderWidth: 1.5,
           pointRadius: 0, spanGaps: false, tension: .25, yAxisID: "y", order: 1 },
         { type: "line", label: "75th percentile", data: series("p75").data,
-          borderColor: "transparent", backgroundColor: M.color + "24", pointRadius: 0, fill: "+1", tension: .25, yAxisID: "y", order: 2 },
+          borderColor: "transparent", backgroundColor: C.yellow + "24", pointRadius: 0, fill: "+1", tension: .25, yAxisID: "y", order: 2 },
         { type: "line", label: "25th percentile", data: series("p25").data,
           borderColor: "transparent", pointRadius: 0, tension: .25, yAxisID: "y", order: 2 },
         { type: "bar", label: "Trainers at level", data: levelSeries(ERA2.perLevel, (r) => r.n).data,
@@ -818,10 +818,10 @@ function renderEra2Scatter() {
   mount("chart-era2-scatter", {
     data: { datasets: [
       { type: "scatter", label: `Trainers (n = ${pts.length})`, data: pts,
-        backgroundColor: "rgba(65,216,198,.35)", borderColor: "rgba(65,216,198,.7)",
+        backgroundColor: "rgba(255,203,5,.28)", borderColor: "rgba(255,203,5,.6)",
         borderWidth: 1, pointRadius: 3, pointHoverRadius: 6, order: 2 },
       { type: "line", label: `Median per level (n ≥ ${MIN_N})`, data: med,
-        borderColor: C.yellow, borderWidth: 2, borderDash: [5, 4], pointRadius: 0,
+        borderColor: "#ffffff", borderWidth: 2, borderDash: [5, 4], pointRadius: 0,
         tension: .25, spanGaps: false, order: 1 },
     ] },
     options: {
@@ -997,7 +997,7 @@ function renderCost() {
       datasets: [{
         label: "XP for the next level",
         data: labels.map((lv) => byLevel.get(lv)?.xpToNext ?? null),
-        backgroundColor: labels.map((lv) => (lv >= 71 ? C.yellow : C.teal)),
+        backgroundColor: labels.map((lv) => (lv >= 71 ? C.yellow : C.yellow + "66")),
         borderRadius: 2,
       }],
     },
@@ -1005,7 +1005,7 @@ function renderCost() {
       maintainAspectRatio: false,
       plugins: {
         legend: { display: false },
-        title: { display: true, text: "XP to reach the next level — yellow is the endgame, 71 and up (log scale)", color: C.faint, font: { size: 11 } },
+        title: { display: true, text: "XP to reach the next level — brightest bars are the endgame, 71 and up (log scale)", color: C.faint, font: { size: 11 } },
         tooltip: { callbacks: {
           title: (i) => `Level ${i[0].label} → ${Number(i[0].label) + 1}`,
           label: (i) => {
@@ -1178,7 +1178,7 @@ function openStory() {
         <div class="story-big">${s.big}</div>
         <div class="story-label">${s.label}</div>
         ${s.final ? `<div class="story-cta">
-          <a class="btn btn-teal" href="#cohort">Explore every chapter</a>
+          <a class="btn btn-teal" href="#ready">Where this leaves you</a>
           <button class="btn btn-ghost" type="button">Close</button>
         </div>` : ""}
       </div></div>

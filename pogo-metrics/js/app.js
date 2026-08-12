@@ -1268,7 +1268,7 @@ async function build() {
           <p>The export folder may have moved, been deleted, or been renamed since you picked it.
           Add ${unreadable.length === 1 ? esc(unreadable[0]) : "the files"} again to rebuild.</p></div>`
         : `<div class="empty-state"><div class="es-emoji">🤔</div>
-          <h3 style="margin:10px 0 6px">Nothing to visualise yet</h3>
+          <h3 style="margin:10px 0 6px">Nothing to visualize yet</h3>
           <p>None of those files had a story we can tell. Try adding files like <code>Gameplay.txt</code>,
           <code>FriendList.tsv</code>, or your <code>Player_Journey</code> folder.</p></div>`;
       res.scrollIntoView({ behavior: scrollBehavior() });
@@ -1371,7 +1371,7 @@ function resHero() {
      </div>`;
   return `<div class="res-hero">
     <div class="eyebrow">${window.DEMO_PAGE ? "Live example · sample data" : "Your Pokémon GO metrics"}</div>
-    <h2>${who} journey, visualised</h2>
+    <h2>${who} journey, visualized</h2>
     <p>${intro}</p>
     ${toolbar}
   </div>`;
@@ -1403,12 +1403,35 @@ function wireToolbar() {
     $("upload-section").scrollIntoView({ behavior: scrollBehavior() });
   };
 }
+/* The handoff to the research layer. A reader who has just watched their own
+   journey build is the best-qualified audience the Trainer Model will ever get,
+   and the four numbers its benchmark asks for are ones this page just worked
+   out. Printed rather than passed in a URL: the rest of the site keeps personal
+   figures out of links, and this is no exception. */
+function modelHandoff() {
+  const p = STATE.profile || {};
+  // Only lifetime figures are quoted here. The catch and battle counts this
+  // page derives come from the Player_Journey logs, which cover a recent window
+  // — the Trainer Model compares lifetime totals, so putting the two side by
+  // side would invite a comparison neither number supports.
+  const bits = [
+    p.level ? `level ${fmt(p.level)}` : "",
+    p.distanceWalkedKm ? `${fmt(Math.round(p.distanceWalkedKm))} km walked` : "",
+  ].filter(Boolean);
+  return `<div class="notice" style="margin-top:12px">
+    <b>How does that compare to everyone else?</b> ${bits.length
+      ? `Your trainer card says <b>${bits.join(" · ")}</b>. ` : ""}The Trainer Model plots 493 real
+    trainers against today's level cap — <a href="trainer-model.html#standing">see where your
+    numbers land →</a> (it also wants your lifetime catches and battles, which are on your in-game
+    profile rather than in the export).</div>`;
+}
+
 function outro() {
   if (window.DEMO_PAGE) {
     return `<div class="notice" style="margin-top:30px">
       <b>Like what you see?</b> This whole page was built from a sample export — yours would be built
       from your real journey. <a href="metrics.html">Build yours →</a> or
-      <a href="index.html#request">request your data from Niantic first</a>.</div>`;
+      <a href="index.html#request">request your data from Niantic first</a>.</div>` + modelHandoff();
   }
   // tell the player exactly which chapters their remaining files would unlock
   const locked = (window.CATALOG || []).filter((c) =>
@@ -1419,7 +1442,8 @@ function outro() {
       <div style="margin-top:8px"><a href="index.html#datasets">See what every file unlocks →</a></div></div>`
     : "";
   return `<div class="notice" style="margin-top:30px">
-    <b>That's your story — for now.</b> Add more files above to unlock new chapters of your journey.${more}</div>`;
+    <b>That's your story — for now.</b> Add more files above to unlock new chapters of your journey.${more}</div>`
+    + modelHandoff();
 }
 
 /* ── story mode: a Wrapped-style, full-screen tappable recap built from STATE ── */
@@ -1735,7 +1759,7 @@ function renderActivity() {
   if (stats.length < 8 && e.geo.size) stats.push([fmt(e.geo.size), "Map hotspots", "distinct places you played"]);
   const cards = stats.slice(0, 8);
 
-  // Visualisations lead the chapter; the data cards sit below them, after a divider.
+  // Visualizations lead the chapter; the data cards sit below them, after a divider.
   const cMonthly = uid(), cDonut = uid(), cClock = uid();
   const tzOff = -new Date().getTimezoneOffset() / 60;
   const tzLbl = "UTC" + (tzOff >= 0 ? "+" : "") + (Math.round(tzOff * 10) / 10);

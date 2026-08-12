@@ -114,10 +114,14 @@ input:focus-visible, [tabindex]:focus-visible {
 }
 .nav-pages a:hover { color: #fff; background: rgba(255, 255, 255, .06); }
 .nav-pages a.active { color: var(--btn-ink); background: var(--accent); border-color: var(--accent); }
-.nav-cta {
-  color: var(--btn-ink) !important; background: var(--accent2); border-color: var(--accent2) !important;
+/* Listed after .active and matched with equal weight so the CTA keeps its yellow
+   on the page it points at — it used to render teal-filled with a yellow ring,
+   the only two-tone pill on the site, exactly where it mattered most. */
+.nav-pages a.nav-cta,
+.nav-pages a.nav-cta.active {
+  color: var(--btn-ink); background: var(--accent2); border-color: var(--accent2);
 }
-.nav-cta:hover { filter: brightness(1.08); background: var(--accent2) !important; }
+.nav-pages a.nav-cta:hover { filter: brightness(1.08); background: var(--accent2); }
 
 /* ---------- generic layout ---------- */
 main { max-width: 1100px; margin: 0 auto; padding: 0 24px; }
@@ -553,9 +557,18 @@ footer .deck-line .sep { margin: 0 9px; opacity: .55; }
 @media (max-width: 860px) {
   .steps, .priv-grid { grid-template-columns: 1fr; }
   .cat-grid, .split { grid-template-columns: 1fr !important; }
-  .nav-pages .np-label { display: none; }
-  .nav-pages a.active .np-label { display: inline; }
-  .nav-cta .np-label { display: inline !important; }
+  /* The nav used to wrap to three rows (143px, 18% of a phone screen) and strip
+     the label from every inactive tab, so the way home was an unlabelled house.
+     One row that scrolls sideways keeps every label and costs ~half the height. */
+  .nav-inner { flex-wrap: nowrap; gap: 10px; padding-inline: 16px; }
+  .nav-brand { font-size: 15px; }
+  .nav-brand .pokeball-dot { width: 15px; height: 15px; }
+  .nav-pages {
+    flex-wrap: nowrap; overflow-x: auto; justify-content: flex-start;
+    scrollbar-width: none; -webkit-overflow-scrolling: touch;
+  }
+  .nav-pages::-webkit-scrollbar { display: none; }
+  .nav-pages a { flex: none; padding: 6px 10px; font-size: 12.5px; }
   .module { padding: 18px; }
   .medal-cards { grid-template-columns: repeat(2, 1fr) !important; }
   .stat-card { flex-basis: calc(50% - 7px); max-width: none; }
