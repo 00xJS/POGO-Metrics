@@ -1053,17 +1053,18 @@ function renderPace() {
 
   const pct = (100 * p.nLeveled) / p.nObserved;
   const climbing = p.byBand.filter((b) => b.lo < ERA2.meta.levelCap);
-  const stillClimbing = climbing.reduce((s, b) => s + b.n, 0);
   const moved = climbing.filter((b) => b.leveled > 0);
-  const everyoneGainedOne = p.nLeveled > 0 && p.levelsGained === p.nLeveled;
+  const activePct = p.nActive ? (100 * p.nActive) / p.nObserved : null;
 
   $("pace-stats").innerHTML = statTiles([
     ["Recorded twice", fmt(p.nObserved), `over about ${p.meanWindowDays} days`, "teal"],
-    ["Gained a level", fmt(p.nLeveled), `${pct.toFixed(1)}% of them, in that whole window`, ""],
-    ["Still had one to gain", fmt(stillClimbing), "the rest were already at the cap", ""],
-    everyoneGainedOne
-      ? ["Nobody gained two", "exactly 1 each", `${fmt(p.levelsGained)} levels across ${fmt(p.nLeveled)} trainers`, ""]
-      : ["Levels gained", fmt(p.levelsGained), "across every trainer, combined", ""],
+    p.nActive
+      ? ["Were out playing", fmt(p.nActive), `${Math.round(activePct)}% of them caught, battled or walked`, "yellow"]
+      : null,
+    ["Gained a level", fmt(p.nLeveled), `${pct.toFixed(1)}% — same window, same people`, ""],
+    p.caughtGained?.median != null
+      ? ["Typical week's catching", fmt(p.caughtGained.median), `caught, for the ${fmt(p.caughtGained.n)} who caught anything`, ""]
+      : null,
   ]);
 
   const capBand = p.byBand.find((b) => b.lo === ERA2.meta.levelCap);
@@ -1074,22 +1075,29 @@ function renderPace() {
   const rate = (b) => (b.n ? (100 * b.leveled) / b.n : 0);
   const busiest = moved.length ? moved.reduce((m, b) => (rate(b) > rate(m) ? b : m)) : null;
 
+  const km = p.kmWalked, bat = p.battlesWon, cau = p.caughtGained;
   $("pace-note").innerHTML = `
-    <b>This is why the page won't tell you how long it takes to reach ${ERA2.meta.levelCap}.</b>
-    Across about ${p.meanWindowDays} days, <b>${fmt(p.nObserved)} of these trainers gave a usable
-    second reading — and ${p.nLeveled === 0 ? "none" : "only <b>" + fmt(p.nLeveled) + "</b>"} of them
-    gained a single level</b>.
-    ${capBand ? `${fmt(capBand.n)} of them were already at ${ERA2.meta.levelCap}, with nowhere left to climb.` : ""}
-    ${p.nExcludedForCorrection ? `(A further ${fmt(p.nExcludedForCorrection)} were set aside: their level
-      changed between rounds because the record was corrected, not because they played.)` : ""}
+    <b>Almost everyone was playing. Almost nobody moved up a rung.</b>
+    ${p.nActive ? `Of the ${fmt(p.nObserved)} trainers recorded twice, <b>${fmt(p.nActive)}
+      (${Math.round(activePct)}%) had caught something, battled or walked</b> between the two
+      readings${cau?.median != null && km?.median != null
+        ? ` — a typical one added <b>${fmt(cau.median)} catches</b> and <b>${fmt(km.median, 1)} km</b>${
+            bat?.median != null ? `, and won <b>${fmt(Math.round(bat.median))} battles</b>` : ""}` : ""}.
+      In the same window, on the same people, <b>${p.nLeveled === 0 ? "none" : "just " + fmt(p.nLeveled)}
+      gained a level</b>.` : `Across about ${p.meanWindowDays} days, just ${fmt(p.nLeveled)} of
+      ${fmt(p.nObserved)} gained a level.`}
+    ${costShown ? `That gap is what the chart above is for: near the top a single rung costs millions
+      of XP, so a genuinely busy week doesn't finish one.` : ""}
     <br><br>
-    ${busiest ? `<b>And it is not simply that the dear levels move slowest.</b> The busiest band was
-      <b>level ${busiest.band}</b>, where ${fmt(busiest.leveled)} of ${fmt(busiest.n)}
-      (${rate(busiest).toFixed(0)}%) gained one — ${costShown ? "and those are among the most expensive rungs on the chart above" : "and those are among the most expensive rungs of all"}.
-      Cost sets the size of the task; whether anyone finishes it in a week is about how hard they
-      are playing, and the people near the top are the ones still pushing. ` : ""}
-    One window, one cohort, whatever happened to be running that week. It is a real measurement,
-    and it is not a forecast — ${p.nLeveled === 1 ? "a single level-up" : fmt(p.nLeveled) + " level-ups"} cannot carry one.`;
+    <b>Which is also why this page won't tell you how long it takes to reach ${ERA2.meta.levelCap}.</b>
+    ${capBand ? `${fmt(capBand.n)} of these trainers were already at ${ERA2.meta.levelCap}, with nowhere left to climb.` : ""}
+    ${busiest ? `Among those who could still climb, the busiest band was <b>level ${busiest.band}</b>
+      — ${fmt(busiest.leveled)} of ${fmt(busiest.n)} (${rate(busiest).toFixed(0)}%) — which happens to be
+      one of the dearest stretches on the ladder, so cost alone doesn't decide who moves. ` : ""}
+    ${p.nExcludedForCorrection ? `(A further ${fmt(p.nExcludedForCorrection)} trainers were set aside: their
+      level changed between readings because the record was corrected, not because they played.)` : ""}
+    One window, one cohort, whatever happened to be running that week — a real measurement, and not
+    a forecast.`;
   $("pace-xref").hidden = false;
 }
 
