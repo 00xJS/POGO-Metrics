@@ -1061,9 +1061,9 @@ function renderPace() {
     p.nActive
       ? ["Were out playing", fmt(p.nActive), `${Math.round(activePct)}% of them caught, battled or walked`, "yellow"]
       : null,
-    ["Gained a level", fmt(p.nLeveled), `${pct.toFixed(1)}% — same window, same people`, ""],
+    ["Gained a level", fmt(p.nLeveled), `${pct.toFixed(1)}% — in those same ${p.meanWindowDays} days`, ""],
     p.caughtGained?.median != null
-      ? ["Typical week's catching", fmt(p.caughtGained.median), `caught, for the ${fmt(p.caughtGained.n)} who caught anything`, ""]
+      ? ["Caught in that window", fmt(p.caughtGained.median), `median, for the ${fmt(p.caughtGained.n)} who caught anything`, ""]
       : null,
   ]);
 
@@ -1077,17 +1077,18 @@ function renderPace() {
 
   const km = p.kmWalked, bat = p.battlesWon, cau = p.caughtGained;
   $("pace-note").innerHTML = `
-    <b>Almost everyone was playing. Almost nobody moved up a rung.</b>
-    ${p.nActive ? `Of the ${fmt(p.nObserved)} trainers recorded twice, <b>${fmt(p.nActive)}
-      (${Math.round(activePct)}%) had caught something, battled or walked</b> between the two
-      readings${cau?.median != null && km?.median != null
+    <b>Over about ${p.meanWindowDays} days: almost everyone was playing, and almost nobody moved up
+    a rung.</b>
+    ${p.nActive ? `Of the ${fmt(p.nObserved)} trainers recorded twice in that window,
+      <b>${fmt(p.nActive)} (${Math.round(activePct)}%) had caught something, battled or walked</b>
+      between the two readings${cau?.median != null && km?.median != null
         ? ` — a typical one added <b>${fmt(cau.median)} catches</b> and <b>${fmt(km.median, 1)} km</b>${
             bat?.median != null ? `, and won <b>${fmt(Math.round(bat.median))} battles</b>` : ""}` : ""}.
       In the same window, on the same people, <b>${p.nLeveled === 0 ? "none" : "just " + fmt(p.nLeveled)}
       gained a level</b>.` : `Across about ${p.meanWindowDays} days, just ${fmt(p.nLeveled)} of
       ${fmt(p.nObserved)} gained a level.`}
     ${costShown ? `That gap is what the chart above is for: near the top a single rung costs millions
-      of XP, so a genuinely busy week doesn't finish one.` : ""}
+      of XP, so ${p.meanWindowDays} genuinely busy days don't finish one.` : ""}
     <br><br>
     <b>Which is also why this page won't tell you how long it takes to reach ${ERA2.meta.levelCap}.</b>
     ${capBand ? `${fmt(capBand.n)} of these trainers were already at ${ERA2.meta.levelCap}, with nowhere left to climb.` : ""}
@@ -1132,7 +1133,7 @@ function storySlides() {
 
   const p = ERA2.pace;
   if (p?.nObserved) slides.push({ kicker: "How long does that take?", big: `${p.nLeveled} of ${fmt(p.nObserved)}`,
-    label: `That's how many trainers gained a level while we watched — ${fmt(p.nObserved)} of them, recorded twice about ${p.meanWindowDays} days apart. Near the top, a week of ordinary play moves the number next to your name by nothing at all.` });
+    label: `That's how many trainers gained a level while we watched — ${fmt(p.nObserved)} of them, recorded twice about ${p.meanWindowDays} days apart. Most of them were out playing. Near the top, that still moves the number next to your name by nothing at all.` });
 
   if (cap) slides.push({ kicker: "So the honest answer is", big: "A very<br>long time.",
     label: `Lifetime totals carry no clock, so this page won't guess in months. What it can do is weigh the climb: the median level-${ERA2.meta.levelCap} has walked ${fmt(cap.distance.median, 1)} km — ${Math.round((100 * cap.distance.median) / EARTH_KM)}% of the way around the Earth, on foot.` });
