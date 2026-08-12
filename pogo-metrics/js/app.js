@@ -1421,9 +1421,9 @@ function modelHandoff() {
   return `<div class="notice" style="margin-top:12px">
     <b>How does that compare to everyone else?</b> ${bits.length
       ? `Your trainer card says <b>${bits.join(" · ")}</b>. ` : ""}The Trainer Model plots 493 real
-    trainers against today's level cap — <a href="trainer-model.html#standing">see where your
-    numbers land →</a> (it also wants your lifetime catches and battles, which are on your in-game
-    profile rather than in the export).</div>`;
+    trainers against today's level cap — <a href="trainer-model.html#standing">see where you stand
+    →</a> (it also wants your lifetime catches and battles, which are on your in-game profile
+    rather than in the export).</div>`;
 }
 
 function outro() {
