@@ -13,7 +13,11 @@
 .tmodel .chapter { padding-top: 56px; }
 .tmodel .sec-head { margin-bottom: 18px; }
 .tmodel .sec-head h2 { font-size: 25px; font-weight: 700; margin: 7px 0 7px; letter-spacing: -.01em; }
-.tmodel .sec-head p { color: var(--ink-dim); max-width: 72ch; font-size: 15px; }
+/* 900px to match .section-desc, not the 72ch (~708px) this started with. The
+   panels below run the full 1052px content width, so a 708px intro stopped
+   ~240px short of everything under it and read as cut off — the same problem
+   style.css already solved for .section-desc, with the same answer. */
+.tmodel .sec-head p { color: var(--ink-dim); max-width: 900px; font-size: 15px; }
 .tmodel .faint { color: var(--ink-faint); }
 
 /* ── status chips (static, with a live dot — NOT the catalog's filter chips) */
@@ -71,6 +75,22 @@
 .tmodel .stat .value.teal { color: var(--accent); }
 .tmodel .stat .value.yellow { color: var(--accent2); }
 .tmodel .stat .sub { font-size: 12px; color: var(--ink-dim); margin-top: 2px; }
+
+/* The two six-tile grids. auto-fit fits all six in one row on a wide screen,
+   which leaves each tile ~159px — the narrowest on the page, holding the
+   longest values (trainer names with levels, six-figure totals). Three across
+   and two down gives them ~330px and keeps the two chapters consistent with
+   each other. The four-tile grids are fine on one row and keep auto-fit. */
+.tmodel #playstyle-stats,
+.tmodel #cohort-stats { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+@media (max-width: 820px) {
+  .tmodel #playstyle-stats,
+  .tmodel #cohort-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 560px) {
+  .tmodel #playstyle-stats,
+  .tmodel #cohort-stats { grid-template-columns: 1fr; }
+}
 
 /* ── controls ──────────────────────────────────────────────────────────── */
 .tmodel .ctl { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
