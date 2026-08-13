@@ -28,8 +28,8 @@
   <link rel="preload" href="vendor/fonts/c8e7a734b1.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="preload" href="vendor/fonts/1cd702cd25.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="stylesheet" href="vendor/fonts/fonts.css" />
-  <link rel="stylesheet" href="css/style.css?v=20260812a" />
-  <link rel="stylesheet" href="css/trainer-model.css?v=20260812a" />
+  <link rel="stylesheet" href="css/style.css?v=20260812b" />
+  <link rel="stylesheet" href="css/trainer-model.css?v=20260812b" />
 </head>
 <body>
   <nav id="topnav" data-active="model"></nav>
@@ -73,11 +73,14 @@
         </div>
         <div class="notice" style="margin:12px auto 0;max-width:900px;text-align:left">
           <b>Where these numbers come from.</b> Nothing here is anyone's data export. Every figure
-          on this page is what a trainer's public profile already shows their friends — level,
-          catches, battles won, distance walked, and nothing else. Handles are replaced with
-          placeholders before the data reaches this site, and any level with fewer than five
-          trainers has its statistics withheld, because at that size an average is just one
-          person's numbers. The mirror of that promise is
+          about a <em>trainer</em> is what their public profile already shows their friends —
+          level, catches, battles won and distance walked. A profile also carries an XP figure:
+          it is read only to check the game's published level costs against reality in chapter 08,
+          and is never plotted or published per trainer. Chapter 08 adds one source that isn't a
+          person at all — the game's own published tables, XP per level and the Level-Up Research
+          tasks. Handles are replaced with placeholders before the data reaches this site, and
+          any level with fewer than five trainers has its statistics withheld, because at that
+          size an average is just one person's numbers. The mirror of that promise is
           <a href="/#privacy">chapter 03 on the landing page</a>: your own export never leaves
           your device.
         </div>
@@ -284,8 +287,9 @@
             <b>Reading this:</b> far right = catches a lot per kilometre walked (lures,
             incense, dense city play). Far top = battles heavily relative to catching
             (raiders and PvP players). Bottom left = walkers who cover ground without
-            farming it. There is no third axis here for a plain reason: a trainer's
-            public profile shows these three numbers and no more.
+            farming it. There is no third axis here for a plain reason: catches,
+            battles and distance are the only things a public profile says about
+            how someone actually plays.
           </div>
         </div>
       </div>
@@ -324,7 +328,8 @@
             one trainer's lifetime total; the metric buttons below switch this chart too.
             The dashed line is the median at each level, drawn only where five or more
             trainers share a level — it breaks over thinner levels, because a "typical
-            trainer" needs company to be typical.
+            trainer" needs company to be typical.<span id="era2-log-note" role="status"
+            aria-live="polite"></span>
           </div>
         </div>
       </div>
@@ -423,7 +428,7 @@
         <p>
           What does a level actually cost? Rung by rung: what the median trainer at each
           milestone has done in their Pokémon GO lifetime, what the game charges in XP to
-          climb each step, and the one week where we watched to see who moved — plus a
+          climb each step, and the short window where we watched to see who moved — plus a
           tappable full-screen story.
         </p>
       </div>
@@ -486,10 +491,10 @@
     <section class="section" id="ready" style="padding-bottom:20px">
       <h2><span class="num">09</span>Your turn</h2>
       <p class="section-desc">
-        That's 883 trainers across two versions of the same game, and the clearest thing in all of
-        it is how little a level tells you on its own. Your own export says far more — every catch,
-        every raid, every kilometre, every friendship — and it never has to leave your device to
-        do it.
+        That's one friends list, read twice under two versions of the same game — 390 trainers
+        in 2025 and 493 in 2026 — and the clearest thing in all of it is how little a level
+        tells you on its own. Your own export says far more — every catch, every raid, every
+        kilometre, every friendship — and it never has to leave your device to do it.
       </p>
       <div class="hero-cta">
         <a class="btn btn-primary" href="metrics.html">Visualize my journey</a>
@@ -522,10 +527,10 @@
     </p>
   </footer>
 
-  <script defer src="js/nav.js?v=20260812a"></script>
+  <script defer src="js/nav.js?v=20260812b"></script>
   <!-- Chart.js loads up front here (unlike metrics.html's on-demand injection):
        this page is nothing but charts, and the file is already precached. -->
   <script defer src="vendor/chart.umd.min.js"></script>
-  <script defer src="js/trainer-model.js?v=20260812a"></script>
+  <script defer src="js/trainer-model.js?v=20260812b"></script>
 </body>
 </html>

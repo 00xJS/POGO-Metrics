@@ -94,6 +94,12 @@
 }
 
 /* ── controls ──────────────────────────────────────────────────────────── */
+/* An author `display` beats the UA's [hidden] rule, and half the controls on
+   this page ship hidden until era2.json lands. Without this the era toggle is
+   visible during the fetch — claiming the 2026 cohort while the form beneath it
+   still says cap 50 — and stays visible and dead if the fetch fails. Same
+   gotcha style.css documents for .fc-echo and .deck-list rows. */
+.tmodel [hidden] { display: none !important; }
 .tmodel .ctl { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .tmodel .ctl-label {
   font-family: var(--mono); font-size: 10px; letter-spacing: .08em;
@@ -126,7 +132,12 @@
   border-radius: var(--radius-control); padding: 8px 10px; width: 100%;
   font-variant-numeric: tabular-nums;
 }
-.tmodel input:focus {
+/* Scoped to the number fields on purpose. Written unqualified, this stripped
+   the site's focus ring off all six checkboxes above — a border-colour and a
+   3px 18%-alpha glow mean nothing on a native checkbox, so keyboard users lost
+   the only indicator they had. style.css:79 supplies the ring; nothing here
+   may take it away from a control it can't replace it on. */
+.tmodel input[type="number"]:focus {
   outline: none; border-color: var(--accent);
   box-shadow: 0 0 0 3px rgba(65, 216, 198, .18);
 }

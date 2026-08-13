@@ -1,6 +1,6 @@
 /* catalog.js — the knowledge base about every file in a Niantic Pokémon GO
  * GDPR/data export. Used by the landing page (to teach people what Niantic
- * stores) and by the app (to recognise uploaded files and label their story).
+ * stores) and by the app (to recognize uploaded files and label their story).
  *
  * Each entry:
  *   id        canonical filename (or folder for Player_Journey)
