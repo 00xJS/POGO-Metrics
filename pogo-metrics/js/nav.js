@@ -11,7 +11,7 @@
     // "/" not "/index.html": both serve the landing page, but "/" is what the
     // canonical tag and the sitemap declare, so the nav should vote for it too.
     { id: "home", href: "/", icon: "🏠", label: "Home" },
-    { id: "guide", href: "/#datasets", icon: "📚", label: "Your Data Explained" },
+    { id: "guide", href: "/#datasets", icon: "📚", label: "What's in your export" },
     { id: "demo", href: "/demo.html", icon: "🎬", label: "Live Example" },
     { id: "model", href: "/trainer-model.html", icon: "📈", label: "Trainer Model" },
     { id: "app", href: "/metrics.html", icon: "📊", label: "Visualize my journey", cta: true },

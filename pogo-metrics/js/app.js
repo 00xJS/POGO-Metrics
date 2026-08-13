@@ -1439,7 +1439,7 @@ function outro() {
   const more = locked.length
     ? `<div style="margin-top:10px">${locked.map((c) =>
         `<span class="locked-chip">${c.icon} <code>${esc(c.id)}</code> unlocks <b>${esc(c.name)}</b></span>`).join("")}
-      <div style="margin-top:8px"><a href="index.html#datasets">See what every file unlocks →</a></div></div>`
+      <div style="margin-top:8px"><a href="/#datasets">See what's in your export →</a></div></div>`
     : "";
   return `<div class="notice" style="margin-top:30px">
     <b>That's your story — for now.</b> Add more files above to unlock new chapters of your journey.${more}</div>`
