@@ -1,7 +1,7 @@
 /* app.js — POGO Metrics engine.
  *
  * Reads raw Niantic Pokémon GO data-export files entirely in the browser,
- * parses each recognised file, and renders a per-file "story" module. Nothing
+ * parses each recognized file, and renders a per-file "story" module. Nothing
  * is uploaded anywhere — every File is read with FileReader/.text() locally.
  *
  * Each uploaded file lights up its own chapter, so a single FriendList.tsv
@@ -398,35 +398,51 @@ async function ingest(files) {
   }
 }
 
-/* Load the bundled, fully-scrubbed demo export so people can see the output
- * without uploading anything of their own. */
+/* True whenever what's on screen was built from the bundled sample export
+ * rather than the reader's own files. `window.DEMO_PAGE` is NOT a substitute:
+ * metrics.html?demo=1 loads the same invented trainer on a page that is
+ * otherwise the real app. Anything that addresses the reader in the second
+ * person about their own figures must check THIS. It is deliberately sticky —
+ * if sample and real files are ever mixed, staying true suppresses a claim
+ * rather than making a false one. */
+let SAMPLE_DATA = false;
+
+/* Load the bundled, fully-scrubbed sample export so people can see the output
+ * without uploading anything of their own.
+ *
+ * The folder is `sample-export/`, not `demo/`: a folder called demo collides
+ * with the demo.html page once Netlify serves extensionless URLs, and the
+ * netlify.toml `noindex` header written for the data would then land on the
+ * page too. Different names, no collision. */
 async function loadDemo() {
   clearError();
-  const btn = $("demo-btn");
-  if (btn) { btn.disabled = true; btn.textContent = "Loading demo…"; }
   try {
-    const man = await fetch("demo/manifest.json").then((r) => {
+    const man = await fetch("sample-export/manifest.json").then((r) => {
       if (!r.ok) throw new Error("manifest.json " + r.status);
       return r.json();
     });
     // All in parallel — HTTP/2 serves the whole sample export in one round trip.
     const files = await Promise.all(man.files.map(async (p) => {
-      const r = await fetch("demo/" + p);
+      const r = await fetch("sample-export/" + p);
       if (!r.ok) throw new Error(p + " " + r.status);
       return new File([await r.text()], p.split("/").pop());
     }));
     RAW = []; DATA_GEN++;
+    SAMPLE_DATA = true;
     await ingest(files);
     build();
   } catch (e) {
     console.warn(e);
-    showError("Couldn't load the demo dataset (" + (e && e.message ? e.message : "network error") + "). Check your connection and try again — or upload your own files.");
-    // On the dedicated demo page there's no upload UI — give a real retry button
+    // "live example" everywhere, including when it fails — and the upload advice
+    // only applies on metrics.html, which is the only page with an upload UI.
+    showError("Couldn't load the live example (" + (e && e.message ? e.message : "network error") + ")."
+      + (window.DEMO_PAGE ? " Usually a connection blip — try again in a moment." : " Check your connection and try again — or upload your own files."));
+    // On the live-example page there's no upload UI — give a real retry button
     // instead of stranding the visitor on a dead spinner.
     const res = window.DEMO_PAGE && $("results");
     if (res) {
       res.innerHTML = `<div class="empty-state"><div class="es-emoji">📡</div>
-        <h3 style="margin:10px 0 6px">The example couldn't load</h3>
+        <h3 style="margin:10px 0 6px">The live example couldn't load</h3>
         <p>The sample export didn't come through — usually a connection blip.</p></div>`;
       const rb = document.createElement("button");
       rb.className = "btn btn-teal"; rb.type = "button"; rb.style.marginTop = "14px";
@@ -434,8 +450,6 @@ async function loadDemo() {
       rb.onclick = () => { res.innerHTML = `<div class="empty-state"><div class="gl-spin" style="margin:0 auto 14px"></div><p>Building the example…</p></div>`; loadDemo(); };
       res.querySelector(".empty-state").appendChild(rb);
     }
-  } finally {
-    if (btn) { btn.disabled = false; btn.textContent = "See a live demo"; }
   }
 }
 
@@ -445,7 +459,7 @@ function renderDetected() {
   const buildRow = $("build-row");
   if (!RAW.length) { el.innerHTML = ""; if (buildRow) buildRow.style.display = "none"; return; }
   const rows = RAW.map((r) => {
-    let cls = "unknown", status = "Not recognised", name = r.name, icon = "❓", note = "We don't have a story for this file.";
+    let cls = "unknown", status = "Not recognized", name = r.name, icon = "❓", note = "We don't have a story for this file.";
     if (r.entry) {
       name = r.entry.name; icon = r.entry.icon; note = r.entry.summary;
       if (r.entry.story) { cls = "ok"; status = "Ready"; }
@@ -1356,11 +1370,13 @@ function resHero() {
   const intro = window.DEMO_PAGE
     ? `This is a live example built from a fully anonymized sample export — the exact same charts your own files would produce.`
     : `${range ? esc(range) + " · " : ""}${chapters} chapter${chapters > 1 ? "s" : ""} built from your export. Screenshot any card to share it.`;
-  // The demo page keeps its header CTAs, so its toolbar carries only the story
-  // button; the real app gets the full set.
+  // The live-example page keeps its header CTAs, so its toolbar carries only
+  // the story button; the real app gets the full set. The label matches the
+  // header button and the intro copy that points at it — the story isn't
+  // "mine" on a page built from someone invented.
   const toolbar = window.DEMO_PAGE
     ? `<div class="res-toolbar">
-       <button class="btn btn-primary" id="story-btn" type="button">▶ Play my story</button>
+       <button class="btn btn-primary" id="story-btn" type="button">▶ Play the example story</button>
      </div>`
     : `<div class="res-toolbar">
        <button class="btn btn-primary" id="story-btn" type="button">▶ Play my story</button>
@@ -1405,7 +1421,7 @@ function wireToolbar() {
 }
 /* The handoff to the research layer. A reader who has just watched their own
    journey build is the best-qualified audience the Trainer Model will ever get,
-   and the four numbers its benchmark asks for are ones this page just worked
+   and two of the numbers its benchmark asks for are ones this page just worked
    out. Printed rather than passed in a URL: the rest of the site keeps personal
    figures out of links, and this is no exception. */
 function modelHandoff() {
@@ -1414,13 +1430,22 @@ function modelHandoff() {
   // page derives come from the Player_Journey logs, which cover a recent window
   // — the Trainer Model compares lifetime totals, so putting the two side by
   // side would invite a comparison neither number supports.
-  const bits = [
+  // When the numbers came from the sample export they belong to a made-up
+  // trainer, so the second person is a lie: the page says "no real person's
+  // information is shown here" two screens up, and must not then hand the
+  // reader a sample level as their own to carry into the benchmark. The whole
+  // sentence changes, not just the figures — the question is written to follow
+  // them, and left alone it points at nothing.
+  const bits = SAMPLE_DATA ? [] : [
     p.level ? `level ${fmt(p.level)}` : "",
     p.distanceWalkedKm ? `${fmt(Math.round(p.distanceWalkedKm))} km walked` : "",
   ].filter(Boolean);
+  const opener = SAMPLE_DATA
+    ? `<b>How would your own numbers compare?</b> `
+    : `<b>How does that compare to everyone else?</b> ${bits.length
+        ? `Your trainer card says <b>${bits.join(" · ")}</b>. ` : ""}`;
   return `<div class="notice" style="margin-top:12px">
-    <b>How does that compare to everyone else?</b> ${bits.length
-      ? `Your trainer card says <b>${bits.join(" · ")}</b>. ` : ""}The Trainer Model plots 493 real
+    ${opener}The Trainer Model plots 493 real
     trainers against today's level cap — <a href="trainer-model.html#standing">see where you stand
     →</a> (it also wants your lifetime catches and battles, which are on your in-game profile
     rather than in the export).</div>`;
@@ -1572,9 +1597,18 @@ function storyMode() {
     else render(idx + 1);
   });
   const onKey = (ev2) => {
-    if (ev2.key === "Escape") close();
-    else if (ev2.key === "ArrowLeft") render(idx - 1);
-    else if (ev2.key === "ArrowRight" || ev2.key === " ") { ev2.preventDefault(); idx >= slides.length - 1 ? close() : render(idx + 1); }
+    if (ev2.key === "Escape") { close(); return; }
+    if (ev2.key === "ArrowLeft") { render(idx - 1); return; }
+    // Space belongs to whichever control has focus. Focus opens on the close
+    // button and the finale slide adds two more, so swallowing Space here meant
+    // a keyboard user pressing it on "⬇ My journey card" advanced the story
+    // instead of downloading the card. Same guard the Trainer Model's overlay
+    // uses. Arrow keys stay unconditional — no control claims those.
+    const onControl = document.activeElement !== ov && ov.contains(document.activeElement);
+    if (ev2.key === "ArrowRight" || (ev2.key === " " && !onControl)) {
+      ev2.preventDefault();
+      idx >= slides.length - 1 ? close() : render(idx + 1);
+    }
   };
   document.addEventListener("keydown", onKey);
   render(0);
@@ -2968,7 +3002,12 @@ function renderGlobe() {
   const maxCount = Math.max(1, ...points.map((p) => p.count));
   const arcs = [...e.raidArcs.entries()].sort((a, b) => b[1] - a[1]).slice(0, 600).map(([key, count]) => {
     const [slat, slng, elat, elng] = key.split(",").map(Number);
-    return { slat, slng, elat, elng, count, km: haversine(slat, slng, elat, elng) };
+    // Clamped to the exact per-raid maximum: this key's endpoints were rounded
+    // to 0.1° for de-duplication, and that rounding can push the longest arc
+    // PAST the real farthest raid — which the same panel prints a few hundred
+    // pixels away, from the unrounded figure. One distance, one number.
+    const km = haversine(slat, slng, elat, elng);
+    return { slat, slng, elat, elng, count, km: e.raidMaxKm ? Math.min(km, e.raidMaxKm) : km };
   });
   let home = null, hc = -1;
   for (const [key, c] of e.geo) { if (c > hc) { hc = c; const [la, lo] = key.split(",").map(Number); home = { lat: la, lng: lo }; } }
@@ -2977,7 +3016,11 @@ function renderGlobe() {
 
   const subBits = [];
   if (points.length) subBits.push(`${fmt(points.length)} activity hotspots`);
-  if (arcs.length) subBits.push(`${fmt(e.raidRemote)} remote-raid arcs`);
+  // arcs.length, not e.raidRemote: endpoints are rounded to 0.1° and de-duped
+  // above, so repeat raids on the same gym share one stroke. Counting raids
+  // here described a globe several times denser than the one drawn (686 vs
+  // 216 on the sample export). The raid total has its own tile below.
+  if (arcs.length) subBits.push(`${fmt(arcs.length)} remote-raid arcs`);
   if (paths.length) subBits.push(`a ${fmt(paths.length)}-day GPS trail`);
 
   const html = `<div class="module globe-module">
@@ -3684,7 +3727,7 @@ function parseBag(text) {
 
 /* Niantic's internal item codes don't always tidy up into the name players
  * actually see in the shop, so override those by hand. Add a line here whenever
- * a code prettifies into something no trainer would recognise.
+ * a code prettifies into something no trainer would recognize.
  *
  * Only add a mapping you are SURE of. A wrong shop name is worse than a raw
  * code: the code at least looks like a code, so nobody trusts it. Some entries
@@ -3943,7 +3986,7 @@ document.addEventListener("DOMContentLoaded", () => {
     // Clear means clear: the file queue AND anything already on screen. For a
     // privacy tool, leaving the built dashboard up after "Clear" is a betrayal.
     $("clear-btn").addEventListener("click", () => {
-      RAW = []; DATA_GEN++;
+      RAW = []; DATA_GEN++; SAMPLE_DATA = false;
       renderDetected();
       clearError();
       teardown();
@@ -3951,9 +3994,6 @@ document.addEventListener("DOMContentLoaded", () => {
       res.innerHTML = "";
       res.classList.add("results-hidden");
     });
-    const demoBtn = $("demo-btn");
-    if (demoBtn) demoBtn.addEventListener("click", loadDemo);
-
     // iOS has no real folder picker (webkitdirectory is ignored) — hide the
     // button rather than let it degrade into a confusing files-only dialog.
     const isIOS = /iPhone|iPad|iPod/.test(navigator.userAgent)

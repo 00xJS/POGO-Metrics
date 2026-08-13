@@ -28,7 +28,7 @@
   <link rel="preload" href="vendor/fonts/c8e7a734b1.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="preload" href="vendor/fonts/1cd702cd25.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="stylesheet" href="vendor/fonts/fonts.css" />
-  <link rel="stylesheet" href="css/style.css?v=20260812a" />
+  <link rel="stylesheet" href="css/style.css?v=20260812b" />
 </head>
 <body>
   <nav id="topnav" data-active="home"></nav>
@@ -111,8 +111,9 @@
       </div>
       <div class="notice" style="margin-top:12px">
         <b>Just sent your request?</b> The wait is up to a week — and the download link Niantic sends
-        expires after 7 days. <a href="#" id="ics-reminder">📅 Download a calendar reminder</a> to
-        check back, and bookmark this page now so your story is one tap away.
+        expires after 7 days. <button type="button" class="linkish" id="ics-reminder">📅 Download a
+        calendar reminder</button> to check back, and bookmark this page now so your story is one
+        tap away.
       </div>
     </section>
 
@@ -155,16 +156,16 @@
         <div class="stat-card">
           <div class="v">306,606</div>
           <div class="l">catches for a median level 50</div>
-          <div class="s">back when 50 was the ceiling</div>
+          <div class="s">when 50 was the ceiling — 73 trainers sat there</div>
         </div>
         <div class="stat-card">
           <div class="v">9,338</div>
           <div class="l">catches for a median level 50 today</div>
-          <div class="s">same level, a much longer ladder</div>
+          <div class="s">same level, a much longer ladder — only 5 sit there now</div>
         </div>
         <div class="stat-card">
           <div class="v">8 of 213</div>
-          <div class="l">trainers gained a level in a week</div>
+          <div class="l">trainers gained a level in about five days</div>
           <div class="s">near the top, the ladder barely moves</div>
         </div>
       </div>
@@ -219,17 +220,16 @@
     </p>
   </footer>
 
-  <script defer src="js/nav.js?v=20260812a"></script>
-  <script defer src="js/catalog.js?v=20260812a"></script>
-  <script defer src="js/catalog-ui.js?v=20260812a"></script>
+  <script defer src="js/nav.js?v=20260812b"></script>
+  <script defer src="js/catalog.js?v=20260812b"></script>
+  <script defer src="js/catalog-ui.js?v=20260812b"></script>
   <script>
     // "Check for my Niantic export" — a 7-days-from-now reminder, generated on
     // the device as a plain .ics download. No calendar service, no request.
     document.addEventListener("DOMContentLoaded", () => {
       const a = document.getElementById("ics-reminder");
       if (!a) return;
-      a.addEventListener("click", (e) => {
-        e.preventDefault();
+      a.addEventListener("click", () => {
         const d = new Date(Date.now() + 7 * 86400000);
         const ymd = d.toISOString().slice(0, 10).replace(/-/g, "");
         const stamp = new Date().toISOString().replace(/[-:]/g, "").slice(0, 15) + "Z";

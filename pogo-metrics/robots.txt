@@ -1,17 +1,18 @@
 User-agent: *
 Allow: /
 
-# The og-card render sources are NOT disallowed here, for the same reason /demo/
-# isn't (below): each one already declares <meta name="robots" content="noindex">,
-# and a Disallow would stop a crawler reading the very tag that excludes it. They
-# are kept out of results by X-Robots-Tag headers in netlify.toml, which also
-# cover the dev files that ship inside the publish folder.
+# The og-card render sources are NOT disallowed here, for the same reason
+# /sample-export/ isn't (below): each one already declares
+# <meta name="robots" content="noindex">, and a Disallow would stop a crawler
+# reading the very tag that excludes it. They are kept out of results by
+# X-Robots-Tag headers in netlify.toml, which also cover the dev files that ship
+# inside the publish folder.
 
-# /demo/ is deliberately NOT disallowed. Blocking it here stopped crawlers
-# fetching the sample export that demo.html builds itself from, so the indexed
-# version of the live example was a "Building the example…" spinner. The data
-# is kept out of search results by an X-Robots-Tag: noindex header on /demo/*
-# (see netlify.toml) — which excludes the files from the index while still
-# letting a crawler render the page that uses them.
+# /sample-export/ is deliberately NOT disallowed. Blocking it here stopped
+# crawlers fetching the sample export that demo.html builds itself from, so the
+# indexed version of the live example was a "Building the example…" spinner. The
+# data is kept out of search results by an X-Robots-Tag: noindex header on
+# /sample-export/* (see netlify.toml) — which excludes the files from the index
+# while still letting a crawler render the page that uses them.
 
 Sitemap: https://pogo-metrics.netlify.app/sitemap.xml

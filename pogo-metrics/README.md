@@ -3,7 +3,7 @@
 A privacy-first, **bring-your-own-data** web app: drop your official Niantic Pokémon GO
 data export into the browser and get a beautiful, digestible summary & dashboard
 of your trainer journey. Nothing is uploaded — every file is parsed locally with JavaScript,
-and the site ships **none of your data**. (The only datasets in the repo are `demo/`, a fully
+and the site ships **none of your data**. (The only datasets in the repo are `sample-export/`, a fully
 anonymized sample used by the Live Example page, and `data/trainer-model/`, the anonymized
 friends-list cohort behind the Trainer Model page.)
 
@@ -131,12 +131,12 @@ node static-server.mjs "$PWD" 8770
 (The server resolves its root against the process working directory, so pass an
 absolute path — a bare `.` makes every request fall outside the root and 403.)
 
-Or open `demo.html` to load the bundled, fully anonymized `demo/` dataset and preview
+Or open `demo.html` to load the bundled, fully anonymized `sample-export/` dataset and preview
 every chart.
 
-## Demo dataset
+## The sample export
 
-`demo/` is a scrubbed, downsampled sample export used by the Live Example page. Regenerate
+`sample-export/` is a scrubbed, downsampled sample export used by the Live Example page. Regenerate
 it from any real export with:
 
 ```sh
@@ -152,9 +152,9 @@ and timing are preserved so the story still feels real.
 
 It then checks its own work: every file it wrote is re-read, and it deletes the output rather than
 shipping if any redacted identifier, email, IP or real coordinate value survived. **No real
-personal data is present in `demo/`**, and that is verified on every run.
+personal data is present in `sample-export/`**, and that is verified on every run.
 
-> An earlier version translated every coordinate by one global offset. That is not anonymisation —
+> An earlier version translated every coordinate by one global offset. That is not anonymization —
 > a rigid translation preserves every distance and bearing, so the published demo was one
 > subtraction away from the real map. Don't reintroduce it.
 

@@ -19,10 +19,17 @@
     Referrer-Policy = "no-referrer"
 
 # ── caching ────────────────────────────────────────────────────────────────
-# vendor/ holds pinned library builds and textures that never change in place
-# (any upgrade lands under a new filename), so repeat visitors skip ~3MB of
-# revalidation round-trips. HTML/js/css stay on Netlify's revalidating default
+# vendor/ holds pinned library builds and textures, so repeat visitors skip ~3MB
+# of revalidation round-trips. HTML/js/css stay on Netlify's revalidating default
 # and use ?v= query busting.
+#
+# THE RULE THIS DEPENDS ON: never overwrite a file inside vendor/ — an upgrade
+# must land under a new filename. Only the woff2 files are content-hashed, so
+# nothing enforces this but the reader of this comment. Break it and there is no
+# recovery: a year of `immutable` pins the old bytes in the browser's HTTP
+# cache, and sw.js serves /vendor/ cache-first, so even bumping the service
+# worker VERSION doesn't help — the new cache misses, fetches, and is handed the
+# stale copy right back.
 [[headers]]
   for = "/vendor/*"
   [headers.values]
@@ -32,13 +39,20 @@
 # itself from them, and robots.txt used to block that, so the indexed live
 # example was a loading spinner) but the raw data files should not themselves
 # appear in results — which is what noindex does and Disallow cannot.
+#
+# The folder is `sample-export/`, not `demo/`. Netlify serves pages at
+# extensionless URLs, so a folder named demo shares its path with demo.html:
+# `for = "/demo/*"` matched the PAGE at /demo as well as the data, and quietly
+# noindexed the one page the robots.txt block below goes out of its way to keep
+# crawlable. Never name a data folder after a page.
 [[headers]]
-  for = "/demo/*"
+  for = "/sample-export/*"
   [headers.values]
     Cache-Control = "public, max-age=3600"
     X-Robots-Tag = "noindex"
 
-# The Trainer Model cohort data — same reasoning and same pattern as /demo/*:
+# The Trainer Model cohort data — same reasoning and same pattern as the sample
+# export above (and /data/ likewise shares no name with any page):
 # crawlers may fetch it (trainer-model.html builds itself from these files),
 # but the raw JSON should never surface in search results itself.
 [[headers]]

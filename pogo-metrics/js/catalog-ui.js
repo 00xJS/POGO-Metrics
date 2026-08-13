@@ -138,7 +138,7 @@
           <h3 class="fc-name">${esc(c.name)}</h3>
           <div class="fc-file">${esc(c.id)}</div>
         </div>
-        <span class="fc-cols" title="${c.columns.length} raw columns">${c.columns.length} COLS</span>
+        <span class="fc-cols" title="${c.columns.length} raw column${c.columns.length === 1 ? "" : "s"}">${c.columns.length} COL${c.columns.length === 1 ? "" : "S"}</span>
       </div>
       <div class="fc-meta">
         <span class="chip chip-static">${esc(c.group)}</span>

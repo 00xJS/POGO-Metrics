@@ -3,8 +3,8 @@
  *   node tools/test-parsers.mjs
  *
  * Runs the SHIPPED js/app.js inside a vm with minimal browser stubs, feeds it
- * every file in demo/manifest.json exactly as the app does, and asserts the
- * numbers the demo is known to produce.
+ * every file in sample-export/manifest.json exactly as the app does, and asserts
+ * the numbers the sample export is known to produce.
  *
  * Why this exists: every parser bug this project has shipped was silent — a
  * renamed column or a bad regex yields zero, not an error, so the page still
@@ -30,9 +30,9 @@ import { fileURLToPath } from "node:url";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(HERE, "..");
-const DEMO = path.join(ROOT, "demo");
+const DEMO = path.join(ROOT, "sample-export");
 
-/* ---------- expected results, measured from the committed demo/ ---------- */
+/* ------- expected results, measured from the committed sample-export/ ------- */
 const GOLDEN = {
   "chapters unlocked": 15,
   "logged actions": 13905,
@@ -149,7 +149,7 @@ const manifest = JSON.parse(fs.readFileSync(path.join(DEMO, "manifest.json"), "u
 let routed = 0;
 for (const rel of manifest.files) {
   const full = path.join(DEMO, rel);
-  if (!fs.existsSync(full)) { console.error(`missing demo file: ${rel}`); process.exit(2); }
+  if (!fs.existsSync(full)) { console.error(`missing sample-export file: ${rel}`); process.exit(2); }
   const name = rel.split("/").pop();
   ctx.__name = name;
   ctx.__text = fs.readFileSync(full, "utf8");
@@ -326,7 +326,7 @@ const streamTests = [
 
 /* ---------- report ---------- */
 let failed = 0;
-console.log(`\n  parsed ${routed} demo files\n`);
+console.log(`\n  parsed ${routed} sample-export files\n`);
 for (const [k, want] of Object.entries(GOLDEN)) {
   const got = actual[k];
   const ok = got === want;

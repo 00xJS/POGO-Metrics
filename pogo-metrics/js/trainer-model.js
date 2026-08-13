@@ -13,7 +13,7 @@ const C = {
 const REDUCED_MOTION = matchMedia("(prefers-reduced-motion: reduce)").matches;
 
 /* `lower` is written out rather than derived with toLowerCase() — that would
-   produce "pokémon caught", and the P in Pokémon is always capitalised. */
+   produce "pokémon caught", and the P in Pokémon is always capitalized. */
 const METRICS = {
   caught:   { key: "caught",   label: "Pokémon caught",  lower: "Pokémon caught",  unit: "",    dp: 0, color: C.teal },
   battles:  { key: "battles",  label: "Battles won",     lower: "battles won",     unit: "",    dp: 0, color: C.yellow },
@@ -38,6 +38,20 @@ const $ = (id) => document.getElementById(id);
    remember the exception to. */
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) =>
   ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+
+/* Every date this page writes in prose is spelled out ("February 2025", "the
+   same list's August 2026 re-record"), so the three places a build date reaches
+   the screen go through here rather than printing raw ISO at the reader. The
+   day is kept: these are provenance, and the ledger is the one place on the
+   page that should be exact to the day.
+   Parsed by hand, not by Date — `new Date("2026-08-11")` is UTC midnight, which
+   prints as the 10th for anyone west of Greenwich. */
+const MONTHS = ["January", "February", "March", "April", "May", "June",
+  "July", "August", "September", "October", "November", "December"];
+const spellDate = (iso) => {
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(iso || "");
+  return m ? `${+m[3]} ${MONTHS[+m[2] - 1]} ${m[1]}` : (iso || "—");
+};
 
 /* One stat tile, from [label, value, sub, cls] rows. Three chapters render the
    same tile; keeping one template means they can't drift apart. */
@@ -222,7 +236,7 @@ function renderHero() {
     ${row("Trainers recorded", fmt(m.n), e2 && fmt(e2.n), e2 && "+" + fmt(e2.n - m.n), e2 && "up")}
     ${row("Levels seen", `${lo1}–${hi1}`, e2 && `${e2.lo}–${e2.hi}`)}
     ${row("At the cap", capped1, e2 && e2.capped)}
-    ${row("Recorded", m.capturedAt, e2 && e2.date)}
+    ${row("Recorded", spellDate(m.capturedAt), e2 && spellDate(e2.date))}
     <div class="hw-caption" style="margin-top:10px">
       Same friends list under two ladders — levels aren't comparable across the
       eras${m.distanceUnitAssumed ? " · distance is assumed to be km (see Known limitations, chapter 01)" : ""}.
@@ -279,23 +293,40 @@ const EXPLORER = { metric: "caught", mode: "none" };
 
 function renderExplorer() {
   const M = METRICS[EXPLORER.metric];
+  // The same floor the era-2 build ships and the page states in prose. Read
+  // defensively: era 1 renders before era2.json has landed.
+  const MIN_N = ERA2?.meta?.minNForQuartiles ?? 5;
   const rows = applyOutlierMode(DATA.trainers, EXPLORER.mode);
   const xs = rows.map((r) => r.level), ys = rows.map((r) => r[M.key]);
   const lin = ols(xs, ys), lg = logFit(xs, ys);
 
   const levels = [...new Set(xs)].sort((a, z) => a - z);
-  const medianLine = levels.map((lv) => {
-    const v = rows.filter((r) => r.level === lv).map((r) => r[M.key]).sort((a, z) => a - z);
-    return { x: lv, y: quantile(v, 0.5) };
-  });
-  const medPred = rows.map((r) => medianLine.find((p) => p.x === r.level).y);
-  const meanLine = levels.map((lv) => {
-    const v = rows.filter((r) => r.level === lv).map((r) => r[M.key]);
-    return { x: lv, y: v.reduce((s, n) => s + n, 0) / v.length };
-  });
-  const meanPred = rows.map((r) => meanLine.find((p) => p.x === r.level).y);
+  const at = (lv) => rows.filter((r) => r.level === lv).map((r) => r[M.key]);
+
+  /* Per-level lines are withheld below five, the same floor renderCompare and
+     the era-2 build already apply. Not because the underlying dot is a secret —
+     every trainer is plotted, by design, from figures their public profile
+     already shows — but because at levels 23, 26 and 31 exactly one trainer
+     occupies the level, and calling that person's total a "median" is a claim
+     the sample can't support. The lines mask to null and BREAK (spanGaps:false)
+     rather than draw a statistic over a group of one. The R² readouts are
+     scored on the same published levels, or they would be counting levels where
+     the "median" fits its single trainer perfectly by construction. */
+  const pubLevels = new Set(levels.filter((lv) => at(lv).length >= MIN_N));
+  const withheld = levels.length - pubLevels.size;
+  const line = (of) => levels.map((lv) => ({ x: lv, y: pubLevels.has(lv) ? of(at(lv)) : null }));
+  const medianLine = line((v) => quantile([...v].sort((a, z) => a - z), 0.5));
+  const meanLine = line((v) => v.reduce((s, n) => s + n, 0) / v.length);
+
+  const pub = rows.filter((r) => pubLevels.has(r.level));
+  const pubYs = pub.map((r) => r[M.key]);
+  const predOn = (ln) => pub.map((r) => ln.find((p) => p.x === r.level).y);
+  const medPred = predOn(medianLine);
+  const meanPred = predOn(meanLine);
 
   const logScale = $("scale-log").checked;
+  const posYs = ys.filter((y) => y > 0);
+  const logFloor = posYs.length ? 10 ** Math.floor(Math.log10(Math.min(...posYs))) : undefined;
   const span = [];
   for (let lv = Math.min(...xs); lv <= Math.max(...xs); lv += 0.5) span.push(lv);
 
@@ -324,14 +355,14 @@ function renderExplorer() {
   });
 
   if ($("fit-median").checked) datasets.push({
-    type: "line", label: "Median per level",
-    data: medianLine,
+    type: "line", label: `Median per level (n ≥ ${MIN_N})`,
+    data: medianLine, spanGaps: false,
     borderColor: C.yellow, borderWidth: 2, borderDash: [5, 4], pointRadius: 0, tension: .25, order: 2,
   });
 
   if ($("fit-mean").checked) datasets.push({
-    type: "line", label: "Mean per level",
-    data: meanLine,
+    type: "line", label: `Mean per level (n ≥ ${MIN_N})`,
+    data: meanLine, spanGaps: false,
     borderColor: C.purple, borderWidth: 2, borderDash: [2, 3], pointRadius: 0, tension: .25, order: 2,
   });
 
@@ -356,7 +387,15 @@ function renderExplorer() {
       },
       scales: {
         x: { ...axis("Trainer level"), ticks: { stepSize: 2, callback: (v) => v } },
-        y: { ...axis(M.label + (M.unit ? ` (${M.unit.trim()})` : ""), logScale), beginAtZero: !logScale },
+        // Same trap as the era-2 scatter (see renderEra2Scatter): a log axis
+        // whose data minimum is <= 0 gets floored one decade below the MAXIMUM,
+        // which here clips most of the cohort off the bottom. No trainer is on
+        // zero, but the linear fit is — it predicts NEGATIVE catches down at the
+        // low levels, which is the whole point chapter 02 is making, and that
+        // negative is enough to spring the trap. The floor follows the real
+        // readings; the fit lines simply run off the bottom, as they should.
+        y: { ...axis(M.label + (M.unit ? ` (${M.unit.trim()})` : ""), logScale),
+             beginAtZero: !logScale, ...(logScale && logFloor ? { min: logFloor } : {}) },
       },
     },
   });
@@ -370,8 +409,13 @@ function renderExplorer() {
     lin ? `<span class="chip"><span class="dot"></span>linear R² <b>${lin.r2.toFixed(3)}</b></span>` : "",
     lg ? `<span class="chip"><span class="dot"></span>log-linear R² <b>${lg.r2.toFixed(3)}</b></span>` : "",
     lg ? `<span class="chip"><span class="dot"></span>growth <b>×${lg.perLevel.toFixed(2)}</b>/level</span>` : "",
-    `<span class="chip"><span class="dot"></span>median R² <b>${r2Of(ys, medPred).toFixed(3)}</b></span>`,
-    `<span class="chip"><span class="dot"></span>mean R² <b>${r2Of(ys, meanPred).toFixed(3)}</b></span>`,
+    `<span class="chip"><span class="dot"></span>median R² <b>${r2Of(pubYs, medPred)?.toFixed(3) ?? "—"}</b></span>`,
+    `<span class="chip"><span class="dot"></span>mean R² <b>${r2Of(pubYs, meanPred)?.toFixed(3) ?? "—"}</b></span>`,
+    // Short on purpose: .tmodel .chip is nowrap inside an overflow:hidden panel,
+    // so a long label is unreachable on a phone rather than merely ugly. The
+    // legend above already spells out the n ≥ 5 rule. Same wording the era-2
+    // panel uses for the same idea.
+    withheld ? `<span class="chip warn"><span class="dot"></span><b>${withheld}</b> thin level${withheld === 1 ? "" : "s"} (n&lt;${MIN_N})</span>` : "",
   ].join("");
 
   /* the point of the whole chapter */
@@ -532,9 +576,15 @@ function renderWall() {
     <tbody>${rows}</tbody>`;
 
   const v = capped.map((r) => r.caught).sort((a, z) => a - z);
+  // "a 18×" reads wrong. The article has to follow how the rendered number is
+  // SPOKEN: anything starting with 8 (eight, eighty, eight hundred) takes "an",
+  // as do eleven and eighteen exactly — but not 118, which is "one hundred and
+  // eighteen".
+  const spread = (v[v.length - 1] / v[0]).toFixed(0);
+  const article = /^(8|11$|18$)/.test(spread) ? "an" : "a";
   $("wall-note").innerHTML = `
     All ${capped.length} of these trainers share the exact same level. Between the
-    quietest and the busiest there is a <b>${(v[v.length - 1] / v[0]).toFixed(0)}× gap in Pokémon caught</b>
+    quietest and the busiest there is ${article} <b>${spread}× gap in Pokémon caught</b>
     — from ${fmt(v[0])} to ${fmt(v[v.length - 1])}. No model that takes only level as its
     input can tell these players apart, because as far as the data is concerned they are
     identical. This is <b>${Math.round((100 * capped.length) / DATA.meta.n)}% of the entire cohort</b>.
@@ -545,11 +595,20 @@ function renderWall() {
 /* ═══════════════════════ 4 · report card ═══════════════════════ */
 
 function renderR2Table() {
+  // The "median per level" column scores the same model chapter 02's readout
+  // scores, so it has to be scored the same way: on the levels that model is
+  // actually published for. Without the n >= MIN_N filter the two chapters
+  // printed 0.639 and 0.636 for one number, and the thin levels were the
+  // difference — a "median" over one trainer predicts them perfectly.
+  const MIN_N = ERA2?.meta?.minNForQuartiles ?? 5;
+  const published = new Set(DATA.perLevel.filter((l) => l.n >= MIN_N).map((l) => l.level));
+
   const rows = Object.values(METRICS).map((M) => {
     const xs = DATA.trainers.map((r) => r.level), ys = DATA.trainers.map((r) => r[M.key]);
     const lin = ols(xs, ys), lg = logFit(xs, ys);
     const medMap = new Map(DATA.perLevel.map((l) => [l.level, l.median[M.key]]));
-    const medR2 = r2Of(ys, xs.map((x) => medMap.get(x)));
+    const pub = DATA.trainers.filter((r) => published.has(r.level));
+    const medR2 = r2Of(pub.map((r) => r[M.key]), pub.map((r) => medMap.get(r.level)));
     const best = Math.max(lin.r2, lg.r2, medR2);
     const cell = (v) => `<td class="num${v === best ? " ratio-ok" : ""}">${v.toFixed(3)}</td>`;
     return `<tr>
@@ -723,7 +782,7 @@ function renderEra2() {
   const labels = series("median").labels;
   const d = M.dp;
 
-  $("era2-date").textContent = ERA2.meta.latestCapture ?? "—";
+  $("era2-date").textContent = spellDate(ERA2.meta.latestCapture);
   const capped = ERA2.perLevel.find((l) => l.level === ERA2.meta.levelCap);
   const sparseCount = ERA2.perLevel.filter((l) => l.sparse).length;
   $("era2-chips").innerHTML = [
@@ -822,6 +881,24 @@ function renderEra2Scatter() {
   const logScale = $("era2-scale-log")?.checked ?? false;
   const d = M.dp;
 
+  // A log axis with a zero in the data is a trap. Chart.js sees a minimum of 0,
+  // discards it, and floors the axis one decade below the MAXIMUM instead — for
+  // battles (one trainer on 0, top of 132,100) that put the floor at 10,000 and
+  // clipped 416 of 493 dots off the bottom, under a caption promising all 493.
+  // So the floor is stated, not inferred: the decade below the smallest real
+  // value. Chart.js then draws a zero AT that floor rather than dropping it, so
+  // everyone is still on the chart — but one dot is sitting above its true
+  // value, and the panel says so instead of letting it pass as a reading.
+  const positives = pts.map((p) => p.y).filter((y) => y > 0);
+  const floor = positives.length ? 10 ** Math.floor(Math.log10(Math.min(...positives))) : undefined;
+  const offLog = pts.length - positives.length;
+  const note = $("era2-log-note");
+  if (note) note.textContent = logScale && offLog
+    ? ` One caveat on this view: ${offLog === 1 ? "one trainer has" : `${fmt(offLog)} trainers have`} `
+      + `zero ${M.lower}, and a logarithmic axis has no room for zero — ${offLog === 1 ? "that dot is" : "those dots are"} `
+      + `pinned to the axis floor rather than plotted. Untick the log scale above to see ${offLog === 1 ? "it" : "them"} in place.`
+    : "";
+
   mount("chart-era2-scatter", {
     data: { datasets: [
       { type: "scatter", label: `Trainers (n = ${pts.length})`, data: pts,
@@ -852,7 +929,8 @@ function renderEra2Scatter() {
         x: { type: "linear", min: Math.min(10, ERA2.perLevel[0].level), max: ERA2.meta.levelCap + 2,
              title: { display: true, text: "Trainer level", color: C.faint, font: { size: 11 } },
              grid: { color: C.grid }, ticks: { stepSize: 10 } },
-        y: { ...axis(M.label + (M.unit ? ` (${M.unit.trim()})` : ""), logScale), beginAtZero: !logScale },
+        y: { ...axis(M.label + (M.unit ? ` (${M.unit.trim()})` : ""), logScale),
+             beginAtZero: !logScale, ...(logScale && floor ? { min: floor } : {}) },
       },
     },
   });
@@ -1061,7 +1139,7 @@ function renderCost() {
       remaining ${fmt(meta.published)} are levels nobody on this friends list happens to occupy, so
       the published figure stands alone there. Any disagreement between the two would be shown
       rather than quietly resolved; there are currently none.` : ""}
-    ${meta.tasksRequiredFromLevel ? `<br><br><b>Above level ${meta.tasksRequiredFromLevel}, XP is not
+    ${meta.tasksRequiredFromLevel ? `<br><br><b>From level ${meta.tasksRequiredFromLevel} up, XP is not
       the whole price.</b> The last stretch also gates on Level-Up Research tasks, so those final
       rungs cost the numbers above <em>and</em> a set of things you have to go and do — listed in
       the panel below. This chart shows the XP half.` : ""}`;
@@ -1111,13 +1189,22 @@ function renderTasks() {
         <td>${lv}${lv === ERA2.meta.levelCap ? " <span class='faint'>(cap)</span>" : ""}</td>
         <td style="white-space:normal">${tasks[lv].map((t) => esc(t)).join(" · ")}</td>
       </tr>`).join("")}</tbody>`;
+  // Who was actually inside the gated stretch. The bands the pace panel counts
+  // in don't line up with the gate — 66–75 straddles level 71 — so this says
+  // "certainly" and "possibly" rather than quietly rounding both into "all 8".
+  const gate = levels[0];
+  const bands = ERA2.pace?.byBand ?? [];
+  const inside = bands.filter((b) => b.lo >= gate).reduce((s, b) => s + b.leveled, 0);
+  const maybe = bands.filter((b) => b.lo < gate && b.hi >= gate).reduce((s, b) => s + b.leveled, 0);
+
   $("tasks-note").innerHTML = `
     <b>This is why the top of the ladder is slow in a way XP alone doesn't explain.</b> Reaching
     level ${ERA2.meta.levelCap} asks for ${fmt(tasks[ERA2.meta.levelCap]?.length ?? 4)} specific
     achievements as well as the ${fmtCompact(ERA2.levelCost.at(-1).xpToNext)} XP of the final rung —
     and several of them, like 999 Excellent Throws or 50 platinum medals, are the work of months on
-    their own. The ${fmt(ERA2.pace?.nLeveled ?? 0)} trainers who moved during our window were
-    climbing against both.`;
+    their own.${inside ? ` Of the ${fmt(ERA2.pace?.nLeveled ?? 0)} trainers who moved during our
+      window, <b>${fmt(inside)} were above level ${gate}</b> and so climbing against both${
+      maybe ? `; ${fmt(maybe)} more sat in a band that straddles it` : ""}.` : ""}`;
 }
 
 /* ── the pace panel: the only place a clock touches this data ──────────────
@@ -1163,8 +1250,11 @@ function renderPace() {
     ${p.nActive ? `Of the ${fmt(p.nObserved)} trainers recorded twice in that window,
       <b>${fmt(p.nActive)} (${Math.round(activePct)}%) had caught something, battled or walked</b>
       between the two readings${cau?.median != null && km?.median != null
-        ? ` — a typical one added <b>${fmt(cau.median)} catches</b> and <b>${fmt(km.median, 1)} km</b>${
-            bat?.median != null ? `, and won <b>${fmt(Math.round(bat.median))} battles</b>` : ""}` : ""}.
+        ? ` — a typical one walked <b>${fmt(km.median, 1)} km</b>, and the <b>${fmt(cau.n)}</b> who
+            caught anything caught a median of <b>${fmt(cau.median)}</b>${
+            bat?.median != null ? `. Battling is the narrower habit: <b>${fmt(bat.n)}</b> of the
+              ${fmt(p.nActive)} won a battle at all, a median of <b>${fmt(Math.round(bat.median))}</b>
+              each` : ""}` : ""}.
       In the same window, on the same people, <b>${p.nLeveled === 0 ? "none" : "just " + fmt(p.nLeveled)}
       gained a level</b>.` : `Across about ${p.meanWindowDays} days, just ${fmt(p.nLeveled)} of
       ${fmt(p.nObserved)} gained a level.`}
@@ -1178,8 +1268,8 @@ function renderPace() {
       one of the dearest stretches on the ladder, so cost alone doesn't decide who moves. ` : ""}
     ${p.nExcludedForCorrection ? `(A further ${fmt(p.nExcludedForCorrection)} trainers were set aside: their
       level changed between readings because the record was corrected, not because they played.)` : ""}
-    One window, one cohort, whatever happened to be running that week — a real measurement, and not
-    a forecast.`;
+    One short window — ${p.meanWindowDays} days between readings on average — one cohort, and
+    whatever happened to be running at the time. A real measurement, not a forecast.`;
   $("pace-xref").hidden = false;
 }
 
@@ -1198,10 +1288,10 @@ function storySlides() {
   const slides = [];
 
   slides.push({ kicker: "The Trainer Model", big: "One ladder,<br>80 rungs.",
-    label: `How far real trainers have climbed the rebalanced game — ${fmt(ERA2.meta.n)} friends from one list, as of ${ERA2.meta.latestCapture}.` });
+    label: `How far real trainers have climbed the rebalanced game — ${fmt(ERA2.meta.n)} friends from one list, as of ${spellDate(ERA2.meta.latestCapture)}.` });
 
   if (l50) slides.push({ kicker: "Level 50 · the old summit", big: `${fmtCompact(l50.caught.median)} caught`,
-    label: `Today's median level-50 trainer has caught ${fmt(l50.caught.median)} Pokémon. In the 2025 game, 50 was the cap — its median trainer carried ${fmt(e1cap.median.caught)}. Same rung, a much longer ladder.` });
+    label: `Today's median level-50 trainer has caught ${fmt(l50.caught.median)} Pokémon — across just ${l50.n} of them, because hardly anyone stops at 50 any more. In the 2025 game, 50 was the cap, and its median trainer carried ${fmt(e1cap.median.caught)}. Same rung, a much longer ladder.` });
 
   if (l60) slides.push({ kicker: "Level 60 · the long middle", big: `${fmtCompact(l60.caught.median)} caught`,
     label: `The median level-60: ${fmt(l60.battles.median)} battles won and ${fmt(l60.distance.median, 1)} km walked, across ${l60.n} trainers.` });
@@ -1257,13 +1347,24 @@ function openStory() {
     if (opener && document.contains(opener)) opener.focus();
   };
 
+  /* The chrome is built once and only the stage is re-rendered, for one reason
+     that matters: a live region has to sit in the DOM before its text changes
+     or a screen reader has nothing to watch. Replacing the whole overlay per
+     slide — which is what this used to do — left the story completely silent,
+     while the site's own story mode (js/app.js) announced every slide. */
+  ov.innerHTML = `
+    <div class="story-prog" aria-hidden="true">${slides.map(() => "<i></i>").join("")}</div>
+    <button class="story-x" aria-label="Close story">×</button>
+    <div class="story-live sr-only" role="status" aria-live="polite"></div>
+    <div class="story-stage"></div>
+    <div class="story-hint">tap to continue · esc to close</div>`;
+  const stage = ov.querySelector(".story-stage");
+  const live = ov.querySelector(".story-live");
+  ov.querySelector(".story-x").addEventListener("click", (e) => { e.stopPropagation(); close(); });
+
   const render = () => {
     const s = slides[i];
-    ov.innerHTML = `
-      <div class="story-prog">${slides.map((_, k) =>
-        `<i class="${k < i ? "done" : k === i ? "cur" : ""}"></i>`).join("")}</div>
-      <button class="story-x" aria-label="Close story">×</button>
-      <div class="story-stage"><div class="story-slide">
+    stage.innerHTML = `<div class="story-slide">
         <div class="story-kicker">${s.kicker}</div>
         <div class="story-big">${s.big}</div>
         <div class="story-label">${s.label}</div>
@@ -1271,14 +1372,17 @@ function openStory() {
           <a class="btn btn-teal" href="#ready">Where this leaves you</a>
           <button class="btn btn-ghost" type="button">Close</button>
         </div>` : ""}
-      </div></div>
-      <div class="story-hint">tap to continue · esc to close</div>`;
-    ov.querySelector(".story-x").addEventListener("click", (e) => { e.stopPropagation(); close(); });
-    const ghost = ov.querySelector(".story-cta .btn-ghost");
+      </div>`;
+    [...ov.querySelectorAll(".story-prog i")].forEach((el, k) =>
+      (el.className = k < i ? "done" : k === i ? "cur" : ""));
+    const ghost = stage.querySelector(".story-cta .btn-ghost");
     if (ghost) ghost.addEventListener("click", (e) => { e.stopPropagation(); close(); });
-    const cta = ov.querySelector(".story-cta .btn-teal");
+    const cta = stage.querySelector(".story-cta .btn-teal");
     if (cta) cta.addEventListener("click", () => close());
-    // Each slide replaces the dialog's contents, which destroys whatever held
+    // announce each slide — otherwise the whole story is silent to screen readers
+    live.textContent = `Slide ${i + 1} of ${slides.length}. ${s.kicker}. `
+      + `${s.big.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").replace(/\.\s*$/, "").trim()}. ${s.label}`;
+    // Each slide replaces the stage's contents, which destroys whatever held
     // focus; put it back on the dialog itself so Tab still starts from inside.
     if (!ov.contains(document.activeElement)) ov.focus();
   };
@@ -1340,6 +1444,12 @@ async function initEra2() {
   // Fill in the 2026 column of the era-summary table, and state the ledger.
   renderHero();
   renderLedger();
+  // The era-1 chapters draw before this file lands, so they take the withholding
+  // floor from the default. Redraw them now that the build's own value is known
+  // — otherwise a build that ever ships a different floor would leave chapters
+  // 02 and 04 quietly masking to the old one.
+  renderExplorer();
+  renderR2Table();
   renderRank();
   renderEra2Scatter();
   renderEra2();

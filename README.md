@@ -137,35 +137,36 @@ pogo-metrics/          the deployed site (netlify.toml publishes this folder as-
 │   └── trainer-model.js   the Trainer Model dashboard engine
 ├── css/style.css      the site-wide stylesheet — no preprocessor
 ├── css/trainer-model.css  page-only styles for the Trainer Model, scoped under .tmodel
-├── demo/              anonymized sample export
+├── sample-export/     anonymized sample export (named for what it is, not for the
+│                      page that loads it — see netlify.toml on the name collision)
 ├── data/trainer-model/    the anonymized cohort JSONs behind the Trainer Model page
-├── tools/scrub-demo.mjs   regenerates demo/ from a real export
-├── tools/test-parsers.mjs runs every parser against demo/ as a regression check
+├── tools/scrub-demo.mjs   regenerates sample-export/ from a real export
+├── tools/test-parsers.mjs runs every parser against sample-export/ as a regression check
 ├── og-card.html       source for the share image; render it to regenerate og-image.png
 │                      (og-card-demo.html / og-card-model.html do the same for their pages)
 ├── og-image.png       1200×630 Open Graph / Twitter card (+ -demo and -model variants)
 ├── 404.html           branded not-found page (Netlify serves it automatically)
 ├── sw.js              service worker: installable + fully offline-capable
 ├── site.webmanifest   PWA manifest (+ favicon-32 / apple-touch-icon / icon-192 / icon-512)
-├── robots.txt         keeps the og-card pages out of search (demo + cohort data are
+├── robots.txt         keeps the og-card pages out of search (sample export + cohort data are
 │                      excluded via noindex headers instead — see netlify.toml); sitemap.xml alongside
 ├── static-server.mjs  tiny dependency-free static server for local preview
 └── vendor/            Chart.js, Leaflet, globe.gl, fonts, geo — all vendored, lazy-loaded
 ```
 
-## The demo dataset
+## The sample export
 
-`demo/` is generated from a real export by `tools/scrub-demo.mjs`. Every name, email, order number,
+`sample-export/` is generated from a real export by `tools/scrub-demo.mjs`. Every name, email, order number,
 IP, ad-ID, account ID and referral code is faked or dropped, support message bodies are removed,
 cities and countries are remapped, and the big event logs are downsampled. Numbers, dates, medals,
 species and timing are preserved so the story still feels real.
 
-**Coordinates are generated, not anonymized.** No location in `demo/` is derived from a real one.
+**Coordinates are generated, not anonymized.** No location in `sample-export/` is derived from a real one.
 The scrubber builds a synthetic world — one home city and seven travel cities — and assigns each
 distinct real coordinate a place in it by *how often it appears*, never by where it is. Frequency
 rank is the only thing that crosses over, and visit counts are already on screen in the app, so
 nothing new is exposed. Two real stops that were metres apart routinely land on different
-continents. What survives is the *distribution* that makes the demo worth looking at: one stop you
+continents. What survives is the *distribution* that makes the sample worth looking at: one stop you
 visit constantly, a long tail you don't, a home city, some travel, and raids far enough away to
 count as remote.
 
@@ -197,7 +198,7 @@ trainers gained a level — and deliberately never extrapolated into a time-to-8
 The data ships in `data/trainer-model/` as two JSONs. Handles are replaced with placeholder IDs
 before the data ever enters this repo; every stat is real and unmodified. Per-level statistics
 are withheld wherever fewer than five trainers share a level — at that size a "median" is just
-one person's numbers, so publishing it would be neither an average nor anonymous. Like `/demo/*`,
+one person's numbers, so publishing it would be neither an average nor anonymous. Like `/sample-export/*`,
 the raw files are crawlable but carry an `X-Robots-Tag: noindex` header (see `netlify.toml`) so
 they never surface in search results themselves.
 

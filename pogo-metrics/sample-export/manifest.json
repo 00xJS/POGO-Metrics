@@ -1,0 +1,30 @@
+{
+  "generated": "2026-08-08",
+  "note": "Fully anonymized synthetic demo derived from a real export. No real names, locations, emails or identifiers.",
+  "files": [
+    "Gameplay.txt",
+    "Player_Journey/Pokestop_spin1.csv",
+    "Player_Journey/Sfida_capture1.csv",
+    "Player_Journey/Map_Pokemon_encounter1.csv",
+    "Player_Journey/Join_Raid_lobby1.csv",
+    "Player_Journey/Gym_battle1.csv",
+    "Player_Journey/Feed_Pokemon1.csv",
+    "Player_Journey/Deploy_Pokemon1.csv",
+    "Player_Journey/Incense_encounter1.csv",
+    "Player_Journey/Lure_encounter1.csv",
+    "GameplayLocationHistory.tsv",
+    "FriendList.tsv",
+    "RecentlyUnfriended.tsv",
+    "RecentInviteActions.tsv",
+    "ActivityInvitesReceived.tsv",
+    "ActivityInvitesSent.tsv",
+    "InAppPurchases.tsv",
+    "FitnessData.tsv",
+    "Player_Journey/App_Sessions.csv",
+    "Player_Journey/App_Installs.csv",
+    "ImageData.txt",
+    "SupportInteractions1.tsv",
+    "LiveEventRegistrationHistory_AsPurchaser.tsv",
+    "wayfarer_player_data.json"
+  ]
+}
