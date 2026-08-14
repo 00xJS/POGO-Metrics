@@ -1064,8 +1064,11 @@ function parseWayfarer(text) {
 }
 
 /* ───────────────────────────── DOM helpers ───────────────────────────── */
-function moduleHTML(icon, title, sub, inner) {
-  return `<div class="module">
+/* `anchor` pins the chapter's #id when the heading can't be trusted to stay
+   the same — the trainer card's title contains the player's name, so its slug
+   would otherwise differ for every reader and no link to it could be shared. */
+function moduleHTML(icon, title, sub, inner, anchor) {
+  return `<div class="module"${anchor ? ` data-anchor="${anchor}"` : ""}>
     <div class="mod-head"><span class="mod-icon">${icon}</span><h3>${esc(title)}</h3></div>
     ${sub ? `<div class="mod-sub">${sub}</div>` : ""}
     ${inner}</div>`;
@@ -1316,7 +1319,11 @@ async function build() {
         const h = m.querySelector(".mod-head h3");
         const icon = m.querySelector(".mod-icon");
         const t = h ? h.textContent.trim() : "Chapter";
-        m.id = "ch-" + t.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+        // Slug from the heading, EXCEPT where the heading carries the trainer's
+        // name — "AshDemo at a glance" would mint a different anchor for every
+        // player, and these ids are meant to be linkable.
+        m.id = "ch-" + (m.dataset.anchor
+          || t.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, ""));
         return `<a class="ch-chip" href="#${m.id}">${icon ? icon.textContent + " " : ""}${esc(t)}</a>`;
       }).join("");
       res.querySelector(".res-hero").insertAdjacentHTML("afterend",
@@ -1348,12 +1355,41 @@ async function build() {
       if (hero) { try { hero.focus({ preventScroll: true }); } catch (e) {} }
       res.scrollIntoView({ behavior: scrollBehavior() });
     }
+    gotoChapterFromHash();
+    // Live Example only — see the note in js/nav.js on why metrics.html
+    // deliberately gets no copy-link affordance.
+    if (window.DEMO_PAGE && window.linkifyHeadings) window.linkifyHeadings("#results .module > .mod-head h3");
   } finally {
     BUILDING = false;
     POST = [];
     if (btn) { btn.disabled = false; btn.textContent = btnLabel; }
   }
 }
+/* Deep links into a chapter — e.g. /demo.html#ch-your-world-in-3d.
+ *
+ * The chapters don't exist when the browser resolves the fragment: this page
+ * parses an export first and mints the ids at the end of build(). The browser
+ * looks once, finds nothing, and never looks again — so every chapter anchor
+ * was share-proof until this ran the lookup a second time, after the build.
+ *
+ * Deliberately narrow. It only fires for ids this function just created, so a
+ * hash aimed at static markup (#request, #datasets) still resolves the ordinary
+ * way and isn't scrolled twice. Focus moves with the scroll, or a keyboard user
+ * lands at the chapter visually and at the top of the document in fact. */
+function gotoChapterFromHash() {
+  const id = decodeURIComponent(location.hash.slice(1));
+  if (!/^ch-[a-z0-9-]+$/.test(id)) return;
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.setAttribute("tabindex", "-1");
+  // rAF: the charts above it are still being laid out, and scrolling to a
+  // position that is about to move puts the reader in the wrong place.
+  requestAnimationFrame(() => {
+    el.scrollIntoView({ behavior: scrollBehavior(), block: "start" });
+    try { el.focus({ preventScroll: true }); } catch (e) {}
+  });
+}
+
 let POST = [];
 function later(fn) { POST.push(fn); }
 function safe(fn) { try { const html = fn(); if (html) $("results").insertAdjacentHTML("beforeend", html); } catch (e) { console.warn(fn.name, e); } }
@@ -1757,7 +1793,7 @@ function renderTrainer() {
   const windowed = (caught ? 1 : 0) + (evT["Spins"] ? 1 : 0);
   const subtitle = `Your trainer card${p.startYear ? `, playing since ${p.startYear}` : ""}${p.buddy ? ` · buddy ${esc(p.buddy)}` : ""}.`
     + (windowed ? ` Level, XP, distance and medals are lifetime totals; catches and spins are counted from your event logs, which reach back about three years.` : "");
-  return moduleHTML("🎮", (p.username ? esc(p.username) : "Your trainer") + " at a glance", subtitle, inner);
+  return moduleHTML("🎮", (p.username ? esc(p.username) : "Your trainer") + " at a glance", subtitle, inner, "trainer-card");
 }
 
 /* ── activity (Player_Journey) ── */

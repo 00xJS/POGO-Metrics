@@ -37,6 +37,58 @@
   addEventListener("resize", setNavH);
   if (window.ResizeObserver) new ResizeObserver(setNavH).observe(nav);
 
+  /* ── heading permalinks ────────────────────────────────────────────────
+     A "#" on each section heading that copies a link straight to it, so
+     nobody has to know the anchor names to point someone at one chapter.
+     Lives here because both engines need it and both pages already load
+     nav.js; they call it themselves, since the Live Example's chapters do
+     not exist until an export has been parsed.
+
+     Deliberately NOT offered on metrics.html: that page builds from files on
+     your own device, so a link to a chapter of it opens an empty upload page
+     for whoever you send it to. A copy-link button there would be an
+     invitation to share something that cannot be shared. */
+  let liveRegion = null;
+  window.linkifyHeadings = function (selector) {
+    document.querySelectorAll(selector).forEach((h) => {
+      const target = h.closest("[id]");
+      if (!target || !target.id || h.querySelector(".permalink")) return;
+
+      const a = document.createElement("a");
+      a.className = "permalink";
+      a.href = "#" + target.id;
+      a.textContent = "#";
+      a.dataset.tip = "Copy link";
+      // The heading text is the only thing that identifies WHICH link this is
+      // to someone who can't see where the "#" sits.
+      a.setAttribute("aria-label", `Copy link to “${h.textContent.trim()}”`);
+
+      a.addEventListener("click", (e) => {
+        // No preventDefault: letting the link navigate updates the address bar
+        // and scrolls, so even if the clipboard is unavailable the reader can
+        // still copy the URL by hand. The copy is the convenience, not the
+        // mechanism.
+        const url = location.origin + location.pathname + "#" + target.id;
+        if (!navigator.clipboard) return;
+        navigator.clipboard.writeText(url).then(() => {
+          a.dataset.tip = "Copied";
+          a.classList.add("copied");
+          if (!liveRegion) {
+            liveRegion = document.createElement("div");
+            liveRegion.className = "sr-only";
+            liveRegion.setAttribute("role", "status");
+            liveRegion.setAttribute("aria-live", "polite");
+            document.body.appendChild(liveRegion);
+          }
+          liveRegion.textContent = `Link copied: ${url}`;
+          setTimeout(() => { a.dataset.tip = "Copy link"; a.classList.remove("copied"); }, 1600);
+        }).catch(() => {});
+      });
+
+      h.appendChild(a);
+    });
+  };
+
   // Installable + offline-capable. Skipped on localhost so local dev never
   // fights a stale service-worker cache.
   // Root-absolute for the same reason as the links above: on 404.html — served

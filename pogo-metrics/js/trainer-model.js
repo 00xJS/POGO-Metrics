@@ -1457,6 +1457,9 @@ async function initEra2() {
   renderLadder();
   renderCost();
   renderPace();
+  // Chapters 06 and 08 ship hidden and were skipped by the first pass; the
+  // call is idempotent, so re-running it only fills in what's newly visible.
+  window.linkifyHeadings?.(".tmodel .sec-head h2");
 }
 
 /* ═══════════════════════ wiring ═══════════════════════ */
@@ -1492,6 +1495,11 @@ async function init() {
   renderR2Table();
   renderReport();
   renderPlaystyle();
+  // A "#" on every chapter heading that copies a link to it. Of the whole site
+  // this page is the one worth citing a single chapter of, and its section ids
+  // are static, so a link handed out today still lands tomorrow.
+  window.linkifyHeadings?.(".tmodel .sec-head h2");
+
   // Era-2 is optional and self-activating; a failure there must never take the
   // 2025 chapters down with it, and must not surface only as an unhandled
   // rejection. Nothing is awaited here — the era-1 page is already complete.
