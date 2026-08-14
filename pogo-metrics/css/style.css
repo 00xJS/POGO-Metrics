@@ -337,6 +337,34 @@ main { max-width: 1100px; margin: 0 auto; padding: 0 24px; }
 .mod-divider { border: 0; border-top: 1px solid var(--line); margin: 26px 0 22px; }
 .module .stat-grid:last-child { margin-bottom: 0; }
 
+/* ── heading permalinks (js/nav.js) ──────────────────────────────────────
+   Quiet until wanted: hidden behind a hover on the heading, revealed for
+   keyboard focus, and permanently visible on touch — where there is no hover
+   to reveal it with, so hiding it would mean hiding it for good. */
+.permalink {
+  margin-left: 10px; font-weight: 600; font-size: .72em; color: var(--ink-faint);
+  text-decoration: none; opacity: 0; transition: opacity .15s, color .15s;
+  position: relative; vertical-align: middle;
+}
+h2:hover > .permalink, h3:hover > .permalink,
+.permalink:hover, .permalink:focus-visible { opacity: 1; }
+.permalink:hover, .permalink.copied { color: var(--accent); text-decoration: none; }
+/* the tooltip — content comes from data-tip, which flips to "Copied" on click */
+.permalink::after {
+  content: attr(data-tip);
+  position: absolute; bottom: calc(100% + 7px); left: 50%; transform: translateX(-50%);
+  background: var(--bg-raised); border: 1px solid var(--line); border-radius: 6px;
+  padding: 3px 8px; font-family: var(--mono); font-size: 10.5px; font-weight: 500;
+  color: var(--ink-dim); white-space: nowrap; pointer-events: none;
+  opacity: 0; transition: opacity .12s;
+}
+.permalink:hover::after, .permalink:focus-visible::after, .permalink.copied::after { opacity: 1; }
+.permalink.copied::after { color: var(--accent); border-color: var(--accent); }
+@media (hover: none) {
+  .permalink { opacity: .55; }
+  .permalink::after { display: none; }   /* no hover to dismiss it with */
+}
+
 /* ---------- year-over-year + shareable year card ---------- */
 .yoy-metrics { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 14px; }
 .yoy-chip {
