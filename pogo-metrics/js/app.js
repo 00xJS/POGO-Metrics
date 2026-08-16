@@ -1887,7 +1887,12 @@ function renderActivity() {
     newChart(cDonut, {
       type: "doughnut",
       data: { labels: series, datasets: [{ data: series.map((s) => e.totals[s]), backgroundColor: series.map((s) => SERIES_COLORS[s] || C.dim), borderWidth: 0 }] },
-      options: { cutout: "60%", plugins: { legend: { position: "right" }, title: { display: true, text: "What you did most" } } },
+      /* Legend under the chart, not beside it. Chart.js pins a right-hand
+       * legend hard against the canvas edge (measured: zero right margin) and
+       * shoves the doughnut off to the left, so the pair reads as two things
+       * pushed apart rather than one centred chart. A bottom legend is centred
+       * by Chart.js and keeps the doughnut in the middle of its box. */
+      options: { cutout: "60%", plugins: { legend: { position: "bottom", align: "center" }, title: { display: true, text: "What you did most" } } },
     });
 
     // hour grid + 24h play clock, re-rendered together when the timezone chip flips
@@ -2045,7 +2050,7 @@ function renderBag() {
       datasets: [{ data: groups.map((g) => g[1]),
         backgroundColor: groups.map((g) => (BAG_GROUPS.find((x) => x[0] === g[0]) || [, , C.dim])[2]), borderWidth: 0 }],
     },
-    options: { cutout: "58%", plugins: { legend: { position: "right" }, title: { display: true, text: "What your bag is made of" } } },
+    options: { cutout: "58%", plugins: { legend: { position: "bottom", align: "center" }, title: { display: true, text: "What your bag is made of" } } },
   }));
 
   /* Eggs live in their own section of Gameplay.txt rather than the item list,
