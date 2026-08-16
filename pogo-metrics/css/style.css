@@ -940,15 +940,23 @@ footer .deck-line .sep { margin: 0 9px; opacity: .55; }
   }
 }
 
-/* then vs now — a compact delta table */
+/* then vs now — a compact delta table.
+ * The label column used to be 1fr against four `auto` number columns, so it
+ * swallowed every spare pixel and pinned the numbers to the far right — on a
+ * wide panel that left a canyon between "Logged actions" and its own figures.
+ * Now the number columns have real widths and the table is capped and centred,
+ * so the label and its numbers stay near each other at any width. */
 .tvn-head, .tvn-row {
-  display: grid; grid-template-columns: 1fr auto 24px auto 68px;
+  display: grid; grid-template-columns: minmax(0, 1fr) 84px 24px 84px 74px;
   gap: 10px; align-items: center; padding: 7px 0;
   border-bottom: 1px solid var(--line);
+  max-width: 620px; margin-inline: 0 auto;
 }
 .tvn-head { color: var(--ink-faint); font-size: 11.5px; text-transform: uppercase; letter-spacing: .08em; border-bottom-color: transparent; }
 .tvn-l { color: var(--ink-dim); font-size: 13.5px; font-weight: 600; }
-.tvn-a, .tvn-b { font-size: 13.5px; font-variant-numeric: tabular-nums; }
+/* right-aligned so the digits line up under their own year heading, and so
+   1,234 sits directly above 962 instead of drifting by string length */
+.tvn-a, .tvn-b { font-size: 13.5px; font-variant-numeric: tabular-nums; text-align: right; }
 .tvn-a { color: var(--ink-faint); }
 .tvn-b { color: var(--ink); font-weight: 700; }
 .tvn-arrow { text-align: center; font-size: 11px; }
@@ -957,6 +965,6 @@ footer .deck-line .sep { margin: 0 9px; opacity: .55; }
 .tvn-arrow.down, .tvn-d.down { color: var(--orange); }
 .tvn-arrow.flat, .tvn-d.flat { color: var(--ink-faint); }
 @media (max-width: 560px) {
-  .tvn-head, .tvn-row { grid-template-columns: 1fr auto 18px auto 56px; gap: 6px; }
+  .tvn-head, .tvn-row { grid-template-columns: minmax(0, 1fr) 56px 16px 56px 54px; gap: 6px; }
   .tvn-l { font-size: 12.5px; }
 }
