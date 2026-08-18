@@ -11,11 +11,33 @@
 /* CSS can't reach canvas/WebGL animation, so motion driven from JS checks this too. */
 const REDUCED_MOTION = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 const scrollBehavior = () => (REDUCED_MOTION ? "auto" : "smooth");
-const C = {
-  teal: "#41d8c6", yellow: "#ffcb05", red: "#ff5350", blue: "#3b6cff",
-  purple: "#a06bff", pink: "#ff6bb3", orange: "#ff9d42", green: "#5ad469",
-  dim: "#9ba1c5", grid: "rgba(255,255,255,.06)",
-};
+/* Chart/canvas colors, resolved ONCE from the stylesheet's custom properties.
+ * Canvas contexts need literal values, so this is the one legitimate bridge out
+ * of style.css — change a token there and every chart, the globe, and the PNG
+ * cards follow. The literals below are only fallbacks for anything that runs
+ * before the stylesheet; style.css is the source of truth.
+ * Semantics worth keeping: `red` maps to --down (#ff6b6b), NOT --pokeball-red —
+ * the stylesheet reserves the Pokéball red for the logo dot alone. */
+const C = (() => {
+  const fallback = {
+    teal: "#41d8c6", yellow: "#ffcb05", red: "#ff6b6b", blue: "#3b6cff",
+    purple: "#a06bff", pink: "#ff6bb3", orange: "#ff9a44", green: "#3ddc84",
+    dim: "#9ba1c5", faint: "#848ab0", ink: "#e8eaf6", bg: "#0a0d1c", panel2: "#171c47",
+    line: "rgba(255,255,255,.09)",
+  };
+  const tokens = {
+    teal: "--accent", yellow: "--accent2", red: "--down", blue: "--blue",
+    purple: "--purple", pink: "--pink", orange: "--orange", green: "--live",
+    dim: "--ink-dim", faint: "--ink-faint", ink: "--ink", bg: "--bg", panel2: "--panel2",
+    line: "--line",
+  };
+  const out = { grid: "rgba(255,255,255,.06)" };
+  try {
+    const cs = getComputedStyle(document.documentElement);
+    for (const k of Object.keys(tokens)) out[k] = cs.getPropertyValue(tokens[k]).trim() || fallback[k];
+  } catch (e) { Object.assign(out, fallback); }
+  return out;
+})();
 const SERIES_COLORS = {
   "GO Plus catches": C.teal, "Spins": C.blue, "Encounters": C.yellow,
   "Berries fed": C.green, "Raids": C.red, "Incense": C.purple,
@@ -63,7 +85,9 @@ const eventFor = (iso) => GO_EVENTS[iso] || null;
 const EVENT_BADGE = /^BADGE_(EVENT|GOFEST|GOTOUR|GO_TOUR|GOWA|SMORES|MINI_COLLECTION|COMMUNITY|SAFARI|CITY|WILD_AREA)/;
 
 /* ───────────────────────────── tiny helpers ───────────────────────────── */
-const fmt = (n) => Number(n).toLocaleString("en-US");
+/* grouping follows the reader's locale — trainer-model.js already did; the
+ * report was hard-locked to en-US, so the two pages disagreed on 1,234 vs 1.234 */
+const fmt = (n) => Number(n).toLocaleString();
 const round = (n) => Math.round(n);
 const esc = (s) => String(s == null ? "" : s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 const cap = (s) => s.charAt(0).toUpperCase() + s.slice(1).toLowerCase();
@@ -145,6 +169,22 @@ function haversine(la1, lo1, la2, lo2) {
 /* Yield the main thread. MessageChannel, never setTimeout: a background tab
  * clamps timers to as little as once a minute, which would turn a paused build
  * into a stalled one. */
+/* Async SUCCESS was silent to screen readers — errors have role=alert, but
+ * files landing and the demo finishing produced nothing. One polite region,
+ * cleared-then-set so repeat messages re-announce. */
+let LIVE_EL = null;
+function announce(msg) {
+  if (!LIVE_EL) {
+    LIVE_EL = document.createElement("div");
+    LIVE_EL.className = "sr-only";
+    LIVE_EL.setAttribute("role", "status");
+    LIVE_EL.setAttribute("aria-live", "polite");
+    document.body.appendChild(LIVE_EL);
+  }
+  LIVE_EL.textContent = "";
+  setTimeout(() => { if (LIVE_EL) LIVE_EL.textContent = msg; }, 30);
+}
+
 function nextTick() {
   return new Promise((res) => { const mc = new MessageChannel(); mc.port1.onmessage = () => res(); mc.port2.postMessage(0); });
 }
@@ -361,35 +401,70 @@ async function ingest(files) {
     else showError("No .tsv / .csv / .txt / .json files found in what you dropped.");
     return;
   }
-  let added = 0;
-  for (const f of list) {
-    const name = base(f.name);
-    const entry = window.catalogFor(name);
-    const existing = RAW.findIndex((r) => r.name.toLowerCase() === name.toLowerCase());
-    // Too large to read in a browser tab — keep it visible in the list instead
-    // of silently vanishing, so the user knows why that chapter is missing.
-    if (f.size > 80 * 1024 * 1024) {
-      const rec = { name, text: null, entry, oversize: Math.round(f.size / 1024 / 1024) };
+  /* Reading a whole folder is seconds of silent awaits — put the dropzone into
+   * a visible reading state so the drop never looks ignored. Restored in the
+   * finally, including on a mid-read Clear. */
+  const dzEl = $("dropzone");
+  const dzHead = dzEl && dzEl.querySelector("h2, h3");
+  const dzHead0 = dzHead ? dzHead.textContent : "";
+  let added = 0, readN = 0;
+  try {
+    for (const f of list) {
+      const name = base(f.name);
+      const entry = window.catalogFor(name)
+        // the app's own stats export is not a Niantic file, but it has a chapter
+        || (/^pogo-metrics-stats.*\.json$/i.test(name)
+          ? { name: "Friend's stats (from this site)", icon: "🤝", story: true, sensitivity: "low",
+              summary: "A stats JSON exported by POGO Metrics — unlocks the You vs. friend chapter." }
+          : null);
+      const existing = RAW.findIndex((r) => r.name.toLowerCase() === name.toLowerCase());
+      readN++;
+      if (dzHead && list.length > 2) dzHead.textContent = `Reading your files… (${readN} of ${list.length})`;
+      // Too large to read in a browser tab — keep it visible in the list instead
+      // of silently vanishing, so the user knows why that chapter is missing.
+      if (f.size > 80 * 1024 * 1024) {
+        const rec = { name, text: null, entry, oversize: Math.round(f.size / 1024 / 1024) };
+        if (existing >= 0) RAW[existing] = rec; else RAW.push(rec);
+        added++;
+        continue;
+      }
+      let text;
+      // A file whose read throws must not vanish without a trace — keep it in
+      // the list with its own honest status instead.
+      try { text = await f.text(); } catch (e) {
+        const rec = { name, text: null, entry, unreadable: true };
+        if (existing >= 0) RAW[existing] = rec; else RAW.push(rec);
+        continue;
+      }
+      if (stale()) return;   // cleared while this file was being read
+      // Keep the File handle alongside the text. build() drops the text once it
+      // has parsed it and re-reads from the handle on a rebuild, so a 40 MB
+      // export stops costing ~72 MB of retained UTF-16 for the tab's lifetime.
+      // Several files (sweepstakes, leaderboards, refunds) arrive containing
+      // nothing but "No data found." — that isn't a file we failed to read, it's
+      // Niantic saying there's nothing on record, and the list should say so.
+      const rec = { name, text, entry, file: f, empty: /^\s*No data found\.?\s*$/i.test(text) };
       if (existing >= 0) RAW[existing] = rec; else RAW.push(rec);
       added++;
-      continue;
     }
-    let text;
-    try { text = await f.text(); } catch (e) { continue; }
-    if (stale()) return;   // cleared while this file was being read
-    // Keep the File handle alongside the text. build() drops the text once it
-    // has parsed it and re-reads from the handle on a rebuild, so a 40 MB
-    // export stops costing ~72 MB of retained UTF-16 for the tab's lifetime.
-    // Several files (sweepstakes, leaderboards, refunds) arrive containing
-    // nothing but "No data found." — that isn't a file we failed to read, it's
-    // Niantic saying there's nothing on record, and the list should say so.
-    const rec = { name, text, entry, file: f, empty: /^\s*No data found\.?\s*$/i.test(text) };
-    if (existing >= 0) RAW[existing] = rec; else RAW.push(rec);
-    added++;
+  } finally {
+    if (dzHead) dzHead.textContent = dzHead0;
   }
   if (stale()) return;   // cleared on the last file — leave the wipe alone
-  if (!added) showError("Couldn't read those files. Try choosing them again, or pick the folder.");
+  if (!added && !RAW.length) showError("Couldn't read those files. Try choosing them again, or pick the folder.");
+  // A mixed drop keeps its valid files — but the ones filtered out by
+  // extension used to vanish silently, hiding a mis-drop.
+  const skippedExt = all.filter((f) => !/\.(tsv|csv|txt|json)$/i.test(f.name));
+  if (list.length && skippedExt.length) {
+    const names = skippedExt.slice(0, 4).map((f) => esc(f.name)).join(", ");
+    showError(`${skippedExt.length} file${skippedExt.length > 1 ? "s" : ""} in that drop ${skippedExt.length > 1 ? "aren't formats" : "isn't a format"} this site reads (${names}${skippedExt.length > 4 ? ", …" : ""})`
+      + (skippedExt.some((f) => /\.zip$/i.test(f.name))
+        ? " — the ZIP needs unzipping first; the files inside it are what you want to add."
+        : " — only .tsv / .csv / .txt / .json carry chapters."), true);
+  }
   renderDetected();
+  const summaryEl = document.querySelector(".det-head h2");
+  if (summaryEl) announce(summaryEl.textContent + ".");
   // On a phone the Build button lands below the fold, so picking files looked
   // like nothing happened. Bring the next step into view and focus it.
   if (RAW.length && $("build-row")) {
@@ -446,7 +521,7 @@ async function loadDemo() {
         <p>The sample export didn't come through — usually a connection blip.</p></div>`;
       const rb = document.createElement("button");
       rb.className = "btn btn-teal"; rb.type = "button"; rb.style.marginTop = "14px";
-      rb.textContent = "↻ Try again";
+      rb.innerHTML = '<span aria-hidden="true">↻</span> Try again';
       rb.onclick = () => { res.innerHTML = `<div class="empty-state"><div class="gl-spin" style="margin:0 auto 14px"></div><p>Building the example…</p></div>`; loadDemo(); };
       res.querySelector(".empty-state").appendChild(rb);
     }
@@ -458,28 +533,41 @@ function renderDetected() {
   if (!el) return; // results-only pages (e.g. the live-example page) skip the picker
   const buildRow = $("build-row");
   if (!RAW.length) { el.innerHTML = ""; if (buildRow) buildRow.style.display = "none"; return; }
+  const tally = { ready: 0, privacy: 0, noChapter: 0, empty: 0, oversize: 0, unknown: 0 };
   const rows = RAW.map((r) => {
-    let cls = "unknown", status = "Not recognized", name = r.name, icon = "❓", note = "We don't have a story for this file.";
+    let cls = "unknown", status = "Not recognized", name = r.name, icon = "❓", note = "We don't have a story for this file.", kind = "unknown";
     if (r.entry) {
       name = r.entry.name; icon = r.entry.icon; note = r.entry.summary;
-      if (r.entry.story) { cls = "ok"; status = "Ready"; }
+      if (r.entry.story) { cls = "ok"; status = "Ready"; kind = "ready"; }
       // "skipped for privacy" and "we have no chapter for this yet" are very
       // different promises — don't tell someone we ignored a harmless file.
-      else if (r.entry.sensitivity === "high") { cls = "skip"; status = "Skipped (privacy)"; }
-      else { cls = "skip"; status = "No chapter yet"; }
+      else if (r.entry.sensitivity === "high") { cls = "skip"; status = "Skipped (privacy)"; kind = "privacy"; }
+      else { cls = "skip"; status = "No chapter yet"; kind = "noChapter"; }
     }
-    if (r.empty) { cls = "skip"; status = "Empty — nothing on record"; note = "Niantic sent this file with no rows in it."; }
-    if (r.oversize) { cls = "skip"; status = `Too large (${r.oversize} MB) — skipped`; }
+    if (r.empty) { cls = "skip"; status = "Empty — nothing on record"; note = "Niantic sent this file with no rows in it."; kind = "empty"; }
+    if (r.oversize) { cls = "skip"; status = `Too large (${r.oversize} MB) — skipped`; kind = "oversize"; }
+    if (r.unreadable) { cls = "unknown"; status = "Couldn't read — add it again"; note = "The browser couldn't open this file. Pick or drop it once more."; kind = "unknown"; }
+    tally[kind]++;
     return `<div class="file-chip ${cls}">
       <span class="fc-icon">${icon}</span>
       <div class="fc-main"><div class="fc-name">${esc(name)}</div><div class="fc-file">${esc(r.name)} · ${esc(note)}</div></div>
       <span class="fc-status">${esc(status)}</span>
     </div>`;
   }).join("");
+  /* An honest summary, not a flat "N files ready": counting a mis-drop as
+   * "ready" hid the problem behind a closed disclosure until after Build. */
+  const bits = [`<b>${tally.ready}</b> chapter${tally.ready === 1 ? "" : "s"} ready`];
+  if (tally.privacy) bits.push(`${tally.privacy} privacy-skipped`);
+  if (tally.noChapter) bits.push(`${tally.noChapter} no chapter yet`);
+  if (tally.empty) bits.push(`${tally.empty} empty`);
+  if (tally.oversize) bits.push(`${tally.oversize} too large`);
+  if (tally.unknown) bits.push(`${tally.unknown} not recognized`);
+  // wrong or unreadable drops must be visible BEFORE the Build click
+  const attention = tally.unknown + tally.oversize > 0;
   el.innerHTML = `
-    <details class="det-files">
+    <details class="det-files"${attention ? " open" : ""}>
       <summary class="det-head">
-        <h2>${RAW.length} file${RAW.length > 1 ? "s" : ""} ready</h2>
+        <h2>${RAW.length} file${RAW.length > 1 ? "s" : ""} added · ${bits.join(" · ")}</h2>
         <span class="det-toggle">Review files</span>
       </summary>
       <div class="det-list">${rows}</div>
@@ -511,6 +599,9 @@ async function routeFile(name, text) {
     if (/app_installs\.csv$/i.test(n)) return parseInstalls(text);
     if (/liveeventregistrationhistory_aspurchaser\.tsv$/i.test(n)) return parseLiveEvents(text);
     if (/wayfarer_player_data\.json$/i.test(n)) return parseWayfarer(text);
+    // The app's own location-free stats export, re-imported: two friends swap
+    // files over chat and each gets a You-vs-them chapter — no server involved.
+    if (/^pogo-metrics-stats.*\.json$/i.test(n)) return parseCompare(text);
     if (/imagedata\.txt$/i.test(n)) return parsePhotos(text);
     if (/supportinteractions\d*\.tsv$/i.test(n)) return parseSupport(text);
   } catch (e) {
@@ -1092,14 +1183,87 @@ function chartWrap(id, cls = "") { return `<div class="chart-wrap ${cls}"><canva
  * left every chart with Chart.js's own low-contrast #666 text, the wrong font,
  * and animations running for reduced-motion users. */
 let CHART_THEMED = false;
+const NARROW_VIEW = () => window.matchMedia && window.matchMedia("(max-width: 560px)").matches;
 function themeCharts() {
   if (CHART_THEMED || !window.Chart) return;
   CHART_THEMED = true;
+  const narrow = NARROW_VIEW();
   Chart.defaults.color = C.dim;
   Chart.defaults.font.family = "'Outfit', system-ui, sans-serif";
   Chart.defaults.borderColor = C.grid;
-  Chart.defaults.plugins.legend.labels.boxWidth = 12;
-  Chart.defaults.plugins.legend.labels.boxHeight = 12;
+  Chart.defaults.plugins.legend.labels.boxWidth = narrow ? 8 : 12;
+  Chart.defaults.plugins.legend.labels.boxHeight = narrow ? 8 : 12;
+  if (narrow) {
+    /* At phone width the legend was eating up to half of every canvas
+     * (measured: a 142px legend over a 110px doughnut). Chrome shrinks first. */
+    Chart.defaults.plugins.legend.labels.font = { size: 10 };
+    Chart.defaults.plugins.legend.labels.padding = 6;
+  }
+  // one bar language for every chart — was 2/3/6 decided chart by chart
+  Chart.defaults.elements.bar.borderRadius = 3;
+
+  /* House tooltip: the same surface, border and mono value line as the heat
+   * grids' .hw-tip, so the report has ONE tooltip design instead of Chart.js's
+   * stock black box beside a styled bespoke one. */
+  const tt = Chart.defaults.plugins.tooltip;
+  tt.backgroundColor = C.panel2;
+  tt.borderColor = C.line;
+  tt.borderWidth = 1;
+  tt.cornerRadius = 9;
+  tt.padding = 10;
+  tt.titleColor = "#fff";
+  tt.bodyColor = C.teal;
+  tt.bodyFont = { family: "'JetBrains Mono', monospace", size: 12 };
+  tt.footerColor = "#fff";
+  tt.footerFont = { family: "'JetBrains Mono', monospace", size: 12, weight: 700 };
+  /* Index-mode tooltips list up to nine series and leave the reader to sum
+   * them by eye: drop zero rows, sort biggest first, and print the total.
+   * Math.abs keeps the diverging friends chart honest — its "Unfriended"
+   * series is stored negative. */
+  const rawN = (i) => {
+    const v = typeof i.raw === "number" ? i.raw : i.parsed && typeof i.parsed.y === "number" ? i.parsed.y : Number(i.raw);
+    return isFinite(v) ? v : 0;
+  };
+  tt.filter = (item, idx, items) => items.length <= 1 || rawN(item) !== 0;
+  tt.itemSort = (a, b) => Math.abs(rawN(b)) - Math.abs(rawN(a));
+  tt.callbacks.footer = (items) => (items.length > 1 ? "Total: " + fmt(items.reduce((a, i) => a + Math.abs(rawN(i)), 0)) : "");
+
+  /* Part-of-whole charts must state the share — wedge angles are not a number.
+   * Applies to every doughnut through the type override. */
+  Chart.overrides.doughnut = Chart.overrides.doughnut || {};
+  Chart.overrides.doughnut.plugins = Chart.overrides.doughnut.plugins || {};
+  Chart.overrides.doughnut.plugins.tooltip = {
+    callbacks: {
+      label: (c) => {
+        const total = c.dataset.data.reduce((a, b) => a + (+b || 0), 0);
+        return `${c.label}: ${fmt(c.raw)} (${total ? ((c.raw / total) * 100).toFixed(1) : 0}%)`;
+      },
+      footer: () => "",
+    },
+  };
+  /* …and the empty cutout is where the total belongs. Opt in per chart with
+   * options.plugins.centerText = { unit: "actions" }. */
+  Chart.register({
+    id: "centerText",
+    afterDraw(chart) {
+      const o = chart.options.plugins && chart.options.plugins.centerText;
+      if (!o || chart.config.type !== "doughnut") return;
+      const meta = chart.getDatasetMeta(0);
+      if (!meta || !meta.data || !meta.data[0]) return;
+      const { x, y } = meta.data[0];
+      const total = chart.data.datasets[0].data.reduce((a, b) => a + (+b || 0), 0);
+      const ctx = chart.ctx;
+      ctx.save();
+      ctx.textAlign = "center";
+      ctx.fillStyle = "#fff";
+      ctx.font = `700 ${narrow ? 17 : 21}px 'JetBrains Mono', monospace`;
+      ctx.fillText(fmt(total), x, y - 2);
+      ctx.fillStyle = C.dim;
+      ctx.font = `${narrow ? 10 : 12}px 'Outfit', system-ui, sans-serif`;
+      ctx.fillText(o.unit || "total", x, y + (narrow ? 14 : 17));
+      ctx.restore();
+    },
+  });
   if (REDUCED_MOTION) Chart.defaults.animation = false;
 }
 
@@ -1178,6 +1342,16 @@ function newChart(id, cfg) {
   themeCharts();
   cfg.options = cfg.options || {};
   cfg.options.maintainAspectRatio = false;
+  /* A ~260px phone canvas can't spend pixels on 14-16 rotated tick labels or a
+   * y-axis title — derive the tick budget from the real width so labels stay
+   * horizontal and the plot keeps the pixels. Desktop budgets are unchanged. */
+  const xs = cfg.options.scales && cfg.options.scales.x;
+  if (xs && cfg.options.indexAxis !== "y") {
+    const w = (cv.parentElement && cv.parentElement.clientWidth) || cv.clientWidth || 600;
+    xs.ticks = xs.ticks || {};
+    xs.ticks.maxTicksLimit = Math.min(xs.ticks.maxTicksLimit || 14, Math.max(5, Math.floor(w / 56)));
+    if (w && w < 340 && cfg.options.scales.y && cfg.options.scales.y.title) cfg.options.scales.y.title.display = false;
+  }
   const fallback = (cfg.data && cfg.data.datasets && cfg.data.datasets[0] && cfg.data.datasets[0].label) || "Data chart";
   const ch = new Chart(cv, cfg);
   try { chartA11y(cv, ch.data, ch.options, fallback); } catch (e) { console.warn("chart a11y", e); }
@@ -1228,7 +1402,8 @@ async function build() {
   const res = $("results");
   res.classList.remove("results-hidden");
   res.innerHTML = `<div class="empty-state"><div class="gl-spin" style="margin:0 auto 14px"></div>
-    <p id="build-progress">Reading your files…</p></div>`;
+    <p id="build-progress">${SAMPLE_DATA || window.DEMO_PAGE ? "Reading the sample export…" : "Reading your files…"}</p>
+    <div class="build-bar" aria-hidden="true"><i id="build-bar-fill"></i></div></div>`;
   try {
     teardown(); // also resets STATE
 
@@ -1238,10 +1413,17 @@ async function build() {
     // Yields between files; the big parsers additionally yield WITHIN a file
     // (see eachRow), which is what stops one 8.9MB CSV freezing the page.
     const prog = $("build-progress");
+    const bar = $("build-bar-fill");
+    const readable = RAW.filter((r) => !r.oversize).length;
+    const srcWord = SAMPLE_DATA || window.DEMO_PAGE ? "the sample export" : "your files";
+    let readN = 0;
     const unreadable = [];
     for (const r of RAW) {
       if (r.oversize) continue; // too large to read at all — already flagged in the list
-      if (prog) prog.textContent = `Reading ${r.name}…`;
+      readN++;
+      // determinate, not a bare spinner: "2 in or 12?" is the whole question
+      if (prog) prog.textContent = `Reading ${r.name} (${readN} of ${readable}, ${srcWord})…`;
+      if (bar) bar.style.width = Math.round((readN / Math.max(1, readable)) * 88) + "%";
       await nextTick(); // let the progress line paint without timer throttling
       // On a rebuild the text was released after the last build; read it again
       // from the File handle the browser still holds.
@@ -1271,6 +1453,7 @@ async function build() {
         .then(() => ensureScript("vendor/leaflet-heat.js")));
     }
     if (prog) prog.textContent = "Drawing your story…";
+    if (bar) bar.style.width = "96%";
     await Promise.all(libWaits.map((p) => p.catch((e) => console.warn(e))));
     if (stale()) return abort(); // cleared while libraries loaded — draw nothing
 
@@ -1304,6 +1487,7 @@ async function build() {
     safe(renderRecentLog);
     safe(renderRecords);
     safe(renderYearOverYear);
+    safe(renderCompare);
     safe(renderSocial);
     safe(renderSpending);
     safe(renderFitness);
@@ -1328,6 +1512,15 @@ async function build() {
       }).join("");
       res.querySelector(".res-hero").insertAdjacentHTML("afterend",
         `<nav class="chapter-nav" aria-label="Chapters">${chips}</nav>`);
+      /* Chapter grammar: the landing numbers its sections and the Trainer Model
+       * eyebrows its chapters, but the actual product's chapters had neither.
+       * Numbered here, after assembly, so the count is right whatever subset of
+       * files was uploaded. */
+      mods.forEach((m, i) => {
+        const head = m.querySelector(".mod-head");
+        if (head && !m.querySelector(".mod-eyebrow"))
+          head.insertAdjacentHTML("beforebegin", `<div class="mod-eyebrow">Chapter ${String(i + 1).padStart(2, "0")}</div>`);
+      });
     }
 
     res.insertAdjacentHTML("beforeend", outro());
@@ -1340,8 +1533,18 @@ async function build() {
     wireCountUps(res);
     // The demo page's hero CTA can only work once STATE is populated — enabling
     // it here avoids opening a one-slide story over an empty build.
+    fetchCohortRank();
     const demoCta = $("demo-story-cta");
-    if (demoCta) { demoCta.disabled = false; demoCta.onclick = () => storyMode(); }
+    if (demoCta) {
+      demoCta.disabled = false; demoCta.onclick = () => storyMode();
+      announce(`Example ready: ${res.querySelectorAll(".module").length} chapters.`);
+    }
+    /* The tab strip should say which tab holds the journey — this app asks
+     * people to keep the tab open, since a report can't be deep-linked. */
+    if (!window.DEMO_PAGE) {
+      const who = STATE.profile && STATE.profile.username;
+      document.title = `${who ? esc(who) + "'s" : "Your"} journey — POGO Metrics`;
+    }
     /* Move focus and scroll to the freshly built story — but ONLY when the user
      * asked for a build. On metrics.html they pressed a button and expect to be
      * taken to the result. The live-example page builds itself on load, so the
@@ -1415,11 +1618,12 @@ function resHero() {
        <button class="btn btn-primary" id="story-btn" type="button">▶ Play the example story</button>
      </div>`
     : `<div class="res-toolbar">
-       <button class="btn btn-primary" id="story-btn" type="button">▶ Play my story</button>
-       <button class="btn btn-teal" id="journey-btn" type="button">⬇ Journey card</button>
-       <button class="btn btn-ghost" id="json-btn" type="button">🧾 My numbers</button>
-       <button class="btn btn-teal" id="addmore-btn" type="button">＋ Add more files</button>
-       <button class="btn btn-ghost" id="restart-btn" type="button">↺ Start over</button>
+       <button class="btn btn-primary" id="story-btn" type="button"><span aria-hidden="true">▶</span> Play my story</button>
+       <button class="btn btn-teal" id="journey-btn" type="button"><span aria-hidden="true">⬇</span> Journey card</button>
+       <button class="btn btn-ghost" id="json-btn" type="button"><span aria-hidden="true">🧾</span> My numbers</button>
+       <button class="btn btn-ghost" id="poster-btn" type="button"><span aria-hidden="true">🖼</span> Poster</button>
+       <button class="btn btn-teal" id="addmore-btn" type="button"><span aria-hidden="true">＋</span> Add more files</button>
+       <button class="btn btn-ghost" id="restart-btn" type="button"><span aria-hidden="true">↺</span> Start over</button>
      </div>`;
   return `<div class="res-hero">
     <div class="eyebrow">${window.DEMO_PAGE ? "Live example · sample data" : "Your Pokémon GO metrics"}</div>
@@ -1437,6 +1641,11 @@ function wireToolbar() {
     else jc.style.display = "none"; // needs Player_Journey data to mean anything
   }
   if (js) js.onclick = () => downloadStatsJSON();
+  const po = $("poster-btn");
+  if (po) {
+    if (Object.keys(STATE.ev.dayCounts).length) po.onclick = () => downloadPoster(po);
+    else po.style.display = "none"; // the poster is built from the daily ledger
+  }
   if (a) a.onclick = () => $("upload-section").scrollIntoView({ behavior: scrollBehavior() });
   if (r) r.onclick = () => {
     // two-tap confirm — a mis-tap here would throw away minutes of file-picking
@@ -1508,47 +1717,135 @@ function outro() {
 }
 
 /* ── story mode: a Wrapped-style, full-screen tappable recap built from STATE ── */
-function storySlides() {
-  const e = STATE.ev, s = [];
+/* ── trainer archetype: the "listening personality" move. Pure arithmetic over
+   aggregates already in STATE — each candidate's score is (their value /
+   a rough "this defines you" bar), and the strongest identity wins. The bars
+   are editorial, not statistics: they only have to rank ONE trainer's own
+   tendencies against each other. ── */
+function trainerArchetype() {
+  const e = STATE.ev;
   const total = Object.values(e.totals).reduce((a, b) => a + b, 0);
+  if (!total) return null;
+  const share = (k) => (e.totals[k] || 0) / total;
+  const local = gridShift(e.hourweek, -new Date().getTimezoneOffset() / 60);
+  let night = 0, all = 0;
+  for (let d = 0; d < 7; d++) for (let h = 0; h < 24; h++) { all += local[d][h]; if (h >= 22 || h < 4) night += local[d][h]; }
+  const km = Object.values(STATE.fitness.daily).reduce((a, d) => a + (d.meters || 0), 0) / 1000;
+  const streak = longestStreak(Object.keys(e.dayCounts));
+  const cands = [
+    ["The Raid Boss", "⚔️", share("Raids") / 0.18, "raids first, questions later", [C.red, C.orange]],
+    ["The Night Owl", "🦉", (all ? night / all : 0) / 0.22, "the map belongs to you after dark", [C.purple, C.blue]],
+    ["The Globe-Trotter", "🌍", Math.max(e.geo.size / 900, (e.raidMaxKm || 0) / 14000), "your journey spans the actual globe", [C.blue, C.teal]],
+    ["The Socialite", "🤝", STATE.friends.rows.length / 160, "the friends list IS the game", [C.pink, C.purple]],
+    ["The Marathoner", "🏃", km / 3000, "kilometres are your real currency", [C.green, C.teal]],
+    ["The Photographer", "📸", (STATE.photos.total || 0) / 450, "you stop to shoot what others run past", [C.yellow, C.pink]],
+    ["The Ever-Present", "🔥", streak / 130, "day after day, without missing one", [C.orange, C.yellow]],
+    ["The Patron", "💎", (STATE.spend.coinsBought || 0) / 350000, "you back the habit properly", [C.yellow, C.orange]],
+    ["The Collector", "🎯", (catchesOf(e.totals) / total) / 0.45, "if it spawns, it's yours", [C.teal, C.yellow]],
+    ["The Spin Doctor", "🌀", share("Spins") / 0.35, "every stop on the map, spun", [C.blue, C.teal]],
+  ];
+  cands.sort((a, b) => b[2] - a[2]);
+  const [name, emoji, score, line, grads] = cands[0];
+  if (!(score > 0.5)) return { name: "The All-Rounder", emoji: "🧭", line: "a bit of everything, mastered patiently", grads: [C.teal, C.yellow] };
+  return { name, emoji, line, grads };
+}
+
+/* Wrapped's signature stat, from data the site already ships: where this
+ * trainer stands in the Trainer Model's real cohort. Lazy, cached, and
+ * fire-and-forget — the chip and story slide appear when it lands. */
+let COHORT_LEVELS = null;
+async function fetchCohortRank() {
+  const lv = STATE.profile && STATE.profile.level;
+  if (!lv) return;
+  try {
+    if (!COHORT_LEVELS) {
+      const r = await fetch("data/trainer-model/era2.json");
+      if (!r.ok) return;
+      const j = await r.json();
+      COHORT_LEVELS = (j.trainers || []).map((t) => t.level).filter((n) => isFinite(n)).sort((a, b) => a - b);
+    }
+    if (!COHORT_LEVELS.length) return;
+    const below = COHORT_LEVELS.filter((l) => l < lv).length;
+    const pct = Math.round((below / COHORT_LEVELS.length) * 100);
+    STATE.cohortPct = { pct, n: COHORT_LEVELS.length, level: lv };
+    const sub = document.querySelector('.module[data-anchor="trainer-card"] .mod-sub, #ch-trainer-card .mod-sub');
+    if (sub) sub.insertAdjacentHTML("beforeend",
+      ` <b>Level ${lv} — ahead of ${pct}% of ${fmt(COHORT_LEVELS.length)} real trainers.</b> <a href="trainer-model.html#standing">See where you stand →</a>`);
+  } catch (e) { /* the model link still covers this */ }
+}
+
+/* Slides for the full journey, or — given a year — that year alone. The
+ * year-over-year cards each get a "Play <year>" button that reuses this whole
+ * overlay: same gradients, count-ups and a11y, different data slice. */
+function storySlides(year) {
+  const e = STATE.ev, s = [];
+  const yr = year ? String(year) : null;
+  const inYear = (iso) => !yr || iso.startsWith(yr);
+  const dayKeys = Object.keys(e.dayCounts).filter(inYear).sort();
+  // lifetime uses the parser's totals; a year sums its own months
+  const kinds = yr
+    ? Object.keys(e.byMonth).filter((m) => m.startsWith(yr)).reduce((acc, m) => {
+        for (const k of Object.keys(e.byMonth[m])) acc[k] = (acc[k] || 0) + e.byMonth[m][k];
+        return acc;
+      }, {})
+    : e.totals;
+  const total = Object.values(kinds).reduce((a, b) => a + b, 0);
+  const sumMonthly = (obj) => !obj ? 0 : Object.keys(obj).filter(inYear).reduce((a, k) => a + obj[k], 0);
   const who = (STATE.profile && STATE.profile.username) || (window.DEMO_PAGE ? "AshDemo" : "Trainer");
-  const dayKeys = Object.keys(e.dayCounts).sort();
-  s.push({ kicker: "POGO METRICS PRESENTS", big: esc(who), label: "this is your story", grad: 0 });
+  s.push(yr
+    ? { kicker: `POGO METRICS · ${yr}`, big: esc(who), label: `this was your ${yr}`, grad: 0 }
+    : { kicker: "POGO METRICS PRESENTS", big: esc(who), label: "this is your story", grad: 0 });
   if (dayKeys.length) {
-    const daysSince = Math.round((Date.now() - new Date(dayKeys[0] + "T00:00:00Z")) / 86400000);
-    s.push({ kicker: "DAY ONE", big: fmtDate(parseTS(dayKeys[0])), label: `${fmt(daysSince)} days ago, your log begins`, grad: 1 });
+    if (yr) s.push({ kicker: "THE YEAR IN DAYS", num: dayKeys.length, label: `days you played in ${yr}`, grad: 1 });
+    else {
+      const daysSince = Math.round((Date.now() - new Date(dayKeys[0] + "T00:00:00Z")) / 86400000);
+      s.push({ kicker: "DAY ONE", big: fmtDate(parseTS(dayKeys[0])), label: `${fmt(daysSince)} days ago, your log begins`, grad: 1 });
+    }
   }
-  if (total) s.push({ kicker: "SINCE THEN", num: total, label: "actions in the game's log — every spin, catch, raid and battle Niantic wrote down", grad: 2 });
-  const catches = catchesOf(e.totals);
-  if (catches) s.push({ kicker: "GOTTA CATCH 'EM ALL", num: catches, label: "Pokémon caught in the logs — map, incense, lure and GO Plus catches combined", grad: 3 });
+  if (total) s.push({ kicker: yr ? `YOUR ${yr}` : "SINCE THEN", num: total, label: yr ? `actions logged in ${yr}` : "actions in the game's log — every spin, catch, raid and battle Niantic wrote down", grad: 2 });
+  const catches = catchesOf(kinds);
+  if (catches) s.push({ kicker: "GOTTA CATCH 'EM ALL", num: catches, label: `Pokémon caught${yr ? ` in ${yr}` : " in the logs — map, incense, lure and GO Plus catches combined"}`, grad: 3 });
   let bigDay = null, bigN = 0;
   for (const d of dayKeys) if (e.dayCounts[d] > bigN) { bigN = e.dayCounts[d]; bigDay = d; }
-  if (bigDay) s.push({ kicker: "YOUR BIGGEST DAY", num: bigN, label: `actions on ${fmtDate(parseTS(bigDay))}${eventFor(bigDay) ? " — " + eventFor(bigDay) : ""}`, grad: 4 });
-  // busiest slot in the VIEWER'S clock — "your hour" should feel like their life, not UTC
-  const local = gridShift(e.hourweek, -new Date().getTimezoneOffset() / 60);
-  let bd = 0, bh = 0, bn = 0;
-  for (let d = 0; d < 7; d++) for (let h = 0; h < 24; h++) if (local[d][h] > bn) { bn = local[d][h]; bd = d; bh = h; }
-  if (bn) s.push({ kicker: "YOUR HOUR", big: `${DAY_FULL[bd]}s, ${hourLabel(bh)}`, label: "when you play the most, in your local time", grad: 5 });
-  if (e.geo.size) s.push({ kicker: "YOUR WORLD", num: e.geo.size, label: "places you've played" + (e.raidMaxKm ? ` — raiding ${fmt(round(e.raidMaxKm))} km from home` : ""), grad: 6 });
+  if (bigDay) s.push({ kicker: yr ? `${yr}'S BIGGEST DAY` : "YOUR BIGGEST DAY", num: bigN, label: `actions on ${fmtDate(parseTS(bigDay))}${eventFor(bigDay) ? " — " + eventFor(bigDay) : ""}`, grad: 4 });
+  if (!yr) {
+    // busiest slot in the VIEWER'S clock — "your hour" should feel like their life, not UTC
+    const local = gridShift(e.hourweek, -new Date().getTimezoneOffset() / 60);
+    let bd = 0, bh = 0, bn = 0;
+    for (let d = 0; d < 7; d++) for (let h = 0; h < 24; h++) if (local[d][h] > bn) { bn = local[d][h]; bd = d; bh = h; }
+    if (bn) s.push({ kicker: "YOUR HOUR", big: `${DAY_FULL[bd]}s, ${hourLabel(bh)}`, label: "when you play the most, in your local time", grad: 5 });
+    if (e.geo.size) s.push({ kicker: "YOUR WORLD", num: e.geo.size, label: "places you've played" + (e.raidMaxKm ? ` — raiding ${fmt(round(e.raidMaxKm))} km from home` : ""), grad: 6 });
+  }
   const streak = longestStreak(dayKeys);
-  if (streak > 1) s.push({ kicker: "DEDICATION", num: streak, label: "days in a row, without missing one", grad: 7 });
-  if (STATE.friends.rows.length) s.push({ kicker: "NOT ALONE", num: STATE.friends.rows.length, label: "friends on the journey", grad: 8 });
-  if (STATE.spend.coinsBought) s.push({ kicker: "THE WAR CHEST", num: STATE.spend.coinsBought, label: "PokéCoins bought", grad: 9 });
-  const km = Object.values(STATE.fitness.daily).reduce((a, d) => a + (d.meters || 0), 0) / 1000;
-  if (km > 1) s.push({ kicker: "ON FOOT", num: Math.round(km), label: "kilometres walked with the game open", grad: 10 });
-  if (STATE.photos.total) s.push({ kicker: "THROUGH THE LENS", num: STATE.photos.total, label: "GO Snapshots you stopped to take", grad: 3 });
+  if (streak > 1) s.push({ kicker: "DEDICATION", num: streak, label: `days in a row${yr ? ` in ${yr}` : ""}, without missing one`, grad: 7 });
+  const friendsN = yr ? sumMonthly(STATE.friends.monthly) : STATE.friends.rows.length;
+  if (friendsN) s.push({ kicker: "NOT ALONE", num: friendsN, label: yr ? `friends added in ${yr}` : "friends on the journey", grad: 8 });
+  const coins = yr ? sumMonthly(STATE.spend.boughtMonthly) : STATE.spend.coinsBought;
+  if (coins) s.push({ kicker: "THE WAR CHEST", num: coins, label: `PokéCoins bought${yr ? ` in ${yr}` : ""}`, grad: 9 });
+  const km = Object.keys(STATE.fitness.daily).filter(inYear).reduce((a, k) => a + (STATE.fitness.daily[k].meters || 0), 0) / 1000;
+  if (km > 1) s.push({ kicker: "ON FOOT", num: Math.round(km), label: `kilometres walked with the game open${yr ? ` in ${yr}` : ""}`, grad: 10 });
+  const photosN = yr ? sumMonthly(STATE.photos.monthly) : STATE.photos.total;
+  if (photosN) s.push({ kicker: "THROUGH THE LENS", num: photosN, label: `GO Snapshots you stopped to take${yr ? ` in ${yr}` : ""}`, grad: 3 });
+  if (!yr) {
+    const arch = trainerArchetype();
+    if (arch) s.push({ kicker: "YOUR TRAINER TYPE", big: `${arch.emoji} ${esc(arch.name)}`, label: `${arch.line} — computed from your whole journey`, grad: 5, gradPair: arch.grads });
+    if (STATE.cohortPct) s.push({ kicker: "AMONG TRAINERS", big: `top ${Math.max(1, 100 - STATE.cohortPct.pct)}%`,
+      label: `Level ${STATE.cohortPct.level} — ahead of ${STATE.cohortPct.pct}% of ${fmt(STATE.cohortPct.n)} real trainers in the Trainer Model cohort`, grad: 4 });
+  }
   const years = [...new Set(Object.keys(e.byMonth).map((m) => m.slice(0, 4)))];
-  s.push({
-    kicker: "AND COUNTING",
-    big: years.length ? `${years.length} year${years.length > 1 ? "s" : ""} of adventure` : "Your adventure",
-    label: window.DEMO_PAGE ? "this was the sample trainer — imagine yours" : "grab the card, flex the journey",
-    grad: 11, finale: true,
-  });
+  s.push(yr
+    ? { kicker: "AND THAT WAS " + yr, big: `${yr}, wrapped`, label: "grab the year card below to keep it", grad: 11, finale: true }
+    : {
+      kicker: "AND COUNTING",
+      big: years.length ? `${years.length} year${years.length > 1 ? "s" : ""} of adventure` : "Your adventure",
+      label: window.DEMO_PAGE ? "this was the sample trainer — imagine yours" : "grab the card, flex the journey",
+      grad: 11, finale: true,
+    });
   return s;
 }
 
-function storyMode() {
-  const slides = storySlides();
+function storyMode(year) {
+  const slides = storySlides(year);
   if (!slides.length) return;
   // The overlay covers the trigger, but a keyboard user's focus stays on it —
   // a second Enter would otherwise stack a second story on top of the first.
@@ -1557,18 +1854,23 @@ function storyMode() {
   const GRADS = [[C.teal, C.yellow], [C.blue, C.teal], [C.yellow, C.orange], [C.red, C.pink],
     [C.purple, C.blue], [C.pink, C.purple], [C.green, C.teal], [C.orange, C.red],
     [C.teal, C.purple], [C.yellow, C.green], [C.blue, C.pink], [C.teal, C.yellow]];
+  const SLIDE_MS = 6000;                 // auto-advance pace; the segment fill matches it
+  const AUTOPLAY = !REDUCED_MOTION;      // reduced motion keeps the story tap-driven
   const ov = document.createElement("div");
-  ov.className = "story-ov";
+  ov.className = "story-ov" + (AUTOPLAY ? " autoplay" : "");
+  ov.style.setProperty("--slide-ms", SLIDE_MS + "ms");
   ov.setAttribute("role", "dialog");
   ov.setAttribute("aria-modal", "true");
   ov.setAttribute("aria-label", "Your story, chapter by chapter");
   ov.innerHTML = `
-    <div class="story-prog" aria-hidden="true">${slides.map(() => "<i></i>").join("")}</div>
+    <div class="story-bg" aria-hidden="true"></div>
+    <div class="story-bg" aria-hidden="true"></div>
+    <div class="story-prog" aria-hidden="true">${slides.map(() => "<i><b></b></i>").join("")}</div>
     <button class="story-x" type="button" aria-label="Close story">×</button>
     <div class="story-stage"></div>
     <div class="story-live sr-only" role="status" aria-live="polite"></div>
     <div class="story-hint">${window.matchMedia && window.matchMedia("(pointer: coarse)").matches
-      ? "tap the right side for next · left side to go back"
+      ? "swipe, or tap the right side for next · hold to pause"
       : "tap right for next · left for back · Esc to close"}</div>`;
   document.body.appendChild(ov);
   document.body.style.overflow = "hidden";
@@ -1577,32 +1879,82 @@ function storyMode() {
   const inerted = [...document.body.children].filter((el) => el !== ov && !el.inert);
   inerted.forEach((el) => (el.inert = true));
   const stage = ov.querySelector(".story-stage");
-  let idx = -1, closed = false, raf = null;
+  const bgs = [...ov.querySelectorAll(".story-bg")];
+  const segs = [...ov.querySelectorAll(".story-prog i")];
+  let bgFront = 0;
+  let idx = -1, closed = false, raf = null, timer = null, hinted = false;
+  // On Android the hardware Back button must close the story, not navigate
+  // away from metrics.html — that would silently discard a report built from
+  // local files that can't be restored without re-reading them.
+  let popped = false;
+  const onPop = () => { popped = true; close(); };
+  try { history.pushState({ story: 1 }, ""); window.addEventListener("popstate", onPop); } catch (e) {}
   const close = () => {
     if (closed) return;
     closed = true;
     if (raf) cancelAnimationFrame(raf);
+    if (timer) clearTimeout(timer);
     document.body.style.overflow = "";
     document.removeEventListener("keydown", onKey);
+    document.removeEventListener("visibilitychange", onVis);
+    window.removeEventListener("popstate", onPop);
     inerted.forEach((el) => (el.inert = false));
     ov.remove();
+    // Consume the history entry the story pushed — unless Back itself closed us.
+    if (!popped) try { if (history.state && history.state.story) history.back(); } catch (e) {}
     if (opener && opener.isConnected) try { opener.focus(); } catch (e) {}
   };
-  const render = (i) => {
-    idx = Math.max(0, Math.min(slides.length - 1, i));
+  /* ── auto-advance. The current segment's CSS fill doubles as the timer
+     display; hold-to-pause freezes both. No timer on the finale slide — it
+     ends in CTAs, not an auto-close. ── */
+  let held = false, remain = 0, startedAt = 0;
+  const stopTimer = () => { if (timer) { clearTimeout(timer); timer = null; } };
+  const armTimer = (ms) => {
+    stopTimer();
+    if (!AUTOPLAY || closed || idx >= slides.length - 1) return;
+    startedAt = performance.now();
+    remain = ms;
+    timer = setTimeout(() => {
+      timer = null;   // clear BEFORE the guards — a fired-but-skipped timer must not block re-arming
+      if (!held && !document.hidden) render(idx + 1, 1);
+    }, ms);
+  };
+  const pauseTimer = () => {
+    if (!AUTOPLAY) return;
+    ov.classList.add("paused");
+    if (timer) { remain = Math.max(400, remain - (performance.now() - startedAt)); stopTimer(); }
+  };
+  const resumeTimer = () => {
+    if (!AUTOPLAY || closed) return;
+    ov.classList.remove("paused");
+    if (idx < slides.length - 1 && !timer) armTimer(remain || SLIDE_MS);
+  };
+  const onVis = () => { document.hidden ? pauseTimer() : resumeTimer(); };
+  document.addEventListener("visibilitychange", onVis);
+  const render = (i, dir = 0) => {
+    const next = Math.max(0, Math.min(slides.length - 1, i));
+    if (next === idx) return;            // back on slide one: no replay, no re-announce
+    if (raf) { cancelAnimationFrame(raf); raf = null; }   // stop a mid-count loop cold
+    idx = next;
     const sl = slides[idx];
-    const [g1, g2] = GRADS[sl.grad % GRADS.length];
-    ov.style.background = `radial-gradient(120% 90% at 18% 0%, ${g1}36, transparent 60%),` +
-      `radial-gradient(120% 90% at 85% 100%, ${g2}30, transparent 60%), #0a0d1c`;
+    const [g1, g2] = sl.gradPair || GRADS[sl.grad % GRADS.length];
+    // background-image can't interpolate — crossfade two stacked layers instead
+    const back = bgs[1 - bgFront];
+    back.style.background = `radial-gradient(120% 90% at 18% 0%, ${g1}36, transparent 60%),` +
+      `radial-gradient(120% 90% at 85% 100%, ${g2}30, transparent 60%)`;
+    back.style.opacity = "1";
+    bgs[bgFront].style.opacity = "0";
+    bgFront = 1 - bgFront;
     const finale = !sl.finale ? "" : `<div class="story-cta">
       ${window.DEMO_PAGE
         ? `<a class="btn btn-primary" href="metrics.html">Build my own story</a>`
-        : (Object.keys(STATE.ev.dayCounts).length ? `<button class="btn btn-primary" id="story-journey" type="button">⬇ My journey card</button>` : "")}
-      <button class="btn btn-ghost" id="story-back" type="button">Back to my dashboard</button></div>`;
-    stage.innerHTML = `<div class="story-slide">
+        : (Object.keys(STATE.ev.dayCounts).length ? `<button class="btn btn-primary" id="story-journey" type="button"><span aria-hidden="true">⬇</span> My journey card</button>` : "")}
+      <button class="btn btn-ghost" id="story-back" type="button">Back to my chapters</button></div>`;
+    stage.innerHTML = `<div class="story-slide${dir > 0 ? " fwd" : dir < 0 ? " bwd" : ""}">
       <div class="story-kicker">${sl.kicker}</div>
       ${sl.num != null ? `<div class="story-big mono" data-n="${sl.num}">${REDUCED_MOTION ? fmt(sl.num) : "0"}</div>` : `<div class="story-big">${sl.big}</div>`}
       <div class="story-label">${sl.label}</div>
+      ${!sl.finale && !SAMPLE_DATA && idx > 0 ? `<div class="story-share-row"><button class="btn btn-ghost story-share" type="button"><span aria-hidden="true">📤</span> Share this</button></div>` : ""}
       ${finale}</div>`;
     const bigEl = stage.querySelector("[data-n]");
     if (bigEl && !REDUCED_MOTION) {
@@ -1616,7 +1968,12 @@ function storyMode() {
       raf = requestAnimationFrame(tick);
       setTimeout(() => { if (!closed && bigEl.isConnected) bigEl.textContent = fmt(n); }, dur + 250); // rAF doesn't fire in hidden tabs
     }
-    [...ov.querySelectorAll(".story-prog i")].forEach((el, j) => (el.className = j < idx ? "done" : j === idx ? "cur" : ""));
+    segs.forEach((el, j) => (el.className = j < idx ? "done" : j === idx ? "cur" : ""));
+    // restart the current segment's fill so its animation tracks this slide's clock
+    if (AUTOPLAY && segs[idx]) {
+      const fill = segs[idx].querySelector("b");
+      if (fill) { fill.style.animation = "none"; void fill.offsetWidth; fill.style.animation = ""; }
+    }
     // announce each slide — otherwise the whole story is silent to screen readers
     const live = ov.querySelector(".story-live");
     if (live) live.textContent = `Slide ${idx + 1} of ${slides.length}. ${sl.kicker}. ${sl.num != null ? fmt(sl.num) : sl.big}. ${sl.label}`;
@@ -1624,17 +1981,55 @@ function storyMode() {
     if (jb) jb.onclick = () => downloadJourneyCard(jb);
     const bb = stage.querySelector("#story-back");
     if (bb) bb.onclick = close;
+    const sh = stage.querySelector(".story-share");
+    if (sh) sh.onclick = () => {
+      pauseTimer();   // don't auto-advance out from under the share sheet
+      sh.disabled = true;
+      renderStatCard(sl, sl.gradPair || GRADS[sl.grad % GRADS.length], () => { sh.disabled = false; resumeTimer(); });
+    };
+    // the finale earns a celebratory beat — skipped under reduced motion
+    if (sl.finale) confettiBurst(ov, [g1, g2, C.teal, C.yellow]);
+    // the hint has done its job once the reader advances on their own
+    if (idx > 0 && !hinted) { hinted = true; const h = ov.querySelector(".story-hint"); if (h) h.classList.add("off"); }
+    armTimer(SLIDE_MS);
   };
+  /* ── input: tap zones + hold-to-pause + swipe. A hold pauses the clock and
+     must not count as a tap; a horizontal swipe navigates; a downward swipe
+     dismisses — the grammar every story UI trains. `swallow` keeps the click
+     that follows a hold or swipe from also firing the tap zones. ── */
+  let downX = 0, downY = 0, downT = 0, swallow = false;
+  ov.addEventListener("pointerdown", (e) => {
+    if (e.target.closest("button, a")) return;
+    held = true;
+    downX = e.clientX; downY = e.clientY; downT = performance.now();
+    pauseTimer();
+  });
+  ov.addEventListener("pointerup", (e) => {
+    if (!held) return;
+    held = false;
+    const dx = e.clientX - downX, dy = e.clientY - downY, dt = performance.now() - downT;
+    swallow = false;
+    if (Math.abs(dx) > 40 && Math.abs(dx) > Math.abs(dy)) {
+      swallow = true;
+      dx < 0 ? (idx >= slides.length - 1 ? close() : render(idx + 1, 1)) : render(idx - 1, -1);
+      return;                            // a swipe navigated; render() re-armed the clock
+    }
+    if (dy > 60 && Math.abs(dy) > Math.abs(dx)) { swallow = true; close(); return; }
+    if (dt > 300) swallow = true;        // a hold is a pause, not a tap
+    resumeTimer();
+  });
+  ov.addEventListener("pointercancel", () => { held = false; swallow = false; resumeTimer(); });
   ov.addEventListener("click", (ev2) => {
     if (ev2.target.closest(".story-x")) return close();
     if (ev2.target.closest("button, a")) return;
-    if (ev2.clientX < window.innerWidth * 0.3) render(idx - 1);
+    if (swallow) { swallow = false; return; }
+    if (ev2.clientX < window.innerWidth * 0.3) render(idx - 1, -1);
     else if (idx >= slides.length - 1) close();
-    else render(idx + 1);
+    else render(idx + 1, 1);
   });
   const onKey = (ev2) => {
     if (ev2.key === "Escape") { close(); return; }
-    if (ev2.key === "ArrowLeft") { render(idx - 1); return; }
+    if (ev2.key === "ArrowLeft") { render(idx - 1, -1); return; }
     // Space belongs to whichever control has focus. Focus opens on the close
     // button and the finale slide adds two more, so swallowing Space here meant
     // a keyboard user pressing it on "⬇ My journey card" advanced the story
@@ -1643,13 +2038,243 @@ function storyMode() {
     const onControl = document.activeElement !== ov && ov.contains(document.activeElement);
     if (ev2.key === "ArrowRight" || (ev2.key === " " && !onControl)) {
       ev2.preventDefault();
-      idx >= slides.length - 1 ? close() : render(idx + 1);
+      idx >= slides.length - 1 ? close() : render(idx + 1, 1);
     }
   };
   document.addEventListener("keydown", onKey);
   render(0);
   // pull focus into the dialog so keyboard users are inside the story, not behind it
   try { ov.querySelector(".story-x").focus(); } catch (e) {}
+}
+
+/* ── shared canvas delivery: native share sheet on phones, download anchor
+   everywhere else. AbortError means the user closed the sheet on purpose —
+   don't then shove a download at them. ── */
+function deliverCanvas(cv, filename, title, after) {
+  cv.toBlob(async (blob) => {
+    const finish = () => { if (after) after(); };
+    if (blob && navigator.canShare) {
+      try {
+        const file = new File([blob], filename, { type: "image/png" });
+        if (navigator.canShare({ files: [file] })) {
+          await navigator.share({ files: [file], title });
+          finish();
+          return;
+        }
+      } catch (err) {
+        if (err && err.name === "AbortError") { finish(); return; }
+      }
+    }
+    if (!blob) { alert("Could not generate image on this browser."); finish(); return; }
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url; a.download = filename;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    finish();
+  }, "image/png");
+}
+
+/* ── one slide, one image: a 1080x1920 (9:16, phone-story aspect) card of a
+   single stat — the unit people actually post. Reuses the slide object as the
+   card spec: kicker, number/big, label, gradient pair. ── */
+function renderStatCard(sl, pair, after) {
+  const W = 1080, H = 1920, S = 2;
+  const cv = document.createElement("canvas");
+  cv.width = W * S; cv.height = H * S;
+  const ctx = cv.getContext("2d");
+  ctx.scale(S, S);
+  const [g1, g2] = pair;
+  ctx.fillStyle = C.bg; ctx.fillRect(0, 0, W, H);
+  let g = ctx.createRadialGradient(180, 260, 0, 180, 260, 900);
+  g.addColorStop(0, g1 + "59"); g.addColorStop(1, C.bg + "00");
+  ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+  g = ctx.createRadialGradient(W - 160, H - 300, 0, W - 160, H - 300, 950);
+  g.addColorStop(0, g2 + "47"); g.addColorStop(1, C.bg + "00");
+  ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+  ctx.strokeStyle = "rgba(255,255,255,.10)"; ctx.lineWidth = 2;
+  roundRectPath(ctx, 14, 14, W - 28, H - 28, 34); ctx.stroke();
+  ctx.textAlign = "center";
+  // kicker
+  ctx.fillStyle = g1; ctx.font = "600 30px 'JetBrains Mono', monospace";
+  ctx.letterSpacing = "9px";
+  ctx.fillText(sl.kicker.toUpperCase(), W / 2, 660);
+  ctx.letterSpacing = "0px";
+  // the big thing — number or phrase, shrunk until it fits
+  const bigText = sl.num != null ? fmt(sl.num) : String(sl.big).replace(/<[^>]*>/g, "");
+  let size = sl.num != null ? 190 : 120;
+  do {
+    ctx.font = `800 ${size}px ${sl.num != null ? "'JetBrains Mono', monospace" : "'Outfit', sans-serif"}`;
+    size -= 6;
+  } while (ctx.measureText(bigText).width > W - 140 && size > 40);
+  const grad = ctx.createLinearGradient(W / 2 - 300, 0, W / 2 + 300, 0);
+  grad.addColorStop(0, g1); grad.addColorStop(1, g2);
+  ctx.fillStyle = grad;
+  ctx.fillText(bigText, W / 2, 900);
+  // label, wrapped
+  ctx.fillStyle = C.dim; ctx.font = "500 34px 'Outfit', sans-serif";
+  const words = String(sl.label).replace(/<[^>]*>/g, "").split(/\s+/);
+  let line = "", y = 990;
+  for (const w of words) {
+    const trial = line ? line + " " + w : w;
+    if (ctx.measureText(trial).width > W - 220 && line) { ctx.fillText(line, W / 2, y); y += 48; line = w; }
+    else line = trial;
+  }
+  if (line) ctx.fillText(line, W / 2, y);
+  // footer wordmark
+  ctx.fillStyle = C.faint; ctx.font = "600 22px 'JetBrains Mono', monospace";
+  ctx.letterSpacing = "5px";
+  ctx.fillText("POGO METRICS", W / 2, H - 96);
+  ctx.font = "500 17px 'JetBrains Mono', monospace"; ctx.letterSpacing = "2px";
+  ctx.fillText("POGO-METRICS.NETLIFY.APP", W / 2, H - 60);
+  ctx.letterSpacing = "0px";
+  deliverCanvas(cv, `pogo-metrics-${sl.kicker.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "")}.png`,
+    "My Pokémon GO journey", after);
+}
+
+/* ── a tiny celebration: one canvas, ~90 particles, 1.4s, gone. Fired on the
+   story finale and the record book's first reveal. ── */
+function confettiBurst(host, colors) {
+  if (REDUCED_MOTION || host.querySelector(":scope > .confetti")) return;
+  const cvs = document.createElement("canvas");
+  cvs.className = "confetti";
+  const r = host.getBoundingClientRect();
+  if (!r.width || !r.height) return;
+  cvs.width = r.width; cvs.height = Math.min(r.height, 900);
+  cvs.style.cssText = "position:absolute;left:0;top:0;width:100%;pointer-events:none;z-index:5;";
+  host.appendChild(cvs);
+  const ctx = cvs.getContext("2d");
+  const parts = Array.from({ length: 90 }, () => ({
+    x: cvs.width / 2 + (Math.random() - 0.5) * cvs.width * 0.4,
+    y: cvs.height * 0.3,
+    vx: (Math.random() - 0.5) * 9,
+    vy: -(4 + Math.random() * 7),
+    rot: Math.random() * Math.PI,
+    vr: (Math.random() - 0.5) * 0.3,
+    w: 5 + Math.random() * 6,
+    h: 8 + Math.random() * 8,
+    c: colors[(Math.random() * colors.length) | 0],
+  }));
+  const t0 = performance.now();
+  const tick = (t) => {
+    const age = t - t0;
+    ctx.clearRect(0, 0, cvs.width, cvs.height);
+    for (const p of parts) {
+      p.vy += 0.25; p.x += p.vx; p.y += p.vy; p.rot += p.vr;
+      ctx.save();
+      ctx.translate(p.x, p.y);
+      ctx.rotate(p.rot);
+      ctx.globalAlpha = Math.max(0, 1 - age / 1400);
+      ctx.fillStyle = p.c;
+      ctx.fillRect(-p.w / 2, -p.h / 2, p.w, p.h);
+      ctx.restore();
+    }
+    if (age < 1400 && cvs.isConnected) requestAnimationFrame(tick);
+    else cvs.remove();
+  };
+  requestAnimationFrame(tick);
+}
+
+/* ── poster mode: the GitHub-Skyline "put my year on the wall" artifact — a
+   print-ready 2480x3508 (A-series @300dpi) PNG: name, lifetime numbers, and
+   one calendar heat strip per year. Same offline-canvas philosophy as the
+   cards; renderCalendar's per-day math at print scale. ── */
+async function downloadPoster(btn) {
+  const e = STATE.ev;
+  const dayKeys = Object.keys(e.dayCounts);
+  if (!dayKeys.length) return;
+  const W = 2480, H = 3508;
+  const cv = document.createElement("canvas");
+  cv.width = W; cv.height = H;
+  const ctx = cv.getContext("2d");
+  const orig = btn && btn.textContent;
+  if (btn) { btn.textContent = "Rendering…"; btn.disabled = true; }
+  try { await document.fonts.ready; } catch (err) {}
+
+  ctx.fillStyle = C.bg; ctx.fillRect(0, 0, W, H);
+  let g = ctx.createRadialGradient(400, 500, 0, 400, 500, 1900);
+  g.addColorStop(0, C.teal + "26"); g.addColorStop(1, C.bg + "00");
+  ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+  g = ctx.createRadialGradient(W - 380, H - 600, 0, W - 380, H - 600, 2000);
+  g.addColorStop(0, C.yellow + "1f"); g.addColorStop(1, C.bg + "00");
+  ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+  ctx.strokeStyle = "rgba(255,255,255,.12)"; ctx.lineWidth = 4;
+  roundRectPath(ctx, 40, 40, W - 80, H - 80, 56); ctx.stroke();
+
+  ctx.textAlign = "center";
+  ctx.fillStyle = C.dim; ctx.font = "600 46px 'JetBrains Mono', monospace";
+  ctx.letterSpacing = "16px";
+  ctx.fillText("POKÉMON GO · A JOURNEY IN DATA", W / 2, 220);
+  ctx.letterSpacing = "0px";
+  const who = (STATE.profile && STATE.profile.username) || "Trainer";
+  ctx.font = "800 200px 'Outfit', sans-serif";
+  const ng = ctx.createLinearGradient(W / 2 - 500, 0, W / 2 + 500, 0);
+  ng.addColorStop(0, C.teal); ng.addColorStop(1, C.yellow);
+  ctx.fillStyle = ng;
+  ctx.fillText(who, W / 2, 430);
+  const range = e.first && e.last ? `${fmtDate(e.first)} — ${fmtDate(e.last)}` : "";
+  const arch = trainerArchetype();
+  ctx.fillStyle = C.dim; ctx.font = "500 52px 'Outfit', sans-serif";
+  ctx.fillText([range, arch && `${arch.emoji} ${arch.name}`].filter(Boolean).join("   ·   "), W / 2, 530);
+
+  // headline numbers, two rows of three
+  const total = Object.values(e.totals).reduce((a, b) => a + b, 0);
+  const km = Object.values(STATE.fitness.daily).reduce((a, d) => a + (d.meters || 0), 0) / 1000;
+  const tiles = [
+    [fmt(total), "logged actions"], [fmt(catchesOf(e.totals)), "Pokémon caught"],
+    [fmt(e.totals["Spins"] || 0), "PokéStop spins"], [fmt(e.days.size), "days played"],
+    [fmt(longestStreak(dayKeys)), "longest streak"],
+    km > 1 ? [fmt(Math.round(km)) + " km", "on foot"] : [fmt(e.totals["Raids"] || 0), "raid lobbies"],
+  ];
+  tiles.forEach(([v, l], i) => {
+    const col = i % 3, row = (i / 3) | 0;
+    const x = W / 2 + (col - 1) * 720, y = 700 + row * 240;
+    ctx.fillStyle = "#fff"; ctx.font = "700 96px 'JetBrains Mono', monospace";
+    ctx.fillText(v, x, y);
+    ctx.fillStyle = C.faint; ctx.font = "500 40px 'Outfit', sans-serif";
+    ctx.fillText(l, x, y + 58);
+  });
+
+  // one heat strip per year — every day of the journey, on the wall
+  const years = [...new Set(dayKeys.map((d) => d.slice(0, 4)))].sort().slice(-6);
+  const left = 220, right = W - 220;
+  const cell = Math.floor((right - left) / 53);
+  let y0 = 1260;
+  ctx.textAlign = "left";
+  for (const yr of years) {
+    const yearMax = Math.max(1, ...dayKeys.filter((d) => d.startsWith(yr)).map((d) => e.dayCounts[d]));
+    ctx.fillStyle = C.dim; ctx.font = "700 54px 'JetBrains Mono', monospace";
+    ctx.fillText(yr, left, y0);
+    const first = new Date(Date.UTC(+yr, 0, 1));
+    const startDow = (first.getUTCDay() + 6) % 7;
+    const d = new Date(first);
+    let doy = 0;
+    while (d.getUTCFullYear() === +yr) {
+      const iso = d.toISOString().slice(0, 10);
+      const n = e.dayCounts[iso] || 0;
+      const col = Math.floor((startDow + doy) / 7), row = (startDow + doy) % 7;
+      ctx.fillStyle = n === 0 ? "rgba(255,255,255,.05)" : `rgba(65,216,198,${heatAlpha(n, yearMax, 0.2, 0.8).toFixed(2)})`;
+      const cx = left + col * cell, cy = y0 + 30 + row * cell;
+      roundRectPath(ctx, cx, cy, cell - 5, cell - 5, 5);
+      ctx.fill();
+      d.setUTCDate(d.getUTCDate() + 1);
+      doy++;
+    }
+    y0 += 30 + 7 * cell + 64;
+  }
+
+  ctx.textAlign = "center";
+  ctx.fillStyle = C.dim; ctx.font = "600 44px 'JetBrains Mono', monospace";
+  ctx.letterSpacing = "10px";
+  ctx.fillText("POGO METRICS", W / 2, H - 150);
+  ctx.fillStyle = C.faint; ctx.font = "500 32px 'JetBrains Mono', monospace";
+  ctx.letterSpacing = "4px";
+  ctx.fillText("POGO-METRICS.NETLIFY.APP", W / 2, H - 96);
+  ctx.letterSpacing = "0px";
+
+  deliverCanvas(cv, "pogo-metrics-poster.png", "My Pokémon GO journey — poster", () => {
+    if (btn) { btn.textContent = orig; btn.disabled = false; }
+  });
 }
 
 /* ── lifetime journey card: the year-card renderer fed with all-time data ── */
@@ -1665,6 +2290,8 @@ function downloadJourneyCard(btn) {
   const evDays = dayKeys.filter((d) => eventFor(d)).length;
   const monthTotals = Object.entries(e.byMonth).map(([m, kinds]) => [m, Object.values(kinds).reduce((a, b) => a + b, 0)]).sort((a, b) => b[1] - a[1]);
   const badges = [];
+  const arch = trainerArchetype();
+  if (arch) badges.push(`${arch.emoji} ${arch.name}`);
   if (years.length > 1) badges.push(`🎮 ${years.length} years of adventure`);
   if (e.raidMaxKm) badges.push(`🌍 raided ${fmt(round(e.raidMaxKm))} km away`);
   if (evDays) badges.push(`🎪 ${evDays} GO Fest day${evDays > 1 ? "s" : ""}`);
@@ -1752,13 +2379,13 @@ function renderTrainer() {
 
   if (col && Object.keys(col.genCounts).length) {
     inner += `<div class="split" style="margin-top:18px">
-      <div><div style="font-weight:700;margin-bottom:10px">Storage by region of origin</div><div class="gen-bars">${
+      <div><h4 class="mod-h4">Storage by region of origin</h4><div class="gen-bars">${
         Object.entries(col.genCounts).map(([region, g]) => `
           <div class="gen-row"><span class="gname">${esc(region)}</span>
           <div class="gen-bar-track"><div class="gen-bar-fill" style="width:${Math.min(100, g.unique / g.dexSize * 100).toFixed(0)}%"></div></div>
           <span class="gval">${g.unique}/${g.dexSize} · ${fmt(g.total)}</span></div>`).join("")
       }</div></div>
-      <div><div style="font-weight:700;margin-bottom:10px">Most-hoarded species</div>${rankList(col.topSpecies)}</div>
+      <div><h4 class="mod-h4">Most-hoarded species</h4>${rankList(col.topSpecies)}</div>
     </div>`;
   }
 
@@ -1777,7 +2404,7 @@ function renderTrainer() {
       (events ? ` · ${fmt(events)} event badge${events === 1 ? "" : "s"} (GO Fest, GO Tour and friends — collected, not tiered)` : "") +
       (untiered ? ` · ${fmt(untiered)} tracked by progress` : "") +
       ` — ${fmt(tiered + events + untiered)} in total.`;
-    inner += `<div style="margin-top:20px;font-weight:700">Medal cabinet</div>
+    inner += `<h4 class="mod-h4">Medal cabinet</h4>
       <div class="mod-sub">${reconcile}</div>
       <div class="medal-cards">${cards}</div>`;
     if (tiers[4] >= 50) {
@@ -1851,7 +2478,7 @@ function renderActivity() {
       every chapter here counts the sum.</div>`;
   }
   inner += `<div style="margin-top:22px">
-    <div style="font-weight:700;margin-bottom:6px">When you play — hour of week</div>
+    <h4 class="mod-h4">When you play — hour of week</h4>
     ${tzOff !== 0 ? `<div class="yoy-metrics" style="margin:0 0 10px" id="tz-${cMonthly}">
       <button class="yoy-chip active" type="button" aria-pressed="true" data-off="${tzOff}">Your time (${tzLbl})</button>
       <button class="yoy-chip" type="button" aria-pressed="false" data-off="0">Game time (UTC)</button>
@@ -1859,7 +2486,7 @@ function renderActivity() {
     <div id="hw-${cMonthly}"></div>
   </div>`;
   inner += `<div style="margin-top:22px">
-    <div style="font-weight:700;margin-bottom:10px">Every day you played</div>
+    <h4 class="mod-h4">Every day you played</h4>
     <div class="yoy-metrics" style="margin:0 0 10px" id="cy-${cMonthly}"></div>
     <div id="cal-${cMonthly}"></div>
   </div>`;
@@ -1873,13 +2500,15 @@ function renderActivity() {
       data: {
         labels: months.map(fmtMonth),
         datasets: series.map((label) => ({
-          label, backgroundColor: SERIES_COLORS[label] || C.dim, stack: "a", borderRadius: 2,
+          label, backgroundColor: SERIES_COLORS[label] || C.dim, stack: "a",
           data: months.map((mk) => (e.byMonth[mk] || {})[label] || 0),
         })),
       },
       options: {
         interaction: { mode: "index", intersect: false },
-        plugins: { title: { display: true, text: "Your activity, month by month" } },
+        /* On phones the 9-series legend ate half the canvas — and the doughnut
+         * beside it already names every series, so it can go entirely. */
+        plugins: { legend: { display: !NARROW_VIEW() }, title: { display: true, text: "Your activity, month by month" } },
         scales: { x: { stacked: true, grid: { display: false }, ticks: { maxTicksLimit: 16 } }, y: { stacked: true, title: { display: true, text: "events" } } },
       },
     });
@@ -1892,7 +2521,7 @@ function renderActivity() {
        * shoves the doughnut off to the left, so the pair reads as two things
        * pushed apart rather than one centred chart. A bottom legend is centred
        * by Chart.js and keeps the doughnut in the middle of its box. */
-      options: { cutout: "60%", plugins: { legend: { position: "bottom", align: "center" }, title: { display: true, text: "What you did most" } } },
+      options: { cutout: "60%", plugins: { legend: { position: "bottom", align: "center" }, title: { display: true, text: "What you did most" }, centerText: { unit: "actions" } } },
     });
 
     // hour grid + 24h play clock, re-rendered together when the timezone chip flips
@@ -1906,11 +2535,17 @@ function renderActivity() {
         type: "polarArea",
         data: {
           labels: byHour.map((_, h) => hourLabel(h)),
-          datasets: [{ data: byHour, backgroundColor: byHour.map((v) => `rgba(65,216,198,${(0.15 + 0.75 * v / Math.max(1, ...byHour)).toFixed(2)})`), borderWidth: 0 }],
+          /* sqrt, not linear: one 7 AM commute spike was flattening every other
+           * hour to near the floor alpha */
+          datasets: [{ data: byHour, backgroundColor: byHour.map((v) => `rgba(65,216,198,${(0.15 + 0.75 * Math.sqrt(v / Math.max(1, ...byHour))).toFixed(2)})`), borderWidth: 0 }],
         },
         options: {
           plugins: { legend: { display: false }, title: { display: true, text: "Your play clock — events by hour" } },
-          scales: { r: { ticks: { display: false }, grid: { color: C.grid } } },
+          /* a clock face needs anchors: label the compass hours, hide the rest */
+          scales: { r: { ticks: { display: false }, grid: { color: C.grid },
+            pointLabels: { display: true, centerPointLabels: true, color: C.dim,
+              font: { size: 10, family: "'JetBrains Mono', monospace" },
+              callback: (label, i) => (i % 6 === 0 ? label : "") } } },
         },
       });
     };
@@ -1939,6 +2574,98 @@ function renderActivity() {
   });
 
   return moduleHTML("🗺️", "Your adventure log", `Every spin, catch, raid and battle Niantic logged — ${fmt(total)} actions across ${fmt(e.days.size)} days.`, inner);
+}
+
+/* ── friend comparison: parse the app's OWN stats export (downloadStatsJSON)
+   back in. The exchanged file is deliberately location-free — its note field
+   documents the omission — so the comparison inherits the privacy story. ── */
+function parseCompare(text) {
+  try {
+    const j = JSON.parse(text);
+    // only accept what this site itself wrote — the source line is the handshake
+    if (!j || !/POGO Metrics/i.test(j.source || "") || !j.totalsByAction) return;
+    STATE.compare = {
+      who: (j.profile && j.profile.username) || "Your friend",
+      totals: j.totalsByAction || {},
+      monthly: j.monthly || {},
+      dayCounts: j.dayCounts || {},
+      friends: j.friends && j.friends.total,
+      generated: j.generated,
+    };
+    STATE.loaded.push("compare");
+  } catch (e) { /* not our JSON — ignore */ }
+}
+
+function renderCompare() {
+  const cmp = STATE.compare;
+  if (!cmp) return;
+  const mine = STATE.ev.totals;
+  const mineTotal = Object.values(mine).reduce((a, b) => a + b, 0);
+  const theirsTotal = Object.values(cmp.totals).reduce((a, b) => a + b, 0);
+  if (!mineTotal && !theirsTotal) return;
+  const me = (STATE.profile && STATE.profile.username) || "You";
+  const them = esc(cmp.who);
+  const myDays = Object.keys(STATE.ev.dayCounts).length;
+  const theirDays = Object.keys(cmp.dayCounts).length;
+  const myStreak = longestStreak(Object.keys(STATE.ev.dayCounts));
+  const theirStreak = longestStreak(Object.keys(cmp.dayCounts));
+
+  const stats = [
+    [fmt(mineTotal), `${esc(me)} — logged actions`, ""],
+    [fmt(theirsTotal), `${them} — logged actions`, ""],
+    [`${fmt(myDays)} vs ${fmt(theirDays)}`, "Days played", "you vs them"],
+    [`${fmt(myStreak)} vs ${fmt(theirStreak)}`, "Longest streak", "you vs them"],
+  ];
+
+  const kinds = [...new Set([...Object.keys(mine), ...Object.keys(cmp.totals)])]
+    .filter((k) => (mine[k] || 0) + (cmp.totals[k] || 0) > 0)
+    .sort((a, b) => ((mine[b] || 0) + (cmp.totals[b] || 0)) - ((mine[a] || 0) + (cmp.totals[a] || 0)));
+  const cBar = uid(), cLine = uid();
+  let inner = statGrid(stats);
+  inner += `<div style="margin-top:16px">${chartWrap(cBar)}</div>`;
+
+  // who peaked when — both journeys on one clock
+  const allMonths = monthSpan([...new Set([...Object.keys(STATE.ev.byMonth), ...Object.keys(cmp.monthly)])]);
+  const monthTotal = (bym, mk) => Object.values(bym[mk] || {}).reduce((a, b) => a + b, 0);
+  if (allMonths.length > 1) inner += `<div style="margin-top:16px">${chartWrap(cLine)}</div>`;
+
+  later(() => {
+    newChart(cBar, {
+      type: "bar",
+      data: {
+        labels: kinds,
+        datasets: [
+          { label: String(me), backgroundColor: C.teal, data: kinds.map((k) => mine[k] || 0) },
+          { label: cmp.who, backgroundColor: C.purple, data: kinds.map((k) => cmp.totals[k] || 0) },
+        ],
+      },
+      options: {
+        indexAxis: "y",
+        plugins: { title: { display: true, text: "Action by action" } },
+        scales: { x: { grid: { color: C.grid } }, y: { grid: { display: false } } },
+      },
+    });
+    if (allMonths.length > 1) newChart(cLine, {
+      type: "line",
+      data: {
+        labels: allMonths.map(fmtMonth),
+        datasets: [
+          { label: String(me), borderColor: C.teal, backgroundColor: C.teal, pointRadius: 0, borderWidth: 2, tension: .3, data: allMonths.map((mk) => monthTotal(STATE.ev.byMonth, mk)) },
+          { label: cmp.who, borderColor: C.purple, backgroundColor: C.purple, pointRadius: 0, borderWidth: 2, tension: .3, data: allMonths.map((mk) => monthTotal(cmp.monthly, mk)) },
+        ],
+      },
+      options: {
+        interaction: { mode: "index", intersect: false },
+        plugins: { title: { display: true, text: "Who peaked when — actions per month" } },
+        scales: { x: { grid: { display: false }, ticks: { maxTicksLimit: 14 } }, y: { grid: { color: C.grid } } },
+      },
+    });
+  });
+
+  return moduleHTML("🤝", `${esc(me)} vs ${them}`,
+    `Two journeys, side by side — built from a stats file exported by this site (no locations inside, nothing uploaded). `
+    + `Want your own to send back? Hit <b>🧾 My numbers</b> in the toolbar.`,
+    inner, "versus-friend");
 }
 
 /* ── record book: lifetime superlatives, event days, and a playful benchmark ── */
@@ -1981,10 +2708,59 @@ function renderRecords() {
   if (socialPeak) stats.push([fmt(socialPeak[1]), "Most friends in a month", `friends added in ${fmtMonth(socialPeak[0])}`]);
   if (evDays.length) stats.push([fmt(evDays.length), "GO Fest days attended", `${fmt(evEvents)} actions across those days`]);
 
-  const inner = statGrid(stats.slice(0, 8));
+  let inner = statGrid(stats.slice(0, 8));
+
+  /* ── next milestones: the record book was purely retrospective — nothing
+     looked forward. For each headline counter, find the next round number and
+     project an arrival date from the last ~3 months' pace. Recent pace, not
+     lifetime: the export reaches back years and people's play changes. ── */
+  const monthKeys = Object.keys(e.byMonth).sort();
+  const recent = monthKeys.slice(-3);
+  const recentDays = Math.max(30, recent.length * 30);
+  const rateOf = (fn) => recent.reduce((a, m) => a + fn(e.byMonth[m] || {}), 0) / recentDays;
+  const LADDER = [1000, 2500, 5000, 10000, 25000, 50000, 100000, 250000, 500000, 1000000];
+  const next = (n) => LADDER.find((l) => l > n);
+  const mile = [];
+  const addMile = (label, current, rate) => {
+    const target = next(current);
+    if (!target || !current) return;
+    const toGo = target - current;
+    const eta = rate > 0.05 ? new Date(Date.now() + (toGo / rate) * 86400000) : null;
+    mile.push({ label, current, target, toGo, eta });
+  };
+  addMile("Pokémon caught", catchesOf(e.totals), rateOf((k) => catchesOf(k)));
+  addMile("PokéStop spins", e.totals["Spins"] || 0, rateOf((k) => k["Spins"] || 0));
+  addMile("Raids", e.totals["Raids"] || 0, rateOf((k) => k["Raids"] || 0));
+  addMile("Logged actions", total, rateOf((k) => Object.values(k).reduce((a, b) => a + b, 0)));
+  if (mile.length) {
+    inner += `<hr class="mod-divider"><h4 class="mod-h4">Next milestones</h4>
+      <div class="mod-sub" style="margin-bottom:12px">At your pace from the last few months — a reason to come back with next year's export.</div>
+      <div class="gen-bars">${mile.slice(0, 4).map((m) => `
+        <div class="gen-row">
+          <div class="gname">${esc(m.label)}</div>
+          <div class="gen-bar-track"><div class="gen-bar-fill" style="width:${Math.min(100, m.current / m.target * 100).toFixed(1)}%"></div></div>
+          <div class="gval">${fmt(m.toGo)} to ${fmt(m.target)}${m.eta
+            ? ` · ~${m.eta.toLocaleDateString(undefined, { month: "short", year: "numeric" })}`
+            : " · on pause"}</div>
+        </div>`).join("")}</div>`;
+  }
+
+  /* first reveal of the personal-best grid earns the celebration beat */
+  later(() => {
+    const host = document.querySelector('.module[data-anchor="record-book"]');
+    if (!host || REDUCED_MOTION || !("IntersectionObserver" in window)) return;
+    const io = new IntersectionObserver((entries) => {
+      if (entries.some((x) => x.isIntersecting)) {
+        io.disconnect();
+        confettiBurst(host, [C.teal, C.yellow, C.orange, C.pink]);
+      }
+    }, { threshold: 0.35 });
+    io.observe(host);
+  });
+
   return moduleHTML("🏅", "Your record book",
     `Your personal bests. An <b>action</b> is any single thing Niantic logged — a spin, a catch, a raid, a berry, a gym battle — so ${fmt(total)} actions is the sum of everything you did.`,
-    inner);
+    inner, "record-book");
 }
 
 /* ── play sessions: reconstruct bouts from the raw timestamps ──
@@ -2040,7 +2816,7 @@ function renderBag() {
   const cId = uid();
   inner += `<div class="split" style="margin-top:16px">
     <div>${chartWrap(cId)}</div>
-    <div><div style="font-weight:700;margin-bottom:10px">Your ten deepest stacks</div>
+    <div><h4 class="mod-h4">Your ten deepest stacks</h4>
       ${rankList(b.items.slice(0, 10).map((i) => [i.name, i.n]))}</div>
   </div>`;
   later(() => newChart(cId, {
@@ -2058,7 +2834,7 @@ function renderBag() {
   const eg = STATE.eggs;
   if (eg && eg.held) {
     const tiers = Object.entries(eg.tiers).sort((a, c) => +a[0] - +c[0]);
-    inner += `<hr class="mod-divider"><div style="font-weight:700;margin-bottom:2px">Your egg bench</div>
+    inner += `<hr class="mod-divider"><h4 class="mod-h4">Your egg bench</h4>
       <div class="mod-sub" style="margin-bottom:10px">
         <b>${fmt(eg.held)}</b> egg${eg.held === 1 ? "" : "s"} in your bag right now, ${
           eg.incubating ? `<b>${fmt(eg.incubating)}</b> of them walking in an incubator` : "none of them incubating"}${
@@ -2116,7 +2892,7 @@ function renderRhythm() {
     inner += `<div style="margin-top:16px">${chartWrap(cId)}</div>`;
     later(() => newChart(cId, {
       type: "bar",
-      data: { labels: buckets.map((x) => x[2]), datasets: [{ data: counts, label: "sessions", backgroundColor: C.teal, borderRadius: 6 }] },
+      data: { labels: buckets.map((x) => x[2]), datasets: [{ data: counts, label: "sessions", backgroundColor: C.teal }] },
       options: { plugins: { legend: { display: false }, title: { display: true, text: "How long you play, per session" } },
         scales: { y: { beginAtZero: true, title: { display: true, text: "sessions" } }, x: { grid: { display: false } } } },
     }));
@@ -2128,7 +2904,7 @@ function renderRhythm() {
     const totalSpins = forts.reduce((a, f) => a + f.n, 0);
     const top5 = forts.slice(0, 5).reduce((a, f) => a + f.n, 0);
     const years = (topFort.last - topFort.first) / 31557600000;
-    inner += `<hr class="mod-divider"><div style="font-weight:700;margin-bottom:2px">Your regular haunts</div>
+    inner += `<hr class="mod-divider"><h4 class="mod-h4">Your regular haunts</h4>
       <div class="mod-sub" style="margin-bottom:10px">
         You've visited <b>${fmt(forts.length)}</b> distinct PokéStops. Your number one accounts for
         <b>${fmt(topFort.n)}</b> visits${years >= 0.15 ? ` across <b>${years.toFixed(1)} years</b>` : ""} —
@@ -2155,7 +2931,7 @@ function renderRhythm() {
     const totalLobbies = gyms.reduce((a, g) => a + g.n, 0);
     const top5 = gyms.slice(0, 5).reduce((a, g) => a + g.n, 0);
     const years = (topGym.last - topGym.first) / 31557600000;
-    inner += `<hr class="mod-divider"><div style="font-weight:700;margin-bottom:2px">The gyms you keep raiding</div>
+    inner += `<hr class="mod-divider"><h4 class="mod-h4">The gyms you keep raiding</h4>
       <div class="mod-sub" style="margin-bottom:10px">
         You've raided at <b>${fmt(gyms.length)}</b> distinct gyms. Your number one accounts for
         <b>${fmt(topGym.n)}</b> lobbies${years >= 0.15 ? ` across <b>${years.toFixed(1)} years</b>` : ""} —
@@ -2207,9 +2983,9 @@ function renderRecentLog() {
   const escapees = R.fled.slice().sort(byCP).slice(0, 6);
   if (best || escapees.length) {
     inner += `<div class="split" style="margin-top:18px">
-      <div>${best ? `<div style="font-weight:700;margin-bottom:10px">Your best catch of the day</div>
+      <div>${best ? `<h4 class="mod-h4">Your best catch of the day</h4>
         ${rankList(R.caught.slice().sort(byCP).slice(0, 6).map((p) => [p.name, p.cp]), (v) => "CP " + fmt(v))}` : ""}</div>
-      <div>${escapees.length ? `<div style="font-weight:700;margin-bottom:10px">The ones that got away</div>
+      <div>${escapees.length ? `<h4 class="mod-h4">The ones that got away</h4>
         ${rankList(escapees.map((p) => [p.name, p.cp]), (v) => "CP " + fmt(v))}` : ""}</div>
     </div>`;
   }
@@ -2249,7 +3025,9 @@ function renderPhotos() {
     type: "bar",
     data: {
       labels: months.map(fmtMonth),
-      datasets: [{ label: "Snapshots", backgroundColor: C.pink, borderRadius: 3, data: months.map((m) => P.monthly[m] || 0) }],
+      /* single-series charts wear the neutral accent — pink is Lures' identity
+       * in the flagship charts, and reusing it here taught the wrong mapping */
+      datasets: [{ label: "Snapshots", backgroundColor: C.teal, data: months.map((m) => P.monthly[m] || 0) }],
     },
     options: {
       plugins: { legend: { display: false }, title: { display: true, text: "Snapshots you took, month by month" } },
@@ -2333,6 +3111,17 @@ function wireCountUps(root) {
 function hourLabel(h) {
   return h === 0 ? "12 AM" : h < 12 ? h + " AM" : h === 12 ? "12 PM" : (h - 12) + " PM";
 }
+/* Shared intensity ramp for the heat visuals. sqrt, not linear: play data is
+ * heavy-tailed (one GO Fest day can log 50-100x a normal day), and a linear
+ * ramp against that max flattened every ordinary day to the floor alpha —
+ * exactly the most engaged players got the flattest-looking grids. */
+const heatAlpha = (n, max, lo, span) => lo + span * Math.sqrt(max ? n / max : 0);
+/* the swatch key states the encoding once per grid — GitHub's calendar ships
+ * the same "less → more" strip for the same reason */
+const heatKey = (lo, span) =>
+  ` <span class="heat-key" aria-hidden="true">Less ${[0.08, 0.28, 0.55, 0.8, 1].map((t) =>
+    `<i style="background:rgba(65,216,198,${heatAlpha(t, 1, lo, span).toFixed(2)})"></i>`).join("")} More</span>`;
+
 function renderHourWeek(host, grid) {
   if (!host) return;
   const max = Math.max(1, ...grid.flat());
@@ -2341,8 +3130,7 @@ function renderHourWeek(host, grid) {
     html += `<div class="hw-row"><span class="hw-lbl">${DAYS[d]}</span>`;
     for (let h = 0; h < 24; h++) {
       const n = grid[d][h];
-      const t = n / max;
-      const bg = n === 0 ? "rgba(255,255,255,.04)" : `rgba(65,216,198,${(0.14 + t * 0.86).toFixed(2)})`;
+      const bg = n === 0 ? "rgba(255,255,255,.04)" : `rgba(65,216,198,${heatAlpha(n, max, 0.14, 0.86).toFixed(2)})`;
       html += `<div class="hw-cell" style="background:${bg}" data-info="${DAYS[d]} · ${hourLabel(h)}" data-sub="${fmt(n)} event${n === 1 ? "" : "s"}"></div>`;
     }
     html += `</div>`;
@@ -2353,7 +3141,7 @@ function renderHourWeek(host, grid) {
   // name the peak in text — the hover tooltip is unreachable on touch and for AT
   let bd = 0, bh = 0, bn = 0;
   for (let d = 0; d < 7; d++) for (let h = 0; h < 24; h++) if (grid[d][h] > bn) { bn = grid[d][h]; bd = d; bh = h; }
-  if (bn) html += `<div class="hw-caption">Busiest: <b>${DAY_FULL[bd]} around ${hourLabel(bh)}</b> — ${fmt(bn)} events. Tap any cell for its count.</div>`;
+  if (bn) html += `<div class="hw-caption">Busiest: <b>${DAY_FULL[bd]} around ${hourLabel(bh)}</b> — ${fmt(bn)} events. Tap any cell for its count.${heatKey(0.14, 0.86)}</div>`;
   /* The grid itself is 168 background colours and nothing else. Ship the same
    * numbers as a table so they can be read rather than only looked at. */
   html += srTable(
@@ -2375,21 +3163,67 @@ function attachHourWeekTip(host) {
     tip.className = "hw-tip";
     document.body.appendChild(tip);
   }
+  const place = (x, y) => {
+    const pad = 14, r = tip.getBoundingClientRect();
+    let px = x + pad, py = y + pad;
+    if (px + r.width > window.innerWidth - 8) px = x - r.width - pad;
+    if (py + r.height > window.innerHeight - 8) py = y - r.height - pad;
+    tip.style.left = px + "px";
+    tip.style.top = py + "px";
+  };
+  const fill = (cell) => { tip.innerHTML = `<b>${cell.dataset.info}</b><span>${cell.dataset.sub}</span>`; tip.classList.add("on"); };
   const show = (ev) => {
     const cell = ev.target.closest("[data-info]");
     if (!cell) { tip.classList.remove("on"); return; }
-    tip.innerHTML = `<b>${cell.dataset.info}</b><span>${cell.dataset.sub}</span>`;
-    tip.classList.add("on");
-    const pad = 14, r = tip.getBoundingClientRect();
-    let x = ev.clientX + pad, y = ev.clientY + pad;
-    if (x + r.width > window.innerWidth - 8) x = ev.clientX - r.width - pad;
-    if (y + r.height > window.innerHeight - 8) y = ev.clientY - r.height - pad;
-    tip.style.left = x + "px";
-    tip.style.top = y + "px";
+    fill(cell);
+    place(ev.clientX, ev.clientY);
+  };
+  // keyboard variant: position from the CELL's rect — there is no cursor
+  const showForCell = (cell) => {
+    fill(cell);
+    const r = cell.getBoundingClientRect();
+    place(r.right, r.bottom);
   };
   gridEl.addEventListener("mousemove", show);
   gridEl.addEventListener("mouseleave", () => tip.classList.remove("on"));
   gridEl.addEventListener("click", show); // tap support on touch screens
+
+  /* ── keyboard: the captions say "tap any cell", and touch targets were even
+     widened — keyboard was the one modality left with no way to inspect a
+     cell. One tab stop per grid; arrows move a selection ring; the shared tip
+     shows the selected cell's numbers. sr-only tables remain the AT path —
+     this is for sighted keyboard users. ── */
+  const cells = [...gridEl.querySelectorAll("[data-info]")];
+  if (!cells.length) return;
+  const isCal = gridEl.classList.contains("cal-grid");
+  // hw flows row-major (24 per row); the calendar flows column-major (7 per week)
+  const stepH = isCal ? 7 : 1;
+  const stepV = isCal ? 1 : 24;
+  gridEl.tabIndex = 0;
+  gridEl.setAttribute("role", "group");
+  gridEl.setAttribute("aria-label", (isCal ? "Daily activity calendar" : "Hour-of-week activity grid")
+    + ". Arrow keys move between cells; the selected cell's count is shown and announced.");
+  let sel = -1;
+  const select = (i) => {
+    if (sel >= 0 && cells[sel]) cells[sel].classList.remove("kb-sel");
+    sel = Math.max(0, Math.min(cells.length - 1, i));
+    const cell = cells[sel];
+    cell.classList.add("kb-sel");
+    cell.scrollIntoView({ block: "nearest", inline: "nearest" });
+    showForCell(cell);
+    announce(`${cell.dataset.info}: ${cell.dataset.sub}`);
+  };
+  gridEl.addEventListener("keydown", (e) => {
+    const step = { ArrowRight: stepH, ArrowLeft: -stepH, ArrowDown: stepV, ArrowUp: -stepV }[e.key];
+    if (step != null) { e.preventDefault(); select(sel < 0 ? 0 : sel + step); return; }
+    if (e.key === "Escape" && sel >= 0) { cells[sel].classList.remove("kb-sel"); sel = -1; tip.classList.remove("on"); }
+  });
+  gridEl.addEventListener("blur", () => {
+    if (sel >= 0 && cells[sel]) cells[sel].classList.remove("kb-sel");
+    sel = -1;
+    tip.classList.remove("on");
+  });
+
   if (!tip.dataset.wired) { // the tip element is shared across rebuilds — wire window once
     tip.dataset.wired = "1";
     window.addEventListener("scroll", () => tip.classList.remove("on"), { passive: true });
@@ -2406,14 +3240,23 @@ function renderCalendar(host, year, dayCounts) {
   // leading blanks so the first column starts on the right weekday
   for (let i = 0; i < startDow; i++) cells += `<div class="cal-cell blank"></div>`;
   const d = new Date(first);
+  let dayOfYear = 0;
   while (d.getUTCFullYear() === +year) {
     const iso = d.toISOString().slice(0, 10);
     const n = dayCounts[iso] || 0;
     const ev = eventFor(iso);
-    const bg = n === 0 ? "rgba(255,255,255,.045)" : `rgba(65,216,198,${(0.18 + 0.82 * n / yearMax).toFixed(2)})`;
+    const bg = n === 0 ? "rgba(255,255,255,.045)" : `rgba(65,216,198,${heatAlpha(n, yearMax, 0.18, 0.82).toFixed(2)})`;
     cells += `<div class="cal-cell${ev && n ? " ev" : ""}" style="background:${bg}" data-info="${fmtDate(d)}${ev ? " · " + esc(ev) : ""}" data-sub="${n ? fmt(n) + " event" + (n > 1 ? "s" : "") : "no play logged"}"></div>`;
     d.setUTCDate(d.getUTCDate() + 1);
+    dayOfYear++;
   }
+  /* month axis — a bright cluster you can't date is not a memory. Each label
+   * is grid-column-placed at the week column its month starts in, inside the
+   * same scroller as the cells so they can't drift apart. */
+  const monthLabels = MONTHS.map((m, i) => {
+    const col = Math.floor((startDow + (Date.UTC(+year, i, 1) - Date.UTC(+year, 0, 1)) / 86400000) / 7);
+    return `<span style="grid-column:${col + 1}">${m}</span>`;
+  }).join("");
   const played = Object.keys(dayCounts).filter((k) => k.startsWith(year)).length;
   const evDays = Object.keys(dayCounts).filter((k) => k.startsWith(year) && eventFor(k)).length;
   /* Summarised BY MONTH rather than reproducing all 365 cells: a table with a
@@ -2424,19 +3267,37 @@ function renderCalendar(host, year, dayCounts) {
     const keys = Object.keys(dayCounts).filter((k) => k.startsWith(pre));
     return [m, fmt(keys.length), fmt(keys.reduce((a, k) => a + dayCounts[k], 0))];
   });
-  host.innerHTML = `<div class="cal-grid">${cells}</div>
-    <div class="hw-caption">${fmt(played)} days played in ${year}${evDays ? ` — including <b>${evDays} GO Fest day${evDays > 1 ? "s" : ""}</b> (gold ring)` : ""}. Tap a day for details.</div>
+  host.innerHTML = `<div class="cal-scroll"><div class="cal-months" aria-hidden="true">${monthLabels}</div><div class="cal-grid">${cells}</div></div>
+    <div class="hw-caption">${fmt(played)} days played in ${year}${evDays ? ` — including <b>${evDays} GO Fest day${evDays > 1 ? "s" : ""}</b> (gold ring)` : ""}. Tap a day for details.${heatKey(0.18, 0.82)}</div>
     ${srTable(`${year} by month: ${fmt(played)} days played in total.`, ["Month", "Days played", "Actions"], byMonth)}`;
+  /* On phones the strip scrolls — open on the reader's recent months, not last
+   * January. For the current year, put "now" at the right edge. */
+  const sc = host.querySelector(".cal-scroll");
+  if (sc && sc.scrollWidth > sc.clientWidth) {
+    const now = new Date();
+    if (String(now.getUTCFullYear()) === String(year)) {
+      const col = Math.floor((startDow + (Date.now() - Date.UTC(+year, 0, 1)) / 86400000) / 7);
+      const cellW = sc.scrollWidth / Math.ceil((startDow + dayOfYear) / 7);
+      sc.scrollLeft = Math.max(0, (col + 2) * cellW - sc.clientWidth);
+    } else {
+      sc.scrollLeft = sc.scrollWidth;
+    }
+  }
   attachHourWeekTip(host);
 }
 
 /* ── year over year (multi-year journeys) ── */
 const MON1 = ["J", "F", "M", "A", "M", "J", "J", "A", "S", "O", "N", "D"];
-const YEAR_COLORS = {
-  2022: [C.green, C.teal], 2023: [C.red, C.yellow], 2024: [C.blue, C.teal],
-  2025: [C.purple, C.pink], 2026: [C.teal, C.green], 2027: [C.orange, C.yellow],
-};
-const yearColors = (y) => YEAR_COLORS[+y] || [C.teal, C.yellow];
+/* Year-card gradient pairs. A deterministic cycle, not a literal table: the old
+ * 2022-2027 lookup fell back to one identical pair for every year outside it,
+ * so a 2020-2021 veteran got indistinguishable "unique" year cards — and the
+ * scheme would have silently broken again in 2028. The offset keeps every year
+ * of the old table on exactly the colors it had. */
+const YEAR_PAIRS = [
+  [C.green, C.teal], [C.red, C.yellow], [C.blue, C.teal],
+  [C.purple, C.pink], [C.teal, C.green], [C.orange, C.yellow],
+];
+const yearColors = (y) => YEAR_PAIRS[(((+y - 2022) % YEAR_PAIRS.length) + YEAR_PAIRS.length) % YEAR_PAIRS.length];
 const catchesOf = (k) => (k["GO Plus catches"] || 0) + (k["Encounters"] || 0) + (k["Incense"] || 0) + (k["Lures"] || 0);
 
 function buildYearData() {
@@ -2530,7 +3391,7 @@ function renderYearOverYear() {
   }
 
   // one shareable year card per year — single-year players get theirs too
-  inner += `<div style="font-weight:700;margin-bottom:2px">Your year card${multi ? "s" : ""}</div>
+  inner += `<h4 class="mod-h4">Your year card${multi ? "s" : ""}</h4>
     <div class="mod-sub" style="margin-bottom:0">A shareable recap${multi ? " for each year" : ""} — download ${multi ? "any" : "it"} as a PNG.</div>`;
   inner += `<div class="wrap-cards">`;
   const nowYear = String(new Date().getFullYear());
@@ -2560,7 +3421,8 @@ function renderYearOverYear() {
       <div class="wc-big">${fmt(w.events)}</div>
       <div class="wc-big-l">logged actions${w.peakMonth ? ` · peaked ${fmtMonth(w.peakMonth)}` : ""}</div>
       <div class="wc-grid">${cells.slice(0, 8).map(([v, l]) => `<div class="wc-cell"><div class="v">${v}</div><div class="l">${esc(l)}</div></div>`).join("")}</div>
-      <button class="btn btn-teal wc-dl" type="button">⬇ Download ${y} card (PNG)</button>
+      <button class="btn btn-teal wc-play" type="button"><span aria-hidden="true">▶</span> Play ${y}'s story</button>
+      <button class="btn btn-teal wc-dl" type="button"><span aria-hidden="true">⬇</span> Download ${y} card (PNG)</button>
       <div class="wc-foot">POGO Metrics · ${y}</div>
     </div>`;
   });
@@ -2569,18 +3431,25 @@ function renderYearOverYear() {
   later(() => {
     if (multi) {
       // versus bar chart, one bar per year, toggled by metric
+      /* The x-axis already names the years, so hue would carry no information —
+       * and the old per-year colors were the ACTIVITY hues, teaching that red
+       * means both "2023" and "Raids" in the same module. One accent, with the
+       * winning year solid, says exactly one thing: who won. */
       const ch = newChart(cId, {
         type: "bar",
-        data: { labels: years, datasets: [{ data: [], label: METRICS[0][0], backgroundColor: years.map((y) => yearColors(y)[0]), borderRadius: 6 }] },
+        data: { labels: years, datasets: [{ data: [], label: METRICS[0][0], backgroundColor: [] }] },
         options: {
           plugins: { legend: { display: false }, title: { display: true, text: "Year vs year — " + METRICS[0][0] } },
-          scales: { x: { grid: { display: false }, ticks: { font: { size: 14, weight: 700 } } }, y: { beginAtZero: true } },
+          scales: { x: { grid: { display: false } }, y: { beginAtZero: true } },
         },
       });
       const renderVs = (i) => {
         const [label, fn] = METRICS[i];
-        ch.data.datasets[0].data = years.map((y) => fn(data[y]));
+        const vals = years.map((y) => fn(data[y]));
+        const best = vals.indexOf(Math.max(...vals));
+        ch.data.datasets[0].data = vals;
         ch.data.datasets[0].label = label;
+        ch.data.datasets[0].backgroundColor = vals.map((_, j) => (j === best ? C.teal : "rgba(65,216,198,.42)"));
         ch.options.plugins.title.text = "Year vs year — " + label;
         ch.update();
       };
@@ -2597,6 +3466,8 @@ function renderYearOverYear() {
       const y = cardEl.dataset.year;
       const w = data[y];
       const [c1, c2] = yearColors(y);
+      const play = cardEl.querySelector(".wc-play");
+      if (play) play.addEventListener("click", () => storyMode(y));
       const btn = cardEl.querySelector(".wc-dl");
       btn.addEventListener("click", () => downloadYearCard({
         year: y, partial: y === nowYear, c1, c2,
@@ -2645,12 +3516,16 @@ function renderThenVsNow(years, data) {
     const pct = a ? Math.round((b - a) / a * 100) : null;
     const dir = b > a ? "up" : b < a ? "down" : "flat";
     const arrow = dir === "up" ? "▲" : dir === "down" ? "▼" : "＝";
+    /* the % alone hides magnitude — +300% on 12→48 raids visually outranks
+     * +40% on 100k→140k catches; the paired bars restore the scale */
+    const m = Math.max(a, b, 1);
     return `<div class="tvn-row">
       <span class="tvn-l">${esc(label)}</span>
       <span class="tvn-a mono">${fmt(a)}</span>
       <span class="tvn-arrow ${dir}">${arrow}</span>
       <span class="tvn-b mono">${fmt(b)}</span>
       <span class="tvn-d ${dir}">${pct === null ? "new" : (pct > 0 ? "+" : "") + pct + "%"}</span>
+      <span class="tvn-bars" aria-hidden="true"><i class="a" style="width:${(a / m * 100).toFixed(1)}%"></i><i class="b" style="width:${(b / m * 100).toFixed(1)}%"></i></span>
     </div>`;
   }).join("");
 
@@ -2664,7 +3539,7 @@ function renderThenVsNow(years, data) {
     data: {
       labels: [first, last],
       datasets: kinds.map((k) => ({
-        label: k, backgroundColor: SERIES_COLORS[k], stack: "mix", borderRadius: 2,
+        label: k, backgroundColor: SERIES_COLORS[k], stack: "mix",
         data: [share(A, k), share(B, k)],
       })),
     },
@@ -2672,13 +3547,14 @@ function renderThenVsNow(years, data) {
       indexAxis: "y",
       plugins: {
         title: { display: true, text: "What your play is made of (share of each year)" },
-        tooltip: { callbacks: { label: (c) => `${c.dataset.label}: ${c.raw.toFixed(1)}%` } },
+        tooltip: { callbacks: { label: (c) => `${c.dataset.label}: ${c.raw.toFixed(1)}%`, footer: () => "" } },
       },
-      scales: { x: { stacked: true, max: 100, title: { display: true, text: "% of that year's actions" } }, y: { stacked: true, grid: { display: false } } },
+      /* ticks carry their own unit — the axis title alone left bare 0-100 numbers */
+      scales: { x: { stacked: true, max: 100, ticks: { callback: (v) => v + "%" }, title: { display: true, text: "% of that year's actions" } }, y: { stacked: true, grid: { display: false } } },
     },
   }));
 
-  return `<hr class="mod-divider"><div style="font-weight:700;margin-bottom:2px">Then vs now — ${first} against ${last}</div>
+  return `<hr class="mod-divider"><h4 class="mod-h4">Then vs now — ${first} against ${last}</h4>
     <div class="mod-sub" style="margin-bottom:10px">Your first logged year beside your most recent one.</div>
     <div class="tvn-head"><span class="tvn-l"></span><span class="tvn-a">${first}</span><span class="tvn-arrow"></span><span class="tvn-b">${last}</span><span class="tvn-d">change</span></div>
     ${rows}
@@ -2711,18 +3587,18 @@ async function downloadYearCard(o, btn) {
   try { await document.fonts.ready; } catch (e) { /* fonts may already be ready */ }
 
   // background + colored glows
-  ctx.fillStyle = "#0a0d1c"; ctx.fillRect(0, 0, W, H);
+  ctx.fillStyle = C.bg; ctx.fillRect(0, 0, W, H);
   let g = ctx.createRadialGradient(170, 150, 0, 170, 150, 720);
-  g.addColorStop(0, o.c1 + "66"); g.addColorStop(1, "#0a0d1c00");
+  g.addColorStop(0, o.c1 + "66"); g.addColorStop(1, C.bg + "00");
   ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
   g = ctx.createRadialGradient(W - 150, H - 180, 0, W - 150, H - 180, 780);
-  g.addColorStop(0, o.c2 + "4d"); g.addColorStop(1, "#0a0d1c00");
+  g.addColorStop(0, o.c2 + "4d"); g.addColorStop(1, C.bg + "00");
   ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
   ctx.strokeStyle = "rgba(255,255,255,.10)"; ctx.lineWidth = 2;
   roundRectPath(ctx, 12, 12, W - 24, H - 24, 28); ctx.stroke();
 
   ctx.textAlign = "center";
-  ctx.fillStyle = "#9ba1c5"; ctx.font = "600 22px 'JetBrains Mono', monospace";
+  ctx.fillStyle = C.dim; ctx.font = "600 22px 'JetBrains Mono', monospace";
   ctx.letterSpacing = "6px";
   ctx.fillText("POKÉMON GO · METRICS", W / 2, 86);
   ctx.letterSpacing = "0px";
@@ -2731,7 +3607,7 @@ async function downloadYearCard(o, btn) {
   yg.addColorStop(0, o.c1); yg.addColorStop(1, o.c2);
   ctx.fillStyle = yg; ctx.fillText(o.year, W / 2, 232);
   if (o.partial) {
-    ctx.fillStyle = "#9ba1c5"; ctx.font = "500 26px 'Outfit', sans-serif";
+    ctx.fillStyle = C.dim; ctx.font = "500 26px 'Outfit', sans-serif";
     ctx.fillText("so far", W / 2, 272);
   }
 
@@ -2792,7 +3668,7 @@ async function downloadYearCard(o, btn) {
   const hy = hy0 + off;
   ctx.fillStyle = "#fff"; ctx.font = "700 92px 'JetBrains Mono', monospace";
   ctx.fillText(o.events, W / 2, hy);
-  ctx.fillStyle = "#9ba1c5"; ctx.font = "500 26px 'Outfit', sans-serif";
+  ctx.fillStyle = C.dim; ctx.font = "500 26px 'Outfit', sans-serif";
   ctx.fillText("logged actions", W / 2, hy + 40);
 
   // mini monthly stacked chart
@@ -2809,7 +3685,7 @@ async function downloadYearCard(o, btn) {
       if (h > 0.4) { ctx.fillStyle = color; ctx.fillRect(x, yb - h, barW, h); }
       yb -= h;
     });
-    ctx.fillStyle = "#6b76a8"; ctx.font = "500 17px 'Outfit', sans-serif";
+    ctx.fillStyle = C.faint; ctx.font = "500 17px 'Outfit', sans-serif";
     ctx.fillText(o.monthLabels[i] || "", x + barW / 2, cBot + 24);
   });
   // legend — centre each wrapped row under the chart it explains
@@ -2821,7 +3697,7 @@ async function downloadYearCard(o, btn) {
     row.forEach((it) => {
       ctx.fillStyle = it.color;
       roundRectPath(ctx, lx, ly - LEG_SW + 2, LEG_SW, LEG_SW, 4); ctx.fill();
-      ctx.fillStyle = "#c8cce6"; ctx.font = "500 19px 'Outfit', sans-serif";
+      ctx.fillStyle = C.dim; ctx.font = "500 19px 'Outfit', sans-serif";
       ctx.fillText(it.label, lx + LEG_SW + LEG_GAP, ly);
       lx += it.w;
     });
@@ -2829,7 +3705,7 @@ async function downloadYearCard(o, btn) {
     ly += LEG_LH;
   });
   if (o.peakLabel) {
-    ctx.fillStyle = "#9ba1c5"; ctx.font = "500 20px 'Outfit', sans-serif";
+    ctx.fillStyle = C.dim; ctx.font = "500 20px 'Outfit', sans-serif";
     ctx.fillText("Month by month — " + o.peakLabel, W / 2, legendH ? ly + 2 : cBot + 56);
   }
 
@@ -2845,7 +3721,7 @@ async function downloadYearCard(o, btn) {
     ctx.textAlign = "left";
     ctx.fillStyle = "#fff"; ctx.font = "700 40px 'JetBrains Mono', monospace";
     ctx.fillText(v, x + 22, y + 52);
-    ctx.fillStyle = "#9ba1c5"; ctx.font = "500 20px 'Outfit', sans-serif";
+    ctx.fillStyle = C.dim; ctx.font = "500 20px 'Outfit', sans-serif";
     ctx.fillText(l, x + 22, y + 84);
   });
   ctx.textAlign = "center";
@@ -2854,7 +3730,7 @@ async function downloadYearCard(o, btn) {
   ctx.fillStyle = "#848ab0"; ctx.font = "600 18px 'JetBrains Mono', monospace";
   ctx.letterSpacing = "3px";
   ctx.fillText(("POGO METRICS · " + o.year).toUpperCase(), W / 2, H - 62);
-  ctx.fillStyle = "#6b76a8"; ctx.font = "500 15px 'JetBrains Mono', monospace";
+  ctx.fillStyle = C.faint; ctx.font = "500 15px 'JetBrains Mono', monospace";
   ctx.letterSpacing = "2px";
   ctx.fillText("POGO-METRICS.NETLIFY.APP", W / 2, H - 34);
   ctx.letterSpacing = "0px";
@@ -2916,7 +3792,7 @@ function renderWorldUnavailable() {
     <h3 style="margin:10px 0 6px">Your map couldn't be drawn</h3>
     <p>${esc(why)} Your location data parsed perfectly — there is just nothing to draw it into yet.
     Retrying only re-fetches that library from this site; your files are still only in this tab.</p>
-    <button class="btn btn-teal" id="world-retry" type="button" style="margin-top:14px">↻ Try again</button>
+    <button class="btn btn-teal" id="world-retry" type="button" style="margin-top:14px"><span aria-hidden="true">↻</span> Try again</button>
   </div>`;
   later(wireWorldRetry);
   return moduleHTML("🌍", "Your world", "The map needs one more file from this site before it can draw.", inner);
@@ -3336,8 +4212,8 @@ function initGlobe({ P, points, maxCount, arcs, home, paths }) {
     const below = $$("below");
     if (below && (empire.length || topArcs.length)) {
       below.innerHTML = `<div class="split" style="margin-top:18px">
-        ${empire.length ? `<div><div style="font-weight:700;margin-bottom:10px">🌐 Your remote-raid empire</div>${rankList(empire.slice(0, 10).map(([n, r]) => [n, r.raids]))}</div>` : "<div></div>"}
-        ${topArcs.length ? `<div><div style="font-weight:700;margin-bottom:10px">🚀 Longest hauls</div>${calloutRow(topArcs.map((a) => [fmt(round(a.km)) + " km", a._country && a._country !== "Open water" ? "to " + a._country : "to a far-off gym"]))}</div>` : "<div></div>"}
+        ${empire.length ? `<div><h4 class="mod-h4">🌐 Your remote-raid empire</h4>${rankList(empire.slice(0, 10).map(([n, r]) => [n, r.raids]))}</div>` : "<div></div>"}
+        ${topArcs.length ? `<div><h4 class="mod-h4">🚀 Longest hauls</h4>${calloutRow(topArcs.map((a) => [fmt(round(a.km)) + " km", a._country && a._country !== "Open water" ? "to " + a._country : "to a far-off gym"]))}</div>` : "<div></div>"}
       </div>`;
     }
   }).catch(() => {});
@@ -3532,8 +4408,8 @@ function renderSocial() {
       data: {
         labels: months.map(fmtMonth),
         datasets: [
-          { label: "Friends added", backgroundColor: C.teal, stack: "f", borderRadius: 2, data: months.map((m) => F.monthly[m] || 0) },
-          { label: "Unfriended", backgroundColor: C.red, stack: "f", borderRadius: 2, data: months.map((m) => -(F.unfriendedMonthly[m] || 0)) },
+          { label: "Friends added", backgroundColor: C.teal, stack: "f", data: months.map((m) => F.monthly[m] || 0) },
+          { label: "Unfriended", backgroundColor: C.red, stack: "f", data: months.map((m) => -(F.unfriendedMonthly[m] || 0)) },
         ],
       },
       options: {
@@ -3547,9 +4423,9 @@ function renderSocial() {
     const srcList = Object.entries(F.sources).sort((a, b) => b[1] - a[1]).map(([k, v]) => [prettySource(k), v]);
     const gameList = Object.entries(F.games).sort((a, b) => b[1] - a[1]).slice(0, 6);
     inner += `<div class="split" style="margin-top:16px">
-      <div><div style="font-weight:700;margin-bottom:10px">Your oldest friendships</div>${rankList(oldest, (days) => (days / 365.25).toFixed(1) + " yr")}</div>
-      <div><div style="font-weight:700;margin-bottom:10px">How you connect</div>${rankList(srcList.slice(0, 6))}
-        ${gameList.length ? `<div style="font-weight:700;margin:16px 0 10px">Games you share</div>${rankList(gameList)}` : ""}</div>
+      <div><h4 class="mod-h4">Your oldest friendships</h4>${rankList(oldest, (days) => (days / 365.25).toFixed(1) + " yr")}</div>
+      <div><h4 class="mod-h4">How you connect</h4>${rankList(srcList.slice(0, 6))}
+        ${gameList.length ? `<h4 class="mod-h4">Games you share</h4>${rankList(gameList)}` : ""}</div>
     </div>`;
     sub = `${fmt(F.rows.length)} friends in your roster, the oldest going back ${longest} years.`;
   }
@@ -3564,7 +4440,7 @@ function renderSocial() {
     const you = F.initiated["You"] || F.initiated["Me"] || 0;
     const them = Object.entries(F.initiated).filter(([k]) => !/^(you|me)$/i.test(k)).reduce((a, [, v]) => a + v, 0);
     if (bursts.length || you + them) {
-      inner += `<hr class="mod-divider"><div style="font-weight:700;margin-bottom:2px">How your circle grew</div>`;
+      inner += `<hr class="mod-divider"><h4 class="mod-h4">How your circle grew</h4>`;
       if (you + them) {
         const pct = Math.round(you / (you + them) * 100);
         inner += `<div class="mod-sub" style="margin-bottom:10px">You sent the request
@@ -3591,7 +4467,7 @@ function renderSocial() {
     dated.forEach((r) => { const y = Math.floor(yearsOf(r)); buckets[y] = (buckets[y] || 0) + 1; });
     const bLabels = Object.keys(buckets).map(Number).sort((a, b) => a - b);
     const cTenure = uid();
-    inner += `<hr class="mod-divider"><div style="font-weight:700;margin-bottom:2px">Friendship tenure</div>
+    inner += `<hr class="mod-divider"><h4 class="mod-h4">Friendship tenure</h4>
       <div class="mod-sub" style="margin-bottom:10px">Your oldest friendship: <b>${esc(oldest.name)}</b>, going strong for
       <b>${yearsOf(oldest).toFixed(1)} years</b> (since ${fmtDate(oldest.ts)}).</div>
       <div>${chartWrap(cTenure)}</div>`;
@@ -3599,7 +4475,7 @@ function renderSocial() {
       type: "bar",
       data: {
         labels: bLabels.map((y) => (y === 0 ? "< 1 yr" : y + "–" + (y + 1) + " yrs")),
-        datasets: [{ data: bLabels.map((y) => buckets[y]), backgroundColor: C.teal, borderRadius: 6, label: "friends" }],
+        datasets: [{ data: bLabels.map((y) => buckets[y]), backgroundColor: C.teal, label: "friends" }],
       },
       options: { plugins: { legend: { display: false }, title: { display: true, text: "How long you've been friends" } }, scales: { y: { beginAtZero: true, title: { display: true, text: "friends" } }, x: { grid: { display: false } } } },
     }));
@@ -3610,7 +4486,7 @@ function renderSocial() {
   if (STATE.invites.accepted) funnel.push([fmt(STATE.invites.accepted), "accepted"]);
   if (STATE.invites.declined) funnel.push([fmt(STATE.invites.declined), "declined"]);
   if (STATE.party.sent + STATE.party.received) funnel.push([fmt(STATE.party.sent + STATE.party.received), "Party Play invites"]);
-  if (funnel.length) inner += `<div style="margin-top:18px;font-weight:700">Recent invite activity <span class="muted" style="font-weight:400">(Niantic keeps ~4 months)</span></div>${calloutRow(funnel)}`;
+  if (funnel.length) inner += `<h4 class="mod-h4">Recent invite activity <span class="muted" style="font-weight:400">(Niantic keeps ~4 months)</span></h4>${calloutRow(funnel)}`;
 
   if (!sub) sub = "Your recent friend-request and Party Play activity.";
   return moduleHTML("🤝", "Your social world", sub, inner);
@@ -3658,7 +4534,8 @@ function renderSpending() {
       data: {
         labels: months.map(fmtMonth),
         datasets: [
-          { label: "Coins bought", borderColor: C.yellow, backgroundColor: C.yellow, pointRadius: 0, borderWidth: 2, tension: .3, data: months.map((m) => S.boughtMonthly[m] || 0) },
+          /* inflow teal, outflow red — yellow is Encounters' identity hue */
+          { label: "Coins bought", borderColor: C.teal, backgroundColor: C.teal, pointRadius: 0, borderWidth: 2, tension: .3, data: months.map((m) => S.boughtMonthly[m] || 0) },
           { label: "Coins spent", borderColor: C.red, backgroundColor: C.red, pointRadius: 0, borderWidth: 2, tension: .3, data: months.map((m) => S.spentMonthly[m] || 0) },
         ],
       },
@@ -3668,8 +4545,8 @@ function renderSpending() {
 
   const items = Object.entries(S.items).sort((a, b) => b[1] - a[1]).slice(0, 10).map(([n, v]) => [prettyItem(n), v]);
   if (items.length) inner += `<div class="split" style="margin-top:16px">
-    <div><div style="font-weight:700;margin-bottom:10px">Most-bought shop items</div>${rankList(items)}</div>
-    <div><div style="font-weight:700;margin-bottom:10px">Spending by currency</div>${rankList(curEntries.map(([c, d]) => [c, d.native]), (v, name) => (CUR_SYM[name] || "") + fmt(round(v)))}</div>
+    <div><h4 class="mod-h4">Most-bought shop items</h4>${rankList(items)}</div>
+    <div><h4 class="mod-h4">Spending by currency</h4>${rankList(curEntries.map(([c, d]) => [c, d.native]), (v, name) => (CUR_SYM[name] || "") + fmt(round(v)))}</div>
   </div>`;
 
   /* Where the coins were actually bought. Parsed since day one, shown nowhere —
@@ -3677,7 +4554,7 @@ function renderSpending() {
    * bonus the app stores don't. */
   const vendors = Object.entries(S.vendor).sort((a, b) => b[1].coins - a[1].coins);
   if (vendors.length > 1) {
-    inner += `<hr class="mod-divider"><div style="font-weight:700;margin-bottom:2px">Where you bought your coins</div>
+    inner += `<hr class="mod-divider"><h4 class="mod-h4">Where you bought your coins</h4>
       <div class="mod-sub" style="margin-bottom:10px">Ranked by coins, not cash — your purchases may span several currencies.</div>`;
     const buys = {};
     vendors.forEach(([v, d]) => (buys[prettyVendor(v)] = d.purchases));
@@ -3697,7 +4574,7 @@ function renderSpending() {
   if (S.paidBundles) extras.push([fmt(S.paidBundles), "paid shop bundles"]);
   if (S.granted) extras.push([fmt(S.granted), "gifts from Niantic support"]);
   if (extras.length) {
-    inner += `<div style="margin-top:18px;font-weight:700">Also in the ledger</div>${calloutRow(extras)}`;
+    inner += `<h4 class="mod-h4">Also in the ledger</h4>${calloutRow(extras)}`;
     const gifts = Object.entries(S.grantedItems).sort((a, b) => b[1] - a[1]).slice(0, 4);
     if (gifts.length) {
       inner += `<div class="hw-caption">"Granted by admin" is Niantic making something right after an outage or a broken raid.
@@ -3724,10 +4601,10 @@ function prettyVendor(v) {
  * actual bag holds 16,807. Points and resources are counted, but kept out of
  * the bag figure and labelled for what they are. */
 const BAG_GROUPS = [
-  ["Poké Balls", /ball/i, "#e63946"],
-  ["Berries", /berry|razz|nanab|pinap/i, "#5ad469"],
+  ["Poké Balls", /ball/i, C.red],
+  ["Berries", /berry|razz|nanab|pinap/i, C.green],
   ["Potions & Revives", /potion|revive/i, "#ff6bb3"],
-  ["Raid & battle passes", /raid pass|raid ticket|battle_pass|premium/i, "#ff9d42"],
+  ["Raid & battle passes", /raid pass|raid ticket|battle_pass|premium/i, C.orange],
   ["Evolution items", /evolution|stone|dragon scale|king's rock|metal coat|up-grade|sinnoh|unova/i, "#a06bff"],
   ["TMs & move items", /\bTM\b|move_reroll/i, "#3b6cff"],
   ["Candy", /candy/i, "#ffcb05"],
@@ -3832,7 +4709,11 @@ function renderFitness() {
   inner += `<div style="margin-top:16px">${chartWrap(cId)}</div>`;
   later(() => newChart(cId, {
     type: "bar",
-    data: { labels: days.map((d) => d.slice(5)), datasets: [{ label: "Steps", backgroundColor: C.green, borderRadius: 3, data: days.map((d) => D[d].steps) }] },
+    data: {
+      // real date labels, not raw ISO tails ("Aug 14", not "08-14")
+      labels: days.map((d) => { const t = parseTS(d); return t ? t.toLocaleDateString(undefined, { month: "short", day: "numeric" }) : d; }),
+      datasets: [{ label: "Steps", backgroundColor: C.teal, data: days.map((d) => D[d].steps) }],
+    },
     options: { plugins: { legend: { display: false }, title: { display: true, text: "Daily steps (Adventure Sync window)" } }, scales: { x: { grid: { display: false }, ticks: { maxTicksLimit: 14 } }, y: { title: { display: true, text: "steps" } } } },
   }));
 
@@ -3852,7 +4733,7 @@ function renderLiveEvents() {
     [fmt(totalTickets), "Tickets bought"],
     [spendStr || "—", "Spent on tickets"],
   ]);
-  inner += `<div style="font-weight:700;margin:18px 0 10px">Events you bought into</div>`;
+  inner += `<h4 class="mod-h4">Events you bought into</h4>`;
   inner += rankList(evs.slice(0, 12).map((e) => [e.name + (e.date ? " · " + e.date.getUTCFullYear() : ""), e.tickets]), (v) => v + " 🎟️");
   return moduleHTML("🎟️", "Your live events", `Tickets to ${evs.length} real-world Pokémon GO event${evs.length > 1 ? "s" : ""}.`, inner);
 }
@@ -3883,18 +4764,18 @@ function renderSessions() {
     inner += `<div style="margin-top:16px">${chartWrap(cId, "short")}</div>`;
     later(() => newChart(cId, {
       type: "bar",
-      data: { labels: months.map(fmtMonth), datasets: [{ label: "Sessions", backgroundColor: C.blue, borderRadius: 2, data: months.map((m) => S.monthly[m] || 0) }] },
+      data: { labels: months.map(fmtMonth), datasets: [{ label: "Sessions", backgroundColor: C.teal, data: months.map((m) => S.monthly[m] || 0) }] },
       options: { plugins: { legend: { display: false }, title: { display: true, text: "App opens per month" } }, scales: { x: { grid: { display: false }, ticks: { maxTicksLimit: 16 } }, y: { title: { display: true, text: "sessions" } } } },
     }));
   }
   if (devices.length || cities.length) inner += `<div class="split" style="margin-top:16px">
-    ${devices.length ? `<div><div style="font-weight:700;margin-bottom:10px">Devices you played on</div>${rankList(devices)}</div>` : "<div></div>"}
-    ${cities.length ? `<div><div style="font-weight:700;margin-bottom:10px">Where you logged in</div>${rankList(cities)}</div>` : "<div></div>"}
+    ${devices.length ? `<div><h4 class="mod-h4">Devices you played on</h4>${rankList(devices)}</div>` : "<div></div>"}
+    ${cities.length ? `<div><h4 class="mod-h4">Where you logged in</h4>${rankList(cities)}</div>` : "<div></div>"}
   </div>`;
   /* Country is the one piece of geography that needs no GPS file at all, so
    * this survives even when someone uploads nothing but their session log. */
   if (countries.length > 1) {
-    inner += `<hr class="mod-divider"><div style="font-weight:700;margin-bottom:2px">Countries you've played in</div>
+    inner += `<hr class="mod-divider"><h4 class="mod-h4">Countries you've played in</h4>
       <div class="mod-sub" style="margin-bottom:10px">Niantic stamps each session with a country. No coordinates involved —
       this is the only map in the app that works without a single GPS file.</div>`;
     inner += rankList(countries.map(([cc, n]) => [countryName(cc), n]), (v) => fmt(v) + " sessions");
@@ -3921,7 +4802,7 @@ function renderSupport() {
   const meta = topics.find(([t]) => /request my data/i.test(t));
   const convo = T.messages > T.tickets
     ? ` across <b>${fmt(T.messages)}</b> message${T.messages === 1 ? "" : "s"}` : "";
-  let out = `<hr class="mod-divider"><div style="font-weight:700;margin-bottom:2px">Your support history</div>
+  let out = `<hr class="mod-divider"><h4 class="mod-h4">Your support history</h4>
     <div class="mod-sub" style="margin-bottom:10px">
       <b>${fmt(T.tickets)}</b> ticket${T.tickets === 1 ? "" : "s"}${convo} with Niantic${span}.
       ${meta ? `${meta[1] === T.tickets ? "Every one of them was" : `<b>${fmt(meta[1])}</b> of them were`} a request for your data —
@@ -3962,7 +4843,7 @@ function renderTravelLog() {
     rec.n,
   ]);
   const span = away.reduce((best, [name, rec]) => (rec.days.size > (best ? best[1].days.size : 0) ? [name, rec] : best), null);
-  return `<hr class="mod-divider"><div style="font-weight:700;margin-bottom:2px">Your travel log</div>
+  return `<hr class="mod-divider"><h4 class="mod-h4">Your travel log</h4>
     <div class="mod-sub" style="margin-bottom:10px">
       Home base is <b>${esc(homeName)}</b> — ${fmt(home.n)} of your sessions.
       You've also opened the game in <b>${fmt(away.length)}</b> other place${away.length === 1 ? "" : "s"}${
@@ -4014,19 +4895,46 @@ document.addEventListener("DOMContentLoaded", () => {
     fileInput.addEventListener("change", () => takeFiles(fileInput));
     folderInput.addEventListener("change", () => takeFiles(folderInput));
 
-    ["dragenter", "dragover"].forEach((ev) => dz.addEventListener(ev, (e) => { e.preventDefault(); dz.classList.add("drag"); }));
-    ["dragleave", "drop"].forEach((ev) => dz.addEventListener(ev, (e) => { e.preventDefault(); if (ev === "drop" || e.target === dz) dz.classList.remove("drag"); }));
-    dz.addEventListener("drop", async (e) => {
+    /* A drop that misses the dashed zone must never navigate the tab to the
+     * raw file — that would wipe the queue and any built report. Swallow
+     * drags at the document level and treat the whole page as the target:
+     * the zone lights up as soon as a file drag enters the window, and a
+     * drop anywhere routes through the same ingest as a direct hit. The
+     * depth counter is needed because dragenter/dragleave fire for every
+     * element the cursor crosses. */
+    let dragDepth = 0;
+    const dragHasFiles = (e) => e.dataTransfer && [...(e.dataTransfer.types || [])].includes("Files");
+    document.addEventListener("dragover", (e) => e.preventDefault());
+    document.addEventListener("dragenter", (e) => {
+      if (!dragHasFiles(e)) return;
+      dragDepth++;
+      dz.classList.add("drag");
+    });
+    document.addEventListener("dragleave", () => {
+      if (--dragDepth <= 0) { dragDepth = 0; dz.classList.remove("drag"); }
+    });
+    // An aborted drag (Esc mid-drag) fires neither dragleave nor drop
+    window.addEventListener("dragend", () => { dragDepth = 0; dz.classList.remove("drag"); });
+    document.addEventListener("drop", async (e) => {
       e.preventDefault();
+      dragDepth = 0;
+      dz.classList.remove("drag");
       const items = e.dataTransfer.items;
       const files = items && items.length && items[0].webkitGetAsEntry ? await collectFiles(items) : [...e.dataTransfer.files];
-      ingest(files);
+      if (files.length) ingest(files);
+    });
+    // The report can't be deep-linked or restored without re-reading files —
+    // warn before a tab wipe while real (non-sample) results are on screen.
+    window.addEventListener("beforeunload", (e) => {
+      if (RAW.length && !SAMPLE_DATA && !$("results").classList.contains("results-hidden")) e.preventDefault();
     });
 
     $("build-btn").addEventListener("click", build);
     // Clear means clear: the file queue AND anything already on screen. For a
     // privacy tool, leaving the built dashboard up after "Clear" is a betrayal.
+    const title0 = document.title;
     $("clear-btn").addEventListener("click", () => {
+      document.title = title0;
       RAW = []; DATA_GEN++; SAMPLE_DATA = false;
       renderDetected();
       clearError();
@@ -4035,15 +4943,29 @@ document.addEventListener("DOMContentLoaded", () => {
       res.innerHTML = "";
       res.classList.add("results-hidden");
     });
-    // iOS has no real folder picker (webkitdirectory is ignored) — hide the
-    // button rather than let it degrade into a confusing files-only dialog.
+    // Neither iOS nor Android phones have a real folder picker (webkitdirectory
+    // is ignored) — hide the button rather than let it degrade into a
+    // confusing files-only dialog. Touch laptops keep it: their primary
+    // pointer reports as fine.
     const isIOS = /iPhone|iPad|iPod/.test(navigator.userAgent)
       || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
-    if (isIOS) $("folder-btn").style.display = "none";
-    // "Drop your files here" describes a gesture touch screens don't have
-    if (window.matchMedia && window.matchMedia("(pointer: coarse)").matches) {
+    const coarse = window.matchMedia && window.matchMedia("(pointer: coarse)").matches;
+    if (isIOS || (coarse && /Android/i.test(navigator.userAgent))) $("folder-btn").style.display = "none";
+    // "Drop your files here" describes a gesture touch screens don't have —
+    // swap the paragraph too, not just the heading.
+    if (coarse) {
       const h = dz.querySelector("h2, h3");
       if (h) h.textContent = "Add your export files";
+      const p = dz.querySelector("p");
+      if (p) p.innerHTML = "Pick files from the unzipped export — one like <code>FriendList.tsv</code>, or all of them";
+    }
+    // iPhones can't unzip Niantic's password-protected ZIP at all — say so up
+    // front, in the dropzone, not only after a failed attempt.
+    if (isIOS) {
+      const hint = dz.querySelector(".dz-hint");
+      if (hint) hint.innerHTML = '.tsv · .csv · .txt · .json — read locally, never uploaded<br>'
+        + 'Heads up: the iPhone Files app can\'t open Niantic\'s password-protected ZIP — '
+        + '<a href="index.html#request">unzip it on a computer first →</a>';
     }
   }
 

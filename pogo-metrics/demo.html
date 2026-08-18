@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <title>Live Example — POGO Metrics</title>
   <meta name="description" content="A live example of POGO Metrics, built from a fully anonymized sample Pokémon GO export — see exactly what your own data would look like before you upload anything." />
   <meta name="theme-color" content="#0a0d1c">
@@ -28,14 +28,14 @@
   <link rel="preload" href="vendor/fonts/c8e7a734b1.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="preload" href="vendor/fonts/1cd702cd25.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="stylesheet" href="vendor/fonts/fonts.css" />
-  <link rel="stylesheet" href="css/style.css?v=20260813a" />
+  <link rel="stylesheet" href="css/style.css?v=20260817a" />
 </head>
 <body>
   <nav id="topnav" data-active="demo"></nav>
 
-  <main>
+  <main id="main">
     <!-- ───────────────────────── intro ───────────────────────── -->
-    <section class="section" id="demo-intro" style="border-top:none;padding-top:120px">
+    <section class="section page-head" id="demo-intro">
       <div class="center">
         <a class="deck-kicker" href="https://observation-deck.netlify.app/">Observation Deck / POGO Metrics</a>
         <div class="eyebrow">Live example</div>
@@ -49,7 +49,7 @@
           full-screen recap.
         </p>
         <div class="hero-cta" style="justify-content:center">
-          <button class="btn btn-teal" id="demo-story-cta" type="button" disabled>▶ Play the example story</button>
+          <button class="btn btn-teal" id="demo-story-cta" type="button" disabled><span aria-hidden="true">▶</span> Play the example story</button>
           <a class="btn btn-primary" href="metrics.html">Visualize my journey</a>
           <a class="btn btn-ghost" href="/#datasets">What's in your export</a>
         </div>
@@ -58,14 +58,16 @@
     </section>
 
     <!-- app.js needs these hooks even on a results-only page -->
-    <div id="upload-error" class="notice warn" style="display:none"></div>
+    <div id="upload-error" class="notice warn" role="alert" aria-live="assertive" style="display:none"></div>
 
     <!-- ───────────────────────── results (filled by app.js) ───────────────────────── -->
     <section id="results">
       <div class="empty-state" id="demo-loading">
-        <div class="es-emoji">🌀</div>
+        <div class="gl-spin" style="margin:0 auto 14px"></div>
         <h3 style="margin:10px 0 6px">Building the example…</h3>
         <p>Loading the anonymized sample export and rendering every chapter.</p>
+        <noscript><p><b>This example is rendered by JavaScript in your browser</b> — the same engine
+        that would read your own files locally. Enable JavaScript to see the build.</p></noscript>
       </div>
     </section>
   </main>
@@ -89,9 +91,9 @@
 
   <script>window.DEMO_PAGE = true;</script>
   <!-- heavy chart/map/globe libraries load on demand once the sample data is parsed -->
-  <script defer src="js/nav.js?v=20260813a"></script>
-  <script defer src="js/catalog.js?v=20260813a"></script>
-  <script defer src="js/pokedex.js?v=20260813a"></script>
-  <script defer src="js/app.js?v=20260813a"></script>
+  <script defer src="js/nav.js?v=20260817a"></script>
+  <script defer src="js/catalog.js?v=20260817a"></script>
+  <script defer src="js/pokedex.js?v=20260817a"></script>
+  <script defer src="js/app.js?v=20260817a"></script>
 </body>
 </html>

@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <title>POGO Metrics — visualize your Pokémon GO journey</title>
   <meta name="description" content="Turn your official Niantic Pokémon GO data export into a beautiful, private, digestible story of your trainer journey. Everything runs in your browser — nothing is uploaded." />
   <meta name="theme-color" content="#0a0d1c">
@@ -28,7 +28,7 @@
   <link rel="preload" href="vendor/fonts/c8e7a734b1.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="preload" href="vendor/fonts/1cd702cd25.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="stylesheet" href="vendor/fonts/fonts.css" />
-  <link rel="stylesheet" href="css/style.css?v=20260813a" />
+  <link rel="stylesheet" href="css/style.css?v=20260817a" />
 </head>
 <body>
   <nav id="topnav" data-active="home"></nav>
@@ -46,17 +46,21 @@
         you can play back and share.
       </p>
       <div class="hero-cta">
-        <a class="btn btn-ghost" href="#datasets">What's in your export</a>
-        <a class="btn btn-teal" href="demo.html">▶ Watch the example story</a>
+        <a class="btn btn-teal" href="demo.html"><span aria-hidden="true">▶</span> Watch the example story</a>
         <a class="btn btn-primary" href="metrics.html">Visualize my journey</a>
       </div>
+      <!-- Most first visits happen BEFORE the ~7-day Niantic wait has even been
+           started — the funnel's real first step gets its own line rather than
+           competing as a third button. -->
+      <p class="hero-helper">No export yet? <a href="#request">Request it from Niantic</a> — free,
+        official, takes about a week. Curious what's inside one? <a href="#datasets">See every file →</a></p>
       <div class="privacy-ribbon">
         🔒 <span><b>100% private.</b> Your files never leave your device — there is no server, no upload, no account.</span>
       </div>
     </div>
   </header>
 
-  <main>
+  <main id="main">
     <!-- ───────────────────────── how it works ───────────────────────── -->
     <section class="section" id="how">
       <h2><span class="num">01</span>How it works</h2>
@@ -111,7 +115,7 @@
       </div>
       <div class="notice" style="margin-top:12px">
         <b>Just sent your request?</b> The wait is up to a week — and the download link Niantic sends
-        expires after 7 days. <button type="button" class="linkish" id="ics-reminder">📅 Download a
+        expires after 7 days. <button type="button" class="linkish" id="ics-reminder"><span aria-hidden="true">📅</span> Download a
         calendar reminder</button> to check back, and bookmark this page now so your story is one
         tap away.
       </div>
@@ -170,7 +174,7 @@
         </div>
       </div>
       <div class="hero-cta" style="margin-top:22px">
-        <a class="btn btn-teal" href="trainer-model.html">📈 Explore the Trainer Model</a>
+        <a class="btn btn-teal" href="trainer-model.html"><span aria-hidden="true">📈</span> Explore the Trainer Model</a>
       </div>
     </section>
 
@@ -197,7 +201,7 @@
         Curious first? Play the example story and see exactly what you'd get.
       </p>
       <div class="hero-cta">
-        <a class="btn btn-teal" href="demo.html">▶ Watch the example story</a>
+        <a class="btn btn-teal" href="demo.html"><span aria-hidden="true">▶</span> Watch the example story</a>
         <a class="btn btn-primary" href="metrics.html">Visualize my journey</a>
       </div>
     </section>
@@ -220,13 +224,22 @@
     </p>
   </footer>
 
-  <script defer src="js/nav.js?v=20260813a"></script>
-  <script defer src="js/catalog.js?v=20260813a"></script>
-  <script defer src="js/catalog-ui.js?v=20260813a"></script>
+  <script defer src="js/nav.js?v=20260817a"></script>
+  <script defer src="js/catalog.js?v=20260817a"></script>
+  <script defer src="js/catalog-ui.js?v=20260817a"></script>
   <script>
     // "Check for my Niantic export" — a 7-days-from-now reminder, generated on
     // the device as a plain .ics download. No calendar service, no request.
     document.addEventListener("DOMContentLoaded", () => {
+      // The hero says "drop the files here" — a literal drop on THIS page must
+      // not navigate the tab to the raw file. Files can't survive navigation,
+      // so hand the visitor to the page that actually reads them.
+      document.addEventListener("dragover", (e) => e.preventDefault());
+      document.addEventListener("drop", (e) => {
+        e.preventDefault();
+        if (e.dataTransfer && [...(e.dataTransfer.types || [])].includes("Files"))
+          location.href = "metrics.html";
+      });
       const a = document.getElementById("ics-reminder");
       if (!a) return;
       a.addEventListener("click", () => {

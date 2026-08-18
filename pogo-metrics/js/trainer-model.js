@@ -190,10 +190,72 @@ function chartDefaults() {
   if (REDUCED_MOTION) Chart.defaults.animation = false;
 }
 
+/* ── ported from app.js's chartA11y/srTable: a canvas is a wall of silent
+   pixels, and this page's hand-written aria-labels described what each chart
+   IS ("scatter chart of levels…") but never what it SAYS — and went stale the
+   moment a segmented control redrew the data. Two things work for AT, and this
+   does both: the TAKEAWAY goes in the accessible name (refreshed on every
+   update), and the VALUES go in a real, navigable sr-only table beside the
+   canvas. role="img" fallback content is presentational and reaches nothing. */
+const A11Y_MAX_ROWS = 120;
+const a11yNum = (v) => (typeof v === "number" ? v : v && typeof v.y === "number" ? v.y : Number(v));
+function srTable(caption, cols, rows) {
+  return `<div class="sr-only"><table class="chart-data"><caption>${esc(caption)}</caption>
+    <thead><tr>${cols.map((c) => `<th scope="col">${esc(String(c))}</th>`).join("")}</tr></thead>
+    <tbody>${rows.map((r) => `<tr><th scope="row">${esc(String(r[0]))}</th>${
+      r.slice(1).map((c) => `<td>${esc(String(c))}</td>`).join("")}</tr>`).join("")}</tbody></table></div>`;
+}
+function chartA11y(cv, data, options) {
+  const title = (options && options.plugins && options.plugins.title && options.plugins.title.text)
+    || cv.getAttribute("data-a11y-title") || cv.getAttribute("aria-label") || "Data chart";
+  // remember the page-authored description as the stable fallback title
+  if (!cv.getAttribute("data-a11y-title")) cv.setAttribute("data-a11y-title", title);
+  const labels = (data && data.labels) || [];
+  const sets = ((data && data.datasets) || []).filter((d) => d && Array.isArray(d.data));
+  const bits = [];
+  for (const ds of sets) {
+    const nums = ds.data.map(a11yNum).filter((n) => isFinite(n));
+    if (!nums.length) continue;
+    let hi = -Infinity, at = -1;
+    nums.forEach((v, i) => { if (v > hi) { hi = v; at = i; } });
+    const when = labels[at] != null && labels[at] !== "" ? ` (highest ${fmt(Math.round(hi))} at ${labels[at]})` : ` (highest ${fmt(Math.round(hi))})`;
+    bits.push(`${sets.length > 1 && ds.label ? ds.label + ": " : ""}${fmt(nums.length)} points${when}`);
+  }
+  cv.setAttribute("role", "img");
+  cv.setAttribute("aria-label", bits.length ? `${cv.getAttribute("data-a11y-title")}. ${bits.join(". ")}.` : cv.getAttribute("data-a11y-title"));
+  const host = cv.parentElement;
+  if (!host) return;
+  const old = host.querySelector("table.chart-data");
+  if (old) (old.closest(".sr-only") || old).remove();
+  // charts that sit beside a REAL table already have a navigable data path —
+  // the dynamic name above is all they need
+  const panel = host.closest(".panel");
+  if (panel && panel.querySelector("table:not(.chart-data)")) return;
+  if (!labels.length || !sets.length) return;
+  const shown = labels.slice(0, A11Y_MAX_ROWS);
+  const note = labels.length > shown.length ? ` First ${shown.length} of ${labels.length} rows.` : "";
+  const cols = ["Category", ...sets.map((d, i) => d.label || "Series " + (i + 1))];
+  const rows = shown.map((l, i) => [l, ...sets.map((d) => {
+    const v = a11yNum(d.data[i]);
+    return isFinite(v) ? fmt(Math.round(v)) : "—";
+  })]);
+  host.insertAdjacentHTML("beforeend", srTable(`${cv.getAttribute("data-a11y-title")} — data table.${note}`, cols, rows));
+}
+
 function mount(id, config) {
   CHARTS[id]?.destroy();
-  CHARTS[id] = new Chart($(id), config);
-  return CHARTS[id];
+  const ch = new Chart($(id), config);
+  CHARTS[id] = ch;
+  const cv = $(id);
+  try { chartA11y(cv, ch.data, ch.options); } catch (e) { console.warn("chart a11y", e); }
+  // segmented controls redraw in place — keep the accessible name honest
+  const update = ch.update.bind(ch);
+  ch.update = (...a) => {
+    const r = update(...a);
+    try { chartA11y(cv, ch.data, ch.options); } catch (e) { console.warn("chart a11y", e); }
+    return r;
+  };
+  return ch;
 }
 
 const axis = (title, logScale = false) => ({
@@ -507,6 +569,24 @@ function renderRank(writeBack = false) {
     return s + percentileRank(sorted, +$("in-" + M.key).value || 0);
   }, 0) / 3;
 
+  /* The page's single most personal payoff was inaudible: results rendered
+   * into a bare div with no announcement and no focus move. Announce a one-
+   * line summary ONLY on an explicit rank (button/Enter) — renderRank also
+   * re-fires per keystroke, and a live region on that would chatter. */
+  if (writeBack) {
+    let live = $("rank-live");
+    if (!live) {
+      live = document.createElement("div");
+      live.id = "rank-live";
+      live.className = "sr-only";
+      live.setAttribute("role", "status");
+      live.setAttribute("aria-live", "polite");
+      document.body.appendChild(live);
+    }
+    live.textContent = "";
+    setTimeout(() => { live.textContent =
+      `Ranked against ${band.label}: overall ${ordinal(Math.round(avgPct))} percentile among ${peers.length} trainers. Details follow the Rank me button.`; }, 30);
+  }
   $("rank-out").innerHTML = `
     <div class="chip-row" style="margin:0 0 14px">
       <span class="chip teal"><span class="dot"></span>compared against <b>${band.label}</b></span>
