@@ -14,9 +14,13 @@ friends-list cohort behind the Trainer Model page.)
   **dataset catalog** (data from `js/catalog.js`, rendered by `js/catalog-ui.js`) that teaches
   what every file in a Niantic export contains, how sensitive it is, and what story this site
   can build from it.
-- **`metrics.html`** — The app. Drag-and-drop (files *or* a whole folder), client-side parse,
-  and a per-file story. Each recognised file lights up its own chapter, so uploading only
-  `FriendList.tsv` yields just the social chapter, while a full export yields everything.
+- **`metrics.html`** — The app. Drag-and-drop (files *or* a whole folder — anywhere on the
+  page), client-side parse, and a per-file story that now **builds itself** moments after a
+  drop. Each recognised file lights up its own chapter, so uploading only `FriendList.tsv`
+  yields just the social chapter, while a full export yields everything — ending in a
+  Wrapped-style auto-advancing story with per-slide share cards, a computed trainer type,
+  per-year replays, a wall poster, and a **You vs. a friend** chapter when someone sends you
+  their "My numbers" JSON from this site.
 - **`demo.html`** — The **Live Example**: a permanent reference build that auto-runs the
   parser over the bundled anonymized sample export, so visitors can preview every chart
   before requesting their own data. (`metrics.html?demo=1` still works as a shortcut.)

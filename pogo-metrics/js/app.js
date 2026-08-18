@@ -278,6 +278,7 @@ function freshState() {
       stamps: [], forts: new Map(), gyms: new Map(),
       raidTotal: 0, raidRemote: 0, raidMaxKm: 0, raidKmSum: 0, raidWithDist: 0,
       raidArcs: new Map(), raidGymBins: new Map(), remoteRaidsByYear: {},
+      geoFirst: new Map(), arcFirst: new Map(),   // first-seen month per spot/arc — feeds the globe replay
     },
     trail: [], trailCount: 0, trailStride: 1,
     bag: null,
@@ -810,6 +811,7 @@ async function parsePlayerJourney(label, text) {
       hasLoc = true;
       const key = lat.toFixed(3) + "," + lon.toFixed(3);
       e.geo.set(key, (e.geo.get(key) || 0) + 1);
+      if (!e.geoFirst.has(key)) e.geoFirst.set(key, mk);
       let kc = e.geoKind.get(key);
       if (!kc) { kc = {}; e.geoKind.set(key, kc); }
       kc[label] = (kc[label] || 0) + 1;
@@ -842,6 +844,7 @@ async function parsePlayerJourney(label, text) {
           e.remoteRaidsByYear[ts.getUTCFullYear()] = (e.remoteRaidsByYear[ts.getUTCFullYear()] || 0) + 1;
           const ak = `${lat.toFixed(1)},${lon.toFixed(1)},${glat.toFixed(1)},${glon.toFixed(1)}`;
           e.raidArcs.set(ak, (e.raidArcs.get(ak) || 0) + 1);
+          if (!e.arcFirst.has(ak)) e.arcFirst.set(ak, mk);
           const gk = `${glat.toFixed(1)},${glon.toFixed(1)}`;
           e.raidGymBins.set(gk, (e.raidGymBins.get(gk) || 0) + 1);
         }
@@ -1547,6 +1550,21 @@ async function build() {
     wireCountUps(res);
     // The demo page's hero CTA can only work once STATE is populated — enabling
     // it here avoids opening a one-slide story over an empty build.
+    /* December is Wrapped season — surface the year story while it's the moment */
+    const seasonNow = new Date();
+    if (seasonNow.getMonth() === 11) {
+      const y = String(seasonNow.getFullYear());
+      if (Object.keys(STATE.ev.byMonth).some((m) => m.startsWith(y))) {
+        const heroEl = res.querySelector(".res-hero");
+        if (heroEl) {
+          heroEl.insertAdjacentHTML("beforeend",
+            `<div class="season-banner"><span aria-hidden="true">🎁</span> Your ${y}, wrapped —
+             <button class="linkish" id="season-play" type="button">play ${y}'s story</button></div>`);
+          const sp = $("season-play");
+          if (sp) sp.onclick = () => storyMode(y);
+        }
+      }
+    }
     fetchCohortRank();
     const demoCta = $("demo-story-cta");
     if (demoCta) {
@@ -2059,6 +2077,26 @@ function storyMode(year) {
   render(0);
   // pull focus into the dialog so keyboard users are inside the story, not behind it
   try { ov.querySelector(".story-x").focus(); } catch (e) {}
+}
+
+/* A tiny on-device .ics download — no calendar service, no request. Same
+ * pattern as the landing page's export reminder. */
+function downloadICS(summary, date, filename) {
+  const ymd = date.toISOString().slice(0, 10).replace(/-/g, "");
+  const stamp = new Date().toISOString().replace(/[-:]/g, "").slice(0, 15) + "Z";
+  const ics = [
+    "BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//POGO Metrics//EN",
+    "BEGIN:VEVENT", "UID:" + stamp + "@pogo-metrics",
+    "DTSTAMP:" + stamp, "DTSTART;VALUE=DATE:" + ymd,
+    "SUMMARY:" + summary,
+    "DESCRIPTION:Projected from your recent pace by POGO Metrics. Re-export from Niantic and rebuild to see how close you are: https://pogo-metrics.netlify.app/",
+    "URL:https://pogo-metrics.netlify.app/", "END:VEVENT", "END:VCALENDAR",
+  ].join("\r\n");
+  const url = URL.createObjectURL(new Blob([ics], { type: "text/calendar" }));
+  const a = document.createElement("a");
+  a.href = url; a.download = filename;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 4000);
 }
 
 /* ── shared canvas delivery: native share sheet on phones, download anchor
@@ -2754,10 +2792,18 @@ function renderRecords() {
           <div class="gname">${esc(m.label)}</div>
           <div class="gen-bar-track"><div class="gen-bar-fill" style="width:${Math.min(100, m.current / m.target * 100).toFixed(1)}%"></div></div>
           <div class="gval">${fmt(m.toGo)} to ${fmt(m.target)}${m.eta
-            ? ` · ~${m.eta.toLocaleDateString(undefined, { month: "short", year: "numeric" })}`
+            ? ` · ~${m.eta.toLocaleDateString(undefined, { month: "short", year: "numeric" })}
+               <button class="linkish ms-ics" type="button" data-label="${esc(m.label)}" data-target="${m.target}" data-eta="${m.eta.toISOString()}"
+                 aria-label="Calendar reminder for ${esc(m.label)} reaching ${fmt(m.target)}"><span aria-hidden="true">📅</span></button>`
             : " · on pause"}</div>
         </div>`).join("")}</div>`;
   }
+
+  later(() => {
+    document.querySelectorAll(".ms-ics").forEach((b) => b.addEventListener("click", () =>
+      downloadICS(`Pokémon GO: ~${b.dataset.label} hits ${fmt(+b.dataset.target)}`, new Date(b.dataset.eta),
+        "pogo-metrics-milestone.ics")));
+  });
 
   /* first reveal of the personal-best grid earns the celebration beat */
   later(() => {
@@ -3927,7 +3973,7 @@ function renderGlobe() {
     const [lat, lng] = key.split(",").map(Number);
     const kc = e.geoKind.get(key) || {};
     const kind = (Object.entries(kc).sort((a, b) => b[1] - a[1])[0] || ["Encounters"])[0];
-    return { lat, lng, count, kind };
+    return { lat, lng, count, kind, m: e.geoFirst.get(key) };
   });
   if (!points.length && !STATE.trail.length) return renderFlatMap();
   const maxCount = Math.max(1, ...points.map((p) => p.count));
@@ -3938,7 +3984,7 @@ function renderGlobe() {
     // PAST the real farthest raid — which the same panel prints a few hundred
     // pixels away, from the unrounded figure. One distance, one number.
     const km = haversine(slat, slng, elat, elng);
-    return { slat, slng, elat, elng, count, km: e.raidMaxKm ? Math.min(km, e.raidMaxKm) : km };
+    return { slat, slng, elat, elng, count, km: e.raidMaxKm ? Math.min(km, e.raidMaxKm) : km, m: e.arcFirst.get(key) };
   });
   let home = null, hc = -1;
   for (const [key, c] of e.geo) { if (c > hc) { hc = c; const [la, lo] = key.split(",").map(Number); home = { lat: la, lng: lo }; } }
@@ -3971,7 +4017,8 @@ function renderGlobe() {
         ${gToggle(P + "ly-borders", "#5a6db8", "Country lines", true)}
         ${gToggle(P + "ly-labels", "#dfe6ff", "Country names", true)}
         ${gToggle(P + "ly-rotate", C.blue, "Auto-rotate", !REDUCED_MOTION)}
-        <button id="${P}shot" class="gh-btn" type="button">📷 Save image</button>
+        <button id="${P}shot" class="gh-btn" type="button"><span aria-hidden="true">📷</span> Save image</button>
+        ${REDUCED_MOTION ? "" : `<button id="${P}replay" class="gh-btn" type="button"><span aria-hidden="true">▶</span> Replay my journey</button>`}
       </details>
       <div id="${P}legend" class="globe-hud globe-legend"></div>
       <div id="${P}country" class="globe-hud globe-country" hidden></div>
@@ -4257,6 +4304,47 @@ function initGlobe({ P, points, maxCount, arcs, home, paths }) {
     $$("arc-lbl").textContent = +arcDist.value >= 100 ? "all distances" : "≤ " + fmt(Math.round(arcMax)) + " km";
     updateArcs();
   };
+
+  /* ── chronological replay: months accumulate onto the globe under a date
+     ticker — the "six years in thirty seconds" moment. Data was tagged with
+     first-seen months at parse; the trail is already day-keyed. Restores the
+     layer toggles' truth when done. Not offered under reduced motion. ── */
+  const rp = $$("replay");
+  if (rp) {
+    const months = [...new Set([
+      ...points.map((pt) => pt.m), ...arcs.map((a) => a.m),
+      ...paths.map((pa) => pa.date.slice(0, 7)),
+    ].filter(Boolean))].sort();
+    if (months.length < 2) rp.style.display = "none";
+    else rp.onclick = () => {
+      if (rp.disabled) return;
+      rp.disabled = true;
+      const stage = el.closest(".globe-stage");
+      const tick = document.createElement("div");
+      tick.className = "globe-ticker";
+      stage.appendChild(tick);
+      const dwell = Math.max(220, Math.min(650, 26000 / months.length));
+      let i = 0;
+      const step = () => {
+        if (GLOBE !== world || !el.isConnected) { tick.remove(); return; }   // torn down mid-replay
+        const cur = months[i];
+        tick.textContent = fmtMonth(cur);
+        world.pointsData($$("ly-points").checked ? points.filter((pt) => !pt.m || pt.m <= cur) : []);
+        world.arcsData($$("ly-arcs").checked ? arcs.filter((a) => (!a.m || a.m <= cur) && a.km <= arcMax + 0.5) : []);
+        world.pathsData($$("ly-trail").checked ? paths.filter((pa) => pa.date.slice(0, 7) <= cur) : []);
+        i++;
+        if (i < months.length) setTimeout(step, dwell);
+        else setTimeout(() => {
+          tick.remove();
+          world.pointsData($$("ly-points").checked ? points : []);
+          updateArcs();
+          world.pathsData($$("ly-trail").checked ? paths : []);
+          rp.disabled = false;
+        }, 1100);
+      };
+      step();
+    };
+  }
 
   const onResize = () => { if (GLOBE === world && el.isConnected) world.width(el.clientWidth).height(el.clientHeight || 560); };
   window.addEventListener("resize", onResize);

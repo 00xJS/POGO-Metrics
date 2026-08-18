@@ -25,6 +25,7 @@
     "ImageData.txt",
     "SupportInteractions1.tsv",
     "LiveEventRegistrationHistory_AsPurchaser.tsv",
-    "wayfarer_player_data.json"
+    "wayfarer_player_data.json",
+    "pogo-metrics-stats-rival.json"
   ]
 }

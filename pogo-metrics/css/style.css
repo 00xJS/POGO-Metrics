@@ -568,6 +568,12 @@ h2:hover > .permalink, h3:hover > .permalink,
 }
 #results .res-hero p { color: var(--ink-dim); }
 .res-toolbar { display: flex; justify-content: center; gap: 12px; flex-wrap: wrap; margin: 18px 0 6px; }
+/* December-only: the wrapped-season nudge under the report hero */
+.season-banner {
+  display: inline-flex; align-items: center; gap: 8px; margin-top: 14px;
+  background: rgba(255, 203, 5, .10); border: 1px solid rgba(255, 203, 5, .35);
+  color: var(--ink); padding: 8px 16px; border-radius: 999px; font-size: .90625rem; font-weight: 600;
+}
 
 /* callout pills */
 .callout-row { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 14px; }
@@ -677,6 +683,14 @@ footer .deck-line .sep { margin: 0 9px; opacity: .55; }
   font-family: var(--sans); cursor: pointer; transition: background .12s; }
 .gh-btn:hover { background: rgba(65,216,198,.26); }
 .gh-btn:disabled { opacity: .6; cursor: default; }
+/* the replay's month ticker, centered clear of both top HUDs */
+.globe-ticker {
+  position: absolute; left: 50%; top: 14px; transform: translateX(-50%);
+  z-index: 7; pointer-events: none;
+  font-family: var(--mono); font-weight: 700; font-size: 1.375rem; color: #fff;
+  background: rgba(10, 13, 28, .78); border: 1px solid var(--line);
+  border-radius: 999px; padding: 6px 18px; backdrop-filter: blur(6px);
+}
 .globe-legend { bottom: 12px; left: 12px; max-width: 280px; }
 .globe-legend .gh-li { display: inline-flex; align-items: center; gap: 0.3125rem; margin: 0.125rem 0.5625rem 0.125rem 0; font-size: 0.71875rem; color: var(--ink-dim); }
 .globe-legend .gh-d { width: 8px; height: 8px; border-radius: 2px; flex: none; }
