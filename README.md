@@ -50,28 +50,40 @@ Each file you drop in lights up its own chapter. Upload one file or the whole ex
 | **Spending** — coin flow, top items, which storefront, free boxes and support gifts | `InAppPurchases.tsv` |
 | **Fitness** — Adventure Sync steps and real-world equivalents | `FitnessData.tsv` |
 | **Photo album** — every GO Snapshot you've taken, by month | `ImageData.txt` |
-| **Record book** — your personal bests: biggest day, best month, longest streak, farthest raid | `Player_Journey/*.csv` |
+| **Record book** — your personal bests, plus **next-milestone countdowns** projected from your recent pace (with one-tap calendar reminders) | `Player_Journey/*.csv` |
+| **You vs. a friend** — swap "My numbers" JSON files with a friend over chat and each of you gets a side-by-side chapter: action by action, and who peaked when | a `pogo-metrics-stats*.json` exported by this site |
 | **Behind the screen** — sessions, devices, cities, countries, support tickets | app sessions, installs, support |
 | **Live events and Wayfarer contributions** | tickets, `wayfarer_player_data.json` |
 
 Nothing is required. Upload only `FriendList.tsv` and you'll get exactly the social chapter and
 nothing else.
 
-### Four things to do with the result
+### Five things to do with the result
 
-Once a dashboard is built, the toolbar above it offers:
+Once your story is built (it builds itself moments after a drop), the toolbar above it offers:
 
-- **▶ Play my story** — a full-screen, tappable recap of your whole journey, one number at a
-  time. Tap right for next, left to go back, Esc to close. It's also the demo page's main CTA.
+- **▶ Play my story** — a full-screen recap in the Wrapped grammar: slides auto-advance with a
+  filling progress bar, hold to pause, swipe (or tap the edges, or use arrow keys) to move, Esc
+  or the Android Back button to close. It ends on your computed **trainer type** ("The Raid
+  Boss", "The Night Owl"…) and — if `Gameplay.txt` was included — where your level lands among
+  the Trainer Model's real cohort. Every stat slide has a **Share this** button that renders
+  that one number as a phone-story-sized (1080×1920) image straight into the share sheet, and
+  each card in the Year-over-year chapter has a **▶ Play <year>'s story** of its own.
 - **⬇ Journey card** — your entire journey as one shareable PNG: headline totals, a month-by-month
-  chart with a legend, and auto-awarded badges. The Year-over-year chapter offers the same thing
-  per year.
+  chart with a legend, and auto-awarded badges (your trainer type leads them). The Year-over-year
+  chapter offers the same thing per year.
+- **🖼 Poster** — a print-ready 2480×3508 PNG for the wall: your name, lifetime numbers, and one
+  calendar heat-strip for every year of the journey. (The report also carries print styles now,
+  so plain Cmd+P works too.)
 - **🧾 My numbers** — a JSON dump of every figure the app computed, for anyone who'd rather have
   the data than the pictures. **Location data is deliberately excluded** — no GPS trail, no stop or
   activity coordinates, no cities, no countries. Those stay in the browser. Everything else,
   including your trainer profile, is in the file, so treat it like you would any personal export.
 - **＋ Add more files** — drop in the rest of your export later and the new chapters appear
   alongside the ones you already have.
+
+On the globe, **▶ Replay my journey** plays your whole history chronologically — spots,
+remote-raid arcs and the GPS trail accumulate month by month under a date ticker.
 
 ## Privacy, concretely
 
