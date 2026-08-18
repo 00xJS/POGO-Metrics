@@ -76,6 +76,7 @@ const GO_EVENTS = {
   "2023-08-26": "GO Fest 2023 (Global)", "2023-08-27": "GO Fest 2023 (Global)",
   "2024-07-13": "GO Fest 2024 (Global)", "2024-07-14": "GO Fest 2024 (Global)",
   "2025-06-28": "GO Fest 2025 (Global)", "2025-06-29": "GO Fest 2025 (Global)",
+  "2026-07-11": "GO Fest 2026 (Global)", "2026-07-12": "GO Fest 2026 (Global)",
 };
 const eventFor = (iso) => GO_EVENTS[iso] || null;
 
@@ -465,9 +466,20 @@ async function ingest(files) {
   renderDetected();
   const summaryEl = document.querySelector(".det-head h2");
   if (summaryEl) announce(summaryEl.textContent + ".");
-  // On a phone the Build button lands below the fold, so picking files looked
-  // like nothing happened. Bring the next step into view and focus it.
-  if (RAW.length && $("build-row")) {
+  /* The landing page promises "drop the files here, and watch them turn into a
+   * story" — and a whole-folder drop IS the "I'm done, show me" gesture. Build
+   * after a short debounce (multi-drop sessions coalesce; DATA_GEN guards a
+   * mid-wait Clear), keeping the button as a manual Rebuild. When nothing is
+   * buildable yet, keep the old scroll-and-focus so the state is visible. */
+  const buildable = RAW.some((r) => r.entry && r.entry.story && !r.empty && !r.oversize && !r.unreadable);
+  if (buildable) {
+    if (AUTO_BUILD_T) clearTimeout(AUTO_BUILD_T);
+    const genAt = DATA_GEN;
+    AUTO_BUILD_T = setTimeout(() => { AUTO_BUILD_T = null; if (genAt === DATA_GEN) build(); }, 900);
+    const bb = $("build-btn");
+    if (bb) bb.innerHTML = 'Rebuild my story';
+    if ($("build-row")) $("build-row").scrollIntoView({ behavior: scrollBehavior(), block: "center" });
+  } else if (RAW.length && $("build-row")) {
     $("build-row").scrollIntoView({ behavior: scrollBehavior(), block: "center" });
     try { $("build-btn").focus({ preventScroll: true }); } catch (e) {}
   }
@@ -481,6 +493,7 @@ async function ingest(files) {
  * if sample and real files are ever mixed, staying true suppresses a claim
  * rather than making a false one. */
 let SAMPLE_DATA = false;
+let AUTO_BUILD_T = null;   // pending auto-build after a drop (debounced)
 
 /* Load the bundled, fully-scrubbed sample export so people can see the output
  * without uploading anything of their own.
@@ -1396,6 +1409,7 @@ async function build() {
   // Abandoning a build must leave nothing behind: a file parsed in the moment
   // the user hit Clear would otherwise sit in the fresh STATE afterwards.
   const abort = () => { STATE = freshState(); };
+  if (AUTO_BUILD_T) { clearTimeout(AUTO_BUILD_T); AUTO_BUILD_T = null; }
   const btn = $("build-btn");
   const btnLabel = btn ? btn.textContent : "";
   if (btn) { btn.disabled = true; btn.textContent = "Building…"; }

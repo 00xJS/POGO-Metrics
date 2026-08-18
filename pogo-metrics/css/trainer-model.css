@@ -12,13 +12,13 @@
 .tmodel { padding-bottom: 40px; }
 .tmodel .chapter { padding-top: 56px; }
 .tmodel .sec-head { margin-bottom: 18px; }
-.tmodel .sec-head h2 { font-size: 25px; font-weight: 700; margin: 7px 0 7px; letter-spacing: -.01em; }
+.tmodel .sec-head h2 { font-size: 1.5625rem; font-weight: 700; margin: 0.4375rem 0 0.4375rem; letter-spacing: -.01em; }
 /* No max-width: the chapter heading above and the panel below both run the full
    1052px content width, so any cap here leaves the intro ending short of the
    column everything else shares. It started at 72ch (~708px), went to 900px,
    and both still read as cut off next to the panel edge. Matches .section-desc,
    which made the same move for the same reason. */
-.tmodel .sec-head p { color: var(--ink-dim); font-size: 15px; }
+.tmodel .sec-head p { color: var(--ink-dim); font-size: 0.9375rem; }
 .tmodel .faint { color: var(--ink-faint); }
 
 /* ── status chips (static, with a live dot — NOT the catalog's filter chips) */
@@ -29,7 +29,7 @@
   padding: 6px 12px; cursor: default;
   border: 1px solid var(--line); border-radius: var(--radius-pill);
   background: var(--bg-raised); color: var(--ink-dim);
-  font-family: var(--mono); font-size: 11px; letter-spacing: .08em;
+  font-family: var(--mono); font-size: 0.6875rem; letter-spacing: .08em;
   text-transform: uppercase; white-space: nowrap;
 }
 /* the site stylesheet's .chip is a button and glows on hover — these don't */
@@ -59,7 +59,7 @@
   padding: 12px 18px; display: flex; flex-wrap: wrap; gap: 12px;
   align-items: center; justify-content: space-between;
 }
-.tmodel .panel-title { font-family: var(--mono); font-size: 10.5px; letter-spacing: .08em; text-transform: uppercase; color: var(--ink-faint); }
+.tmodel .panel-title { font-family: var(--mono); font-size: 0.65625rem; letter-spacing: .08em; text-transform: uppercase; color: var(--ink-faint); }
 .tmodel .panel-body { padding: 18px; }
 
 /* ── stat tiles (a grid of labelled values — NOT the landing page's flex cards) */
@@ -69,15 +69,15 @@
   border-radius: var(--radius-control); padding: 12px 14px;
 }
 .tmodel .stat .label {
-  font-family: var(--mono); font-size: 10.5px; letter-spacing: .08em;
+  font-family: var(--mono); font-size: 0.65625rem; letter-spacing: .08em;
   text-transform: uppercase; color: var(--ink-faint); display: block; margin-bottom: 4px;
 }
 /* mono, matching the report pages — the same kind of number should not wear
    a different face on this page alone */
-.tmodel .stat .value { font-family: var(--mono); font-size: 20px; font-weight: 700; color: var(--ink); font-variant-numeric: tabular-nums; line-height: 1.25; }
+.tmodel .stat .value { font-family: var(--mono); font-size: 1.25rem; font-weight: 700; color: var(--ink); font-variant-numeric: tabular-nums; line-height: 1.25; }
 .tmodel .stat .value.teal { color: var(--accent); }
 .tmodel .stat .value.yellow { color: var(--accent2); }
-.tmodel .stat .sub { font-size: 12px; color: var(--ink-dim); margin-top: 2px; }
+.tmodel .stat .sub { font-size: 0.75rem; color: var(--ink-dim); margin-top: 0.125rem; }
 
 /* The two six-tile grids. auto-fit fits all six in one row on a wide screen,
    which leaves each tile ~159px — the narrowest on the page, holding the
@@ -104,12 +104,12 @@
 .tmodel [hidden] { display: none !important; }
 .tmodel .ctl { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .tmodel .ctl-label {
-  font-family: var(--mono); font-size: 10.5px; letter-spacing: .08em;
+  font-family: var(--mono); font-size: 0.65625rem; letter-spacing: .08em;
   text-transform: uppercase; color: var(--ink-faint);
 }
 .tmodel .seg { display: inline-flex; background: var(--bg-raised); border: 1px solid var(--line); border-radius: var(--radius-pill); padding: 3px; gap: 2px; }
 .tmodel .seg button {
-  font-family: var(--sans); font-size: 12.5px; font-weight: 600;
+  font-family: var(--sans); font-size: 0.78125rem; font-weight: 600;
   color: var(--ink-dim); background: none; border: none; cursor: pointer;
   padding: 5px 13px; border-radius: var(--radius-pill);
   transition: background .2s, color .2s;
@@ -118,7 +118,7 @@
 .tmodel .seg button[aria-pressed="true"] { background: var(--accent); color: var(--btn-ink); }
 
 .tmodel .toggles { display: flex; gap: 14px; flex-wrap: wrap; }
-.tmodel .toggles label { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--ink-dim); cursor: pointer; }
+.tmodel .toggles label { display: inline-flex; align-items: center; gap: 0.375rem; font-size: 0.8125rem; color: var(--ink-dim); cursor: pointer; }
 .tmodel .toggles input[type="checkbox"] { accent-color: var(--accent); width: 15px; height: 15px; cursor: pointer; }
 /* These must stay in lockstep with the chart line colours in js/trainer-model.js:
    linear → C.down, log-linear → C.teal, median → C.yellow, mean → C.purple. */
@@ -129,7 +129,7 @@
 .tmodel .swatch--mean   { background: var(--purple); }
 
 .tmodel input[type="number"] {
-  font-family: var(--sans); font-size: 14px; color: var(--ink);
+  font-family: var(--sans); font-size: 0.875rem; color: var(--ink);
   background: var(--bg-raised); border: 1px solid var(--line);
   border-radius: var(--radius-control); padding: 8px 10px; width: 100%;
   font-variant-numeric: tabular-nums;
@@ -144,7 +144,7 @@
   box-shadow: 0 0 0 3px rgba(65, 216, 198, .18);
 }
 .tmodel .field label {
-  display: block; font-family: var(--mono); font-size: 10.5px; letter-spacing: .08em;
+  display: block; font-family: var(--mono); font-size: 0.65625rem; letter-spacing: .08em;
   text-transform: uppercase; color: var(--ink-faint); margin-bottom: 5px;
 }
 .tmodel .form-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; align-items: end; }
@@ -160,9 +160,9 @@
 
 /* ── tables ────────────────────────────────────────────────────────────── */
 .tmodel .table-scroll { overflow-x: auto; }
-.tmodel table { border-collapse: collapse; width: 100%; font-size: 13.5px; }
+.tmodel table { border-collapse: collapse; width: 100%; font-size: 0.84375rem; }
 .tmodel thead th {
-  font-family: var(--mono); font-size: 10.5px; letter-spacing: .08em;
+  font-family: var(--mono); font-size: 0.65625rem; letter-spacing: .08em;
   text-transform: uppercase; color: var(--ink-faint); font-weight: 400;
   text-align: left; padding: 9px 12px; border-bottom: 1px solid var(--line); white-space: nowrap;
 }
@@ -180,7 +180,7 @@
   border: 0; border-left: 3px solid var(--accent2);
   background: rgba(255, 203, 5, .06);
   padding: 13px 16px; border-radius: 0 var(--radius-control) var(--radius-control) 0;
-  font-size: 14px; color: var(--ink-dim);
+  font-size: 0.875rem; color: var(--ink-dim);
 }
 .tmodel .callout b, .tmodel .callout strong { color: var(--ink); font-family: inherit; }
 .tmodel .callout.teal { border-left-color: var(--accent); background: rgba(65, 216, 198, .06); }
@@ -192,9 +192,9 @@
   background: var(--bg-raised); border: 1px solid var(--line);
   border-radius: var(--radius-control); padding: 14px 16px;
 }
-.tmodel .pct .label { font-family: var(--mono); font-size: 10.5px; letter-spacing: .08em; text-transform: uppercase; color: var(--ink-faint); }
-.tmodel .pct .big { font-family: var(--mono); font-size: 28px; font-weight: 700; font-variant-numeric: tabular-nums; line-height: 1.15; margin: 4px 0 2px; }
-.tmodel .pct .note { font-size: 12.5px; color: var(--ink-dim); }
+.tmodel .pct .label { font-family: var(--mono); font-size: 0.65625rem; letter-spacing: .08em; text-transform: uppercase; color: var(--ink-faint); }
+.tmodel .pct .big { font-family: var(--mono); font-size: 1.75rem; font-weight: 700; font-variant-numeric: tabular-nums; line-height: 1.15; margin: 0.25rem 0 0.125rem; }
+.tmodel .pct .note { font-size: 0.78125rem; color: var(--ink-dim); }
 .tmodel .bar { height: 6px; border-radius: 3px; background: rgba(255, 255, 255, .07); margin-top: 10px; overflow: hidden; }
 .tmodel .bar > span { display: block; height: 100%; border-radius: 3px; background: linear-gradient(90deg, var(--accent), var(--accent2)); }
 
