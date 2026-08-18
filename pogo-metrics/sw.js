@@ -7,12 +7,12 @@
  *     cached copy when offline
  *   • vendor/ (pinned libs, textures, fonts, geojson) → cache-first
  * Bump VERSION on any release to sweep old caches. */
-const VERSION = "pogo-metrics-v20260813a";
+const VERSION = "pogo-metrics-v20260817a";
 const CORE = [
   "/", "favicon.ico", "index.html", "metrics.html", "demo.html", "trainer-model.html", "404.html",
-  "css/style.css?v=20260813a", "css/trainer-model.css?v=20260813a",
-  "js/nav.js?v=20260813a", "js/catalog.js?v=20260813a", "js/catalog-ui.js?v=20260813a",
-  "js/pokedex.js?v=20260813a", "js/app.js?v=20260813a", "js/trainer-model.js?v=20260813a",
+  "css/style.css?v=20260817a", "css/trainer-model.css?v=20260817a",
+  "js/nav.js?v=20260817a", "js/catalog.js?v=20260817a", "js/catalog-ui.js?v=20260817a",
+  "js/pokedex.js?v=20260817a", "js/app.js?v=20260817a", "js/trainer-model.js?v=20260817a",
   // The Trainer Model page draws entirely from these two files, so an installed
   // app opened offline still gets the full research layer.
   "data/trainer-model/trainers.json", "data/trainer-model/era2.json",
@@ -73,7 +73,13 @@ self.addEventListener("fetch", (e) => {
       return r;
     }).catch(() =>
       caches.match(e.request, { ignoreSearch: true }).then((hit) =>
-        hit || (e.request.mode === "navigate" ? caches.match("index.html") : Response.error()))
+        /* Unknown URL offline → the precached 404 page, not a silent copy of
+         * the homepage wearing the wrong address. Its recovery links all point
+         * at precached pages, so getting out of it is one tap. index.html
+         * remains the last resort if the 404 copy is somehow missing. */
+        hit || (e.request.mode === "navigate"
+          ? caches.match("404.html").then((nf) => nf || caches.match("index.html"))
+          : Response.error()))
     )
   );
 });

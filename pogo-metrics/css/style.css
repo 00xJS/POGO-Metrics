@@ -46,6 +46,10 @@
   --radius-card: 12px;
   --radius-control: 8px;
   --radius-pill: 999px;
+  --radius-feature: 18px; /* hero-scale surfaces: modules, dropzone, wrap-cards */
+
+  --track-label: .12em;   /* small metadata labels */
+  --track-kicker: .25em;  /* hero / story / card kickers */
 
   --mono: 'JetBrains Mono', ui-monospace, monospace;
   --sans: 'Outfit', system-ui, -apple-system, sans-serif;
@@ -65,6 +69,9 @@
    wraps to three rows on a phone, so a hardcoded offset dropped anchor targets
    behind it. The 80px fallback covers the moment before nav.js runs. */
 html { scroll-behavior: smooth; scroll-padding-top: calc(var(--nav-h, 80px) + 12px); }
+/* iOS Safari's landscape "Text Autosizing" inflates arbitrary runs by 15-30%,
+   wrecking the tuned micro-typography — the standard companion to a custom reset */
+html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
 body {
   background: var(--bg);
   color: var(--ink);
@@ -94,8 +101,19 @@ input:focus-visible, [tabindex]:focus-visible {
 }
 .nav-inner {
   max-width: 1180px; margin: 0 auto; padding: 12px 24px;
+  /* installed as a standalone PWA the fixed nav sits under the status bar /
+     Dynamic Island — env() resolves to 0 everywhere else */
+  padding-top: calc(12px + env(safe-area-inset-top, 0px));
   display: flex; justify-content: space-between; align-items: center; gap: 16px;
 }
+/* keyboard bypass for the nav — off-screen until focused (WCAG 2.4.1) */
+.skip-link {
+  position: absolute; left: 12px; top: -52px; z-index: 1200;
+  background: var(--accent); color: var(--btn-ink); font-weight: 700; font-size: 14px;
+  padding: 10px 16px; border-radius: 0 0 10px 10px; text-decoration: none;
+  transition: top .15s;
+}
+.skip-link:focus-visible { top: 0; }
 .nav-brand {
   font-weight: 800; letter-spacing: .01em; display: flex; align-items: center;
   gap: 9px; white-space: nowrap; color: var(--ink); text-decoration: none; font-size: 17px;
@@ -128,7 +146,9 @@ main { max-width: 1100px; margin: 0 auto; padding: 0 24px; }
 .wrap { max-width: 1100px; margin: 0 auto; padding: 0 24px; }
 .eyebrow {
   font-family: var(--mono); color: var(--accent); font-size: 12.5px;
-  letter-spacing: .22em; text-transform: uppercase;
+  letter-spacing: var(--track-kicker); text-transform: uppercase;
+  /* a trailing letter-space shifts a centered line left of true center */
+  margin-right: calc(-1 * var(--track-kicker));
 }
 .muted { color: var(--ink-dim); }
 .center { text-align: center; }
@@ -160,6 +180,9 @@ main { max-width: 1100px; margin: 0 auto; padding: 0 24px; }
   max-width: 660px; margin: 0 auto 32px;
 }
 .hero-cta { display: flex; gap: 14px; justify-content: center; flex-wrap: wrap; }
+/* the funnel's first step for visitors who don't have an export yet */
+.hero-helper { color: var(--ink-dim); font-size: 14.5px; margin-top: 16px; }
+.hero-helper a { font-weight: 600; }
 .btn {
   display: inline-flex; align-items: center; gap: 9px; cursor: pointer;
   font-family: var(--sans); font-weight: 700; font-size: 16px; text-decoration: none;
@@ -171,8 +194,12 @@ main { max-width: 1100px; margin: 0 auto; padding: 0 24px; }
 .btn-primary:hover { filter: brightness(1.07); }
 .btn-ghost { background: transparent; color: var(--ink); border-color: var(--line); }
 .btn-ghost:hover { border-color: var(--accent); color: var(--accent); }
-.btn-teal { background: var(--accent); color: var(--btn-ink); }
-.btn-teal:hover { filter: brightness(1.06); }
+/* Demoted from a solid fill: two saturated fills side by side gave every CTA
+   cluster two "primaries". Yellow is the one true filled action (it already
+   owns the nav CTA); teal is the accented secondary — the same outline-plus-
+   tinted-hover recipe the globe's .gh-btn uses. */
+.btn-teal { background: transparent; color: var(--accent); border-color: var(--accent); }
+.btn-teal:hover { background: rgba(65, 216, 198, .12); filter: none; }
 
 /* privacy ribbon under hero */
 .privacy-ribbon {
@@ -186,9 +213,21 @@ main { max-width: 1100px; margin: 0 auto; padding: 0 24px; }
 /* ---------- sections ---------- */
 .section { padding: 60px 0 20px; border-top: 1px solid var(--line); }
 .section:first-of-type { border-top: none; }
+/* Opening section of the inner pages. The landing's ambient hero glow is the
+   site's signature — the other pages used to open flat with the same
+   border-top:none;padding-top:120px inline hack repeated in three files.
+   Same hues as #hero at reduced opacity, so all four pages read as one product. */
+.page-head {
+  border-top: none;
+  padding-top: 120px;
+  background:
+    radial-gradient(900px 460px at 15% -12%, rgba(232, 121, 43, .10), transparent 60%),
+    radial-gradient(800px 460px at 90% -2%, rgba(194, 62, 140, .08), transparent 60%);
+}
 /* h1 included so metrics/demo can lead with a real <h1> at the same visual scale */
 .section h1, .section h2 {
   font-size: clamp(26px, 4.2vw, 38px); font-weight: 800; letter-spacing: -.015em;
+  line-height: 1.18; text-wrap: balance;
 }
 .section h2 .num {
   color: var(--accent); font-family: var(--mono); font-size: .55em;
@@ -211,7 +250,7 @@ main { max-width: 1100px; margin: 0 auto; padding: 0 24px; }
 .steps { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
 .step {
   background: linear-gradient(160deg, var(--panel2), var(--panel));
-  border: 1px solid var(--line); border-radius: 16px; padding: 24px 22px;
+  border: 1px solid var(--line); border-radius: var(--radius-feature); padding: 24px 22px;
 }
 .step .n {
   font-family: var(--mono); font-size: 13px; color: var(--accent);
@@ -223,7 +262,7 @@ main { max-width: 1100px; margin: 0 auto; padding: 0 24px; }
 /* ---------- privacy explainer cards ---------- */
 .priv-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
 .priv-card {
-  background: var(--panel); border: 1px solid var(--line); border-radius: 16px; padding: 22px;
+  background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius-feature); padding: 22px;
 }
 .priv-card .pi { font-size: 26px; }
 .priv-card h3 { font-size: 18px; margin: 10px 0 6px; }
@@ -233,7 +272,7 @@ main { max-width: 1100px; margin: 0 auto; padding: 0 24px; }
 .req-list { list-style: none; counter-reset: req; display: grid; gap: 14px; }
 .req-list li {
   counter-increment: req; position: relative; padding: 16px 18px 16px 60px;
-  background: var(--panel); border: 1px solid var(--line); border-radius: 14px;
+  background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius-card);
 }
 .req-list li::before {
   content: counter(req); position: absolute; left: 16px; top: 14px;
@@ -255,7 +294,7 @@ main { max-width: 1100px; margin: 0 auto; padding: 0 24px; }
 
 /* ---------- dropzone / upload ---------- */
 #dropzone {
-  border: 2px dashed rgba(65, 216, 198, .45); border-radius: 22px;
+  border: 2px dashed rgba(65, 216, 198, .45); border-radius: var(--radius-feature);
   background: radial-gradient(600px 220px at 50% 0%, rgba(65, 216, 198, .10), transparent), var(--panel);
   padding: 54px 28px; text-align: center; cursor: pointer;
   transition: border-color .15s, background .15s, transform .1s;
@@ -263,7 +302,7 @@ main { max-width: 1100px; margin: 0 auto; padding: 0 24px; }
 #dropzone:hover { border-color: var(--accent); }
 #dropzone.drag { border-color: var(--accent2); background: rgba(255, 203, 5, .07); transform: scale(1.01); }
 #dropzone .dz-emoji { font-size: 46px; }
-#dropzone h2, #dropzone h3 { font-size: 23px; margin: 14px 0 6px; }
+#dropzone h2, #dropzone h3 { font-size: 23px; margin: 14px 0 6px; line-height: 1.2; }
 #dropzone p { color: var(--ink-dim); font-size: 15px; }
 #dropzone .dz-or { color: var(--ink-faint); font-size: 13px; margin: 16px 0 4px; }
 #dropzone .dz-hint { margin-top: 18px; font-size: 13px; color: var(--ink-faint); }
@@ -277,7 +316,7 @@ main { max-width: 1100px; margin: 0 auto; padding: 0 24px; }
 /* detected files list */
 #detected { margin-top: 26px; display: grid; gap: 10px; }
 .det-files {
-  background: var(--panel); border: 1px solid var(--line); border-radius: 14px;
+  background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius-card);
   padding: 4px 6px;
 }
 .det-head {
@@ -316,7 +355,7 @@ main { max-width: 1100px; margin: 0 auto; padding: 0 24px; }
   flex: 1 1 210px; max-width: 264px; min-width: 0; text-align: center;
   display: flex; flex-direction: column; justify-content: center;
   background: linear-gradient(160deg, var(--panel2), var(--panel));
-  border: 1px solid var(--line); border-radius: 14px; padding: 18px 16px;
+  border: 1px solid var(--line); border-radius: var(--radius-card); padding: 18px 16px;
 }
 .stat-card .v {
   font-family: var(--mono); font-size: clamp(18px, 2vw, 26px); font-weight: 700;
@@ -327,11 +366,22 @@ main { max-width: 1100px; margin: 0 auto; padding: 0 24px; }
 
 .module {
   margin-top: 22px; background: var(--panel); border: 1px solid var(--line);
-  border-radius: 18px; padding: 26px;
+  border-radius: var(--radius-feature); padding: 26px;
+  position: relative;   /* hosts the record-book confetti canvas */
+  overflow: hidden;
 }
 .module > .mod-head { display: flex; align-items: center; gap: 12px; margin-bottom: 4px; }
 .module .mod-icon { font-size: 26px; }
-.module h3 { font-size: 22px; font-weight: 800; letter-spacing: -.01em; }
+/* Chapter grammar to match the landing's numbered sections and the Trainer
+   Model's eyebrowed chapters — the product's own chapters were the weakest-
+   styled headings of the three chaptered surfaces. */
+.module .mod-eyebrow {
+  font-family: var(--mono); color: var(--accent); font-size: 11px;
+  letter-spacing: .18em; text-transform: uppercase; margin-bottom: 6px;
+}
+.module h3 { font-size: clamp(22px, 3vw, 27px); font-weight: 800; letter-spacing: -.012em; line-height: 1.2; }
+/* the report's third hierarchy level — was 28 inline bold divs */
+.mod-h4 { font-weight: 700; font-size: 15.5px; letter-spacing: .01em; margin: 20px 0 8px; }
 .module .mod-sub { color: var(--ink-dim); font-size: 15px; margin-bottom: 20px; }
 .module .stat-grid { margin-bottom: 18px; }
 .mod-divider { border: 0; border-top: 1px solid var(--line); margin: 26px 0 22px; }
@@ -376,7 +426,7 @@ h2:hover > .permalink, h3:hover > .permalink,
 .yoy-chip.active { background: var(--accent); border-color: var(--accent); color: #06231f; }
 .wrap-cards { display: flex; flex-wrap: wrap; justify-content: center; gap: 16px; margin-top: 22px; }
 .wrap-card {
-  flex: 1 1 300px; max-width: 360px; border-radius: 18px; padding: 22px 22px 18px;
+  flex: 1 1 300px; max-width: 360px; border-radius: var(--radius-feature); padding: 22px 22px 18px;
   display: flex; flex-direction: column;
   border: 1px solid rgba(255,255,255,.12); position: relative; overflow: hidden; text-align: center;
   background:
@@ -384,28 +434,38 @@ h2:hover > .permalink, h3:hover > .permalink,
     radial-gradient(120% 90% at 92% 100%, color-mix(in srgb, var(--wc2, #ffcb05) 20%, transparent) 0%, transparent 55%),
     var(--panel);
 }
-.wrap-card .wc-kicker { font-family: var(--mono); font-size: 11px; letter-spacing: 3px; color: var(--ink-dim); text-transform: uppercase; }
+.wrap-card .wc-kicker { font-family: var(--mono); font-size: 11px; letter-spacing: var(--track-kicker); margin-right: calc(-1 * var(--track-kicker)); color: var(--ink-dim); text-transform: uppercase; }
 .wrap-card .wc-year { font-size: 54px; font-weight: 800; line-height: 1; margin: 4px 0 2px;
   background: linear-gradient(90deg, var(--wc1, #41d8c6), var(--wc2, #ffcb05)); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; }
 .wrap-card .wc-year .wc-sofar { -webkit-text-fill-color: var(--ink-dim); font-size: 16px; font-weight: 500; margin-left: 8px; }
-.wrap-card .wc-big { font-family: var(--mono); font-size: 38px; font-weight: 700; color: #fff; margin-top: 10px; }
+.wrap-card .wc-big { font-family: var(--mono); font-size: 38px; font-weight: 700; color: #fff; margin-top: 10px; line-height: 1.1; }
 .wrap-card .wc-big-l { color: var(--ink-dim); font-size: 13px; margin-bottom: 4px; }
 .wrap-card .wc-badges { display: flex; flex-wrap: wrap; justify-content: center; gap: 6px; margin: 10px 0 2px; }
 .wrap-card .wc-badge { font-size: 12px; background: rgba(255,255,255,.08); border: 1px solid rgba(255,255,255,.16); border-radius: 999px; padding: 4px 10px; color: var(--ink); }
 .wrap-card .wc-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 14px; }
 .wrap-card .wc-cell { background: rgba(8,12,28,.5); border: 1px solid rgba(255,255,255,.08); border-radius: 11px; padding: 10px 12px; text-align: center; }
-.wrap-card .wc-cell .v { font-family: var(--mono); font-size: 19px; font-weight: 700; color: #fff; }
+.wrap-card .wc-cell .v { font-family: var(--mono); font-size: 19px; font-weight: 700; color: #fff; line-height: 1.15; }
 .wrap-card .wc-cell .l { color: var(--ink-dim); font-size: 11.5px; margin-top: 1px; }
+.wrap-card .wc-play { margin-top: auto; width: 100%; }
 .wrap-card .wc-dl { margin-top: auto; width: 100%; }
+/* when the play button is present it takes the auto push; the download tucks under */
+.wrap-card .wc-play + .wc-dl { margin-top: 8px; }
 .wrap-card .wc-grid { margin-bottom: 16px; }
-.wrap-card .wc-foot { font-family: var(--mono); font-size: 10px; letter-spacing: 2px; color: var(--ink-faint); text-transform: uppercase; margin-top: 14px; }
+.wrap-card .wc-foot { font-family: var(--mono); font-size: 10.5px; letter-spacing: 2px; color: var(--ink-faint); text-transform: uppercase; margin-top: 14px; }
 
 .chart-wrap {
   background: rgba(255, 255, 255, .02); border: 1px solid var(--line);
-  border-radius: 14px; padding: 16px; position: relative; height: 320px;
+  border-radius: var(--radius-card); padding: 16px; position: relative; height: 320px;
 }
 .chart-wrap.tall { height: 400px; }
 .chart-wrap.short { height: 240px; }
+/* at ~260px of canvas the charts are taller than wide — give the plot, not
+   the chrome, the extra pixels */
+@media (max-width: 560px) {
+  .chart-wrap { height: 360px; }
+  .chart-wrap.tall { height: 440px; }
+  .chart-wrap.short { height: 280px; }
+}
 .split { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
 /* grid children default to min-width:auto, which lets wide content (the
    calendar, canvases) blow the column — and the page — out sideways */
@@ -423,7 +483,7 @@ h2:hover > .permalink, h3:hover > .permalink,
 .medal-cards { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; }
 .medal-card {
   background: linear-gradient(160deg, var(--panel2), var(--panel));
-  border: 1px solid var(--line); border-radius: 14px; padding: 18px 16px;
+  border: 1px solid var(--line); border-radius: var(--radius-card); padding: 18px 16px;
   border-top: 3px solid var(--line); text-align: center;
 }
 .medal-card .mc-v { font-family: var(--mono); font-size: clamp(20px, 2.4vw, 30px); font-weight: 700; color: #fff; line-height: 1.1; }
@@ -449,15 +509,27 @@ h2:hover > .permalink, h3:hover > .permalink,
 /* hour-of-week heat grid */
 .hw-grid { display: grid; gap: 3px; overflow-x: auto; }
 .hw-row { display: grid; grid-template-columns: 38px repeat(24, 1fr); gap: 3px; align-items: center; }
-.hw-lbl { font-size: 11px; color: var(--ink-dim); font-family: var(--mono); }
+/* sticky-left so the day names survive horizontal scrolling on phones —
+   the same pattern .rail-l uses in the filter bar */
+.hw-lbl {
+  font-size: 11px; color: var(--ink-dim); font-family: var(--mono);
+  position: sticky; left: 0; background: var(--panel); z-index: 1;
+}
+/* "less → more" swatch strip shared by the heat grids and the calendar */
+.heat-key { display: inline-flex; align-items: center; gap: 3px; margin-left: 10px; font-size: 11px; color: var(--ink-faint); white-space: nowrap; }
+.heat-key i { width: 11px; height: 11px; border-radius: 3px; display: inline-block; }
 .hw-cell { aspect-ratio: 1; border-radius: 3px; min-width: 14px; background: rgba(255,255,255,.04); cursor: crosshair; transition: outline .05s; }
 .hw-cell:hover { outline: 1.5px solid var(--accent); outline-offset: 0; }
+/* keyboard selection ring for the heat grids (arrow-key navigation) */
+.hw-cell.kb-sel, .cal-cell.kb-sel { outline: 2px solid var(--accent2); outline-offset: 0; }
 .hw-axis { display: grid; grid-template-columns: 38px repeat(24, 1fr); gap: 3px; margin-top: 4px; }
-.hw-axis span { font-size: 9px; color: var(--ink-faint); text-align: center; font-family: var(--mono); }
+/* 10.5px floor for tracked mono micro-labels — 9-10px stacked three legibility
+   penalties (tiny + uppercase-tracked + faint) on a dark ground */
+.hw-axis span { font-size: 10.5px; color: var(--ink-faint); text-align: center; font-family: var(--mono); }
 .hw-tip {
   position: fixed; z-index: 9999; pointer-events: none; left: 0; top: 0;
   opacity: 0; transform: translateY(2px); transition: opacity .08s ease;
-  background: var(--panel2); border: 1px solid var(--line); border-radius: 9px;
+  background: var(--panel2); border: 1px solid var(--line); border-radius: var(--radius-control);
   padding: 7px 11px; box-shadow: 0 8px 24px rgba(0,0,0,.45);
   display: flex; flex-direction: column; gap: 2px; white-space: nowrap;
 }
@@ -486,6 +558,7 @@ h2:hover > .permalink, h3:hover > .permalink,
 #results > .res-hero { text-align: center; padding: 10px 0 6px; }
 #results .res-hero h2 {
   font-size: clamp(28px, 5vw, 44px); font-weight: 800; letter-spacing: -.02em;
+  line-height: 1.15; text-wrap: balance;
   background: linear-gradient(96deg, #fff, var(--accent));
   -webkit-background-clip: text; background-clip: text; color: transparent;
 }
@@ -509,6 +582,25 @@ h2:hover > .permalink, h3:hover > .permalink,
 .notice.warn { background: rgba(255, 154, 68, .08); border-color: rgba(255, 154, 68, .35); }
 .notice.coming {
   background: rgba(160, 107, 255, .08); border-color: rgba(160, 107, 255, .32);
+}
+
+/* ---------- print ----------
+   Print-to-PDF is the natural "keep my journey" path for a one-shot report
+   built from an export that expires. Browsers strip dark page backgrounds, so
+   without exact color-adjust the near-white ink prints on white paper —
+   effectively blank pages. Chrome, upload UI and CTAs have no business on
+   paper. */
+@media print {
+  #topnav, #upload-section, #dropzone, .hero-cta, .hero-helper, .chapter-nav,
+  .res-toolbar, .wc-dl, .story-hint, footer .deck-line, .skip-link, .globe-scrim,
+  .globe-fs, .yoy-metrics { display: none !important; }
+  body { background: var(--bg); }
+  .module, .stat-card, .wrap-card, .chart-wrap, .medal-card {
+    print-color-adjust: exact; -webkit-print-color-adjust: exact;
+    break-inside: avoid;
+  }
+  .module { break-before: auto; page-break-inside: avoid; }
+  main, .wrap { max-width: none; }
 }
 
 /* ---------- footer ---------- */
@@ -575,7 +667,7 @@ footer .deck-line .sep { margin: 0 9px; opacity: .55; }
 .gh-slider { display: flex; align-items: center; gap: 7px; margin: 2px 0 4px 22px; }
 .gh-slider.disabled { opacity: .4; pointer-events: none; }
 .gh-slider input { width: 96px; accent-color: var(--accent); }
-.gh-slider .mono { font-family: var(--mono); font-size: 10px; color: var(--ink-dim); white-space: nowrap; }
+.gh-slider .mono { font-family: var(--mono); font-size: 10.5px; color: var(--ink-dim); white-space: nowrap; }
 .gh-btn { margin-top: 10px; width: 100%; background: rgba(65,216,198,.14); border: 1px solid var(--accent);
   color: var(--accent); border-radius: 9px; padding: 7px 10px; font-size: 12.5px; font-weight: 700;
   font-family: var(--sans); cursor: pointer; transition: background .12s; }
@@ -604,6 +696,12 @@ footer .deck-line .sep { margin: 0 9px; opacity: .55; }
     scrollbar-width: none; -webkit-overflow-scrolling: touch;
   }
   .nav-pages::-webkit-scrollbar { display: none; }
+  /* the scrollbar is hidden, so fade the clipped edge to signal there is more
+     row — nav.js drops the fade once scrolled to the end */
+  .nav-pages.scrollable:not(.at-end) {
+    -webkit-mask-image: linear-gradient(90deg, #000 calc(100% - 34px), transparent);
+    mask-image: linear-gradient(90deg, #000 calc(100% - 34px), transparent);
+  }
   .nav-pages a { flex: none; padding: 6px 10px; font-size: 12.5px; }
   .module { padding: 18px; }
   .medal-cards { grid-template-columns: repeat(2, 1fr) !important; }
@@ -641,8 +739,8 @@ footer .deck-line .sep { margin: 0 9px; opacity: .55; }
 .deck-tile.is-inert { cursor: default; }
 .deck-tile:not(.is-inert):hover { border-color: var(--accent); }
 .deck-tile[aria-pressed="true"] { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent), 0 0 18px rgba(65,216,198,.12); }
-.deck-tile .dt-v { font-family: var(--mono); font-size: 26px; font-weight: 700; color: #fff; font-variant-numeric: tabular-nums; }
-.deck-tile .dt-k { font-family: var(--mono); font-size: 10px; text-transform: uppercase; letter-spacing: .16em; color: var(--ink-faint); }
+.deck-tile .dt-v { font-family: var(--mono); font-size: 26px; font-weight: 700; color: #fff; font-variant-numeric: tabular-nums; line-height: 1.1; }
+.deck-tile .dt-k { font-family: var(--mono); font-size: 10.5px; text-transform: uppercase; letter-spacing: .16em; color: var(--ink-faint); }
 
 /* ---------- sticky filter bar ---------- */
 .deck-bar {
@@ -718,7 +816,7 @@ footer .deck-line .sep { margin: 0 9px; opacity: .55; }
 .fc-id { min-width: 0; flex: 1; }
 .fc-name { font-size: 17px; font-weight: 700; }
 .fc-file { font-family: var(--mono); font-size: 11.5px; color: var(--ink-faint); word-break: break-all; }
-.fc-cols { font-family: var(--mono); font-size: 10px; letter-spacing: .1em; color: var(--ink-faint); flex: none; font-variant-numeric: tabular-nums; }
+.fc-cols { font-family: var(--mono); font-size: 10.5px; letter-spacing: .1em; color: var(--ink-faint); flex: none; font-variant-numeric: tabular-nums; }
 .fc-meta { display: flex; gap: 7px; flex-wrap: wrap; margin: 11px 0 9px; }
 .fc-meta .sens-pill { display: inline-flex; align-items: center; gap: 6px; }
 .fc-sum { font-size: 14.5px; color: var(--ink-dim); }
@@ -845,31 +943,58 @@ footer .deck-line .sep { margin: 0 9px; opacity: .55; }
 .story-ov {
   position: fixed; inset: 0; z-index: 2000; background: var(--bg);
   display: flex; align-items: safe center; justify-content: center;
-  overflow-y: auto; padding: 56px 0;
+  overflow-y: auto;
+  /* safe-area padding: installed standalone, the progress bar would sit in the
+     status-bar zone and the hint under the home indicator */
+  padding: calc(56px + env(safe-area-inset-top, 0px)) 0 calc(56px + env(safe-area-inset-bottom, 0px));
   cursor: pointer; user-select: none;
 }
+/* the per-chapter colour wash lives on two stacked layers so slide changes can
+   crossfade — background-image itself can't interpolate */
+.story-bg {
+  position: absolute; inset: 0; pointer-events: none;
+  opacity: 0; transition: opacity .45s ease;
+}
 .story-prog {
-  position: absolute; top: 14px; left: 16px; right: 56px;
+  position: absolute; top: calc(14px + env(safe-area-inset-top, 0px)); left: 16px; right: 56px;
   display: flex; gap: 5px;
 }
 .story-prog i {
   flex: 1; height: 3px; border-radius: 2px; background: rgba(255, 255, 255, .16);
-  transition: background .2s;
+  overflow: hidden;
 }
-.story-prog i.done { background: var(--accent); }
-.story-prog i.cur { background: var(--accent2); }
+.story-prog i b {
+  display: block; height: 100%; width: 100%; border-radius: 2px;
+  background: var(--accent2); transform: scaleX(0); transform-origin: left;
+}
+.story-prog i.done b { transform: none; background: var(--accent); }
+/* manual mode (reduced motion): the current segment is simply full yellow */
+.story-ov:not(.autoplay) .story-prog i.cur b { transform: none; }
+/* autoplay: the current segment fills over exactly one slide's clock, and
+   hold-to-pause freezes it mid-fill */
+.story-ov.autoplay .story-prog i.cur b { animation: story-fill var(--slide-ms, 6s) linear forwards; }
+.story-ov.paused .story-prog i.cur b { animation-play-state: paused; }
+@keyframes story-fill { from { transform: scaleX(0); } to { transform: scaleX(1); } }
 .story-x {
-  position: absolute; top: 10px; right: 14px; z-index: 3;
+  position: absolute; top: calc(10px + env(safe-area-inset-top, 0px)); right: 14px; z-index: 3;
   background: none; border: none; color: var(--ink-dim); font-size: 30px;
   cursor: pointer; line-height: 1; padding: 6px;
 }
 .story-x:hover { color: var(--ink); }
-.story-stage { max-width: 860px; padding: 0 28px; text-align: center; }
+/* relative so the stage paints above the positioned .story-bg layers */
+.story-stage { max-width: 860px; padding: 0 28px; text-align: center; position: relative; }
+/* direction-aware entrances: the slide arrives from the side you're moving
+   toward — tapping back must not animate "forward" */
 .story-slide { animation: story-in .45s ease both; }
+.story-slide.fwd { animation-name: story-in-fwd; }
+.story-slide.bwd { animation-name: story-in-bwd; }
 @keyframes story-in { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: none; } }
+@keyframes story-in-fwd { from { opacity: 0; transform: translateX(26px); } to { opacity: 1; transform: none; } }
+@keyframes story-in-bwd { from { opacity: 0; transform: translateX(-26px); } to { opacity: 1; transform: none; } }
 .story-kicker {
   font-family: var(--mono); color: var(--accent); font-size: 13px;
-  letter-spacing: .3em; text-transform: uppercase; margin-bottom: 18px;
+  letter-spacing: var(--track-kicker); text-transform: uppercase; margin-bottom: 18px;
+  margin-right: calc(-1 * var(--track-kicker));
 }
 .story-big {
   font-weight: 800; font-size: clamp(44px, 10vw, 110px); line-height: 1.05;
@@ -878,17 +1003,33 @@ footer .deck-line .sep { margin: 0 9px; opacity: .55; }
 .story-big.mono { font-family: var(--mono); font-variant-numeric: tabular-nums; }
 .story-label { color: var(--ink-dim); font-size: clamp(16px, 2.6vw, 22px); margin-top: 16px; }
 .story-cta { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; margin-top: 34px; }
+.story-share-row { margin-top: 30px; }
+.story-share-row .btn { font-size: 14px; padding: 9px 18px; }
 .story-hint {
-  position: absolute; bottom: 16px; left: 0; right: 0; text-align: center;
+  position: absolute; bottom: calc(16px + env(safe-area-inset-bottom, 0px)); left: 0; right: 0; text-align: center;
   color: var(--ink-faint); font-size: 12.5px; font-family: var(--mono);
+  transition: opacity .6s;
 }
+/* the hint retires once the reader advances on their own */
+.story-hint.off { opacity: 0; }
 
 /* calendar heatmap — GitHub-style year of play. Cells are fluid exactly like
    the hour grid's (1fr with a floor): the year fills the module edge-to-edge
    on desktop and scrolls horizontally on phones. */
+/* labels and cells share one scroller so the month axis can't drift from the
+   weeks it names */
+.cal-scroll { overflow-x: auto; padding-bottom: 6px; }
+.cal-months {
+  display: grid; grid-auto-flow: column; grid-auto-columns: minmax(13px, 1fr);
+  gap: 3px; margin-bottom: 4px;
+}
+.cal-months span {
+  grid-row: 1; font-family: var(--mono); font-size: 10.5px; color: var(--ink-faint);
+  white-space: nowrap;
+}
 .cal-grid {
   display: grid; grid-template-rows: repeat(7, auto); grid-auto-flow: column;
-  grid-auto-columns: minmax(13px, 1fr); gap: 3px; overflow-x: auto; padding-bottom: 6px;
+  grid-auto-columns: minmax(13px, 1fr); gap: 3px;
 }
 .cal-cell { aspect-ratio: 1; min-width: 13px; border-radius: 3px; }
 .cal-cell.blank { background: transparent; }
@@ -919,10 +1060,16 @@ footer .deck-line .sep { margin: 0 9px; opacity: .55; }
    cells on touch devices just scrolls further rather than breaking layout. */
 @media (pointer: coarse) {
   .hw-cell, .cal-cell { min-width: 24px; min-height: 24px; }
-  .hw-grid, .cal-grid { grid-auto-columns: minmax(24px, 1fr); }
+  .hw-grid, .cal-grid, .cal-months { grid-auto-columns: minmax(24px, 1fr); }
   .hw-row { grid-template-columns: 38px repeat(24, minmax(24px, 1fr)); }
   .hw-axis { grid-template-columns: 38px repeat(24, minmax(24px, 1fr)); }
   .story-x { width: 44px; height: 44px; font-size: 32px; }
+  /* WCAG 2.5.8: the chips and pills phones tap all day were 30-34px tall —
+     grow the hit area, not the visual size */
+  .nav-pages a, .ch-chip, .yoy-chip, .chip { min-height: 44px; display: inline-flex; align-items: center; }
+  /* the permalink is deliberately visible on touch, but 10x20px is a target
+     in name only — pad the hit box without shifting layout */
+  .permalink { padding: 12px 10px; margin: -12px -4px -12px 0; }
 }
 
 /* The file-chip status column dropped to ~3.2:1 via a blanket opacity — these
@@ -964,6 +1111,11 @@ footer .deck-line .sep { margin: 0 9px; opacity: .55; }
 .tvn-arrow.up, .tvn-d.up { color: var(--green); }
 .tvn-arrow.down, .tvn-d.down { color: var(--orange); }
 .tvn-arrow.flat, .tvn-d.flat { color: var(--ink-faint); }
+/* paired magnitude bars under each row: first year faint, latest accent —
+   direction lives in the % column, scale lives here */
+.tvn-bars { grid-column: 1 / -1; display: grid; gap: 2px; margin: 2px 0 1px; }
+.tvn-bars i { display: block; height: 3px; border-radius: 999px; background: var(--accent); }
+.tvn-bars i.a { background: rgba(255, 255, 255, .20); }
 @media (max-width: 560px) {
   .tvn-head, .tvn-row { grid-template-columns: minmax(0, 1fr) 56px 16px 56px 54px; gap: 6px; }
   .tvn-l { font-size: 12.5px; }

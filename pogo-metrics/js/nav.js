@@ -17,6 +17,7 @@
     { id: "app", href: "/metrics.html", icon: "📊", label: "Visualize my journey", cta: true },
   ];
   nav.innerHTML = `
+    <a class="skip-link" href="#main">Skip to content</a>
     <div class="nav-inner">
       <a class="nav-brand" href="/">
         <span class="pokeball-dot"></span> POGO&nbsp;Metrics
@@ -36,6 +37,25 @@
   setNavH();
   addEventListener("resize", setNavH);
   if (window.ResizeObserver) new ResizeObserver(setNavH).observe(nav);
+
+  /* On phones the tab row is a one-line scroller with the scrollbar hidden, so
+   * nothing signals that more tabs exist — and nothing kept the current page's
+   * own tab on screen. Center the active tab (scrollLeft directly, NOT
+   * scrollIntoView, which would also scroll the page), and publish scroll
+   * state as classes so the CSS can fade the clipped edge. */
+  const row = nav.querySelector(".nav-pages");
+  if (row) {
+    const act = row.querySelector(".active") || row.querySelector(".nav-cta");
+    if (act && row.scrollWidth > row.clientWidth)
+      row.scrollLeft = Math.max(0, act.offsetLeft - (row.clientWidth - act.offsetWidth) / 2);
+    const edge = () => {
+      row.classList.toggle("scrollable", row.scrollWidth > row.clientWidth + 6);
+      row.classList.toggle("at-end", row.scrollLeft + row.clientWidth >= row.scrollWidth - 6);
+    };
+    edge();
+    row.addEventListener("scroll", edge, { passive: true });
+    addEventListener("resize", edge);
+  }
 
   /* ── heading permalinks ────────────────────────────────────────────────
      A "#" on each section heading that copies a link straight to it, so

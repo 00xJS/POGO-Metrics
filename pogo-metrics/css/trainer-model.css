@@ -69,10 +69,12 @@
   border-radius: var(--radius-control); padding: 12px 14px;
 }
 .tmodel .stat .label {
-  font-family: var(--mono); font-size: 10px; letter-spacing: .08em;
+  font-family: var(--mono); font-size: 10.5px; letter-spacing: .08em;
   text-transform: uppercase; color: var(--ink-faint); display: block; margin-bottom: 4px;
 }
-.tmodel .stat .value { font-size: 21px; font-weight: 700; color: var(--ink); font-variant-numeric: tabular-nums; line-height: 1.25; }
+/* mono, matching the report pages — the same kind of number should not wear
+   a different face on this page alone */
+.tmodel .stat .value { font-family: var(--mono); font-size: 20px; font-weight: 700; color: var(--ink); font-variant-numeric: tabular-nums; line-height: 1.25; }
 .tmodel .stat .value.teal { color: var(--accent); }
 .tmodel .stat .value.yellow { color: var(--accent2); }
 .tmodel .stat .sub { font-size: 12px; color: var(--ink-dim); margin-top: 2px; }
@@ -102,7 +104,7 @@
 .tmodel [hidden] { display: none !important; }
 .tmodel .ctl { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .tmodel .ctl-label {
-  font-family: var(--mono); font-size: 10px; letter-spacing: .08em;
+  font-family: var(--mono); font-size: 10.5px; letter-spacing: .08em;
   text-transform: uppercase; color: var(--ink-faint);
 }
 .tmodel .seg { display: inline-flex; background: var(--bg-raised); border: 1px solid var(--line); border-radius: var(--radius-pill); padding: 3px; gap: 2px; }
@@ -142,7 +144,7 @@
   box-shadow: 0 0 0 3px rgba(65, 216, 198, .18);
 }
 .tmodel .field label {
-  display: block; font-family: var(--mono); font-size: 10px; letter-spacing: .08em;
+  display: block; font-family: var(--mono); font-size: 10.5px; letter-spacing: .08em;
   text-transform: uppercase; color: var(--ink-faint); margin-bottom: 5px;
 }
 .tmodel .form-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; align-items: end; }
@@ -160,7 +162,7 @@
 .tmodel .table-scroll { overflow-x: auto; }
 .tmodel table { border-collapse: collapse; width: 100%; font-size: 13.5px; }
 .tmodel thead th {
-  font-family: var(--mono); font-size: 10px; letter-spacing: .08em;
+  font-family: var(--mono); font-size: 10.5px; letter-spacing: .08em;
   text-transform: uppercase; color: var(--ink-faint); font-weight: 400;
   text-align: left; padding: 9px 12px; border-bottom: 1px solid var(--line); white-space: nowrap;
 }
@@ -190,8 +192,8 @@
   background: var(--bg-raised); border: 1px solid var(--line);
   border-radius: var(--radius-control); padding: 14px 16px;
 }
-.tmodel .pct .label { font-family: var(--mono); font-size: 10px; letter-spacing: .08em; text-transform: uppercase; color: var(--ink-faint); }
-.tmodel .pct .big { font-size: 30px; font-weight: 800; font-variant-numeric: tabular-nums; line-height: 1.15; margin: 4px 0 2px; }
+.tmodel .pct .label { font-family: var(--mono); font-size: 10.5px; letter-spacing: .08em; text-transform: uppercase; color: var(--ink-faint); }
+.tmodel .pct .big { font-family: var(--mono); font-size: 28px; font-weight: 700; font-variant-numeric: tabular-nums; line-height: 1.15; margin: 4px 0 2px; }
 .tmodel .pct .note { font-size: 12.5px; color: var(--ink-dim); }
 .tmodel .bar { height: 6px; border-radius: 3px; background: rgba(255, 255, 255, .07); margin-top: 10px; overflow: hidden; }
 .tmodel .bar > span { display: block; height: 100%; border-radius: 3px; background: linear-gradient(90deg, var(--accent), var(--accent2)); }

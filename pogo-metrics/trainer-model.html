@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <title>The Trainer Model — POGO Metrics</title>
   <meta name="description" content="One real Pokémon GO friends list, plotted under two level caps: 390 trainers in the 2025 cap-50 game and 493 in today's cap-80 game — and where you'd land." />
   <meta name="theme-color" content="#0a0d1c">
@@ -28,15 +28,15 @@
   <link rel="preload" href="vendor/fonts/c8e7a734b1.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="preload" href="vendor/fonts/1cd702cd25.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="stylesheet" href="vendor/fonts/fonts.css" />
-  <link rel="stylesheet" href="css/style.css?v=20260813a" />
-  <link rel="stylesheet" href="css/trainer-model.css?v=20260813a" />
+  <link rel="stylesheet" href="css/style.css?v=20260817a" />
+  <link rel="stylesheet" href="css/trainer-model.css?v=20260817a" />
 </head>
 <body>
   <nav id="topnav" data-active="model"></nav>
 
-  <main class="tmodel">
+  <main id="main" class="tmodel">
     <!-- ───────────────────────── intro ───────────────────────── -->
-    <section class="section" id="intro" style="border-top:none;padding-top:120px">
+    <section class="section page-head" id="intro">
       <div class="center">
         <a class="deck-kicker" href="https://observation-deck.netlify.app/">Observation Deck / POGO Metrics</a>
         <div class="eyebrow">Research layer · the level cap</div>
@@ -436,7 +436,7 @@
       <div class="panel">
         <div class="panel-chrome">
           <span class="panel-title">What reaching each rung has involved</span>
-          <button class="btn btn-teal" id="btn-story" type="button">▶ Play the ladder story</button>
+          <button class="btn btn-teal" id="btn-story" type="button"><span aria-hidden="true">▶</span> Play the ladder story</button>
         </div>
         <div class="panel-body">
           <div class="table-scroll"><table id="tbl-ladder"></table></div>
@@ -497,8 +497,8 @@
         kilometre, every friendship — and it never has to leave your device to do it.
       </p>
       <div class="hero-cta">
+        <a class="btn btn-teal" href="demo.html"><span aria-hidden="true">▶</span> Watch the example story</a>
         <a class="btn btn-primary" href="metrics.html">Visualize my journey</a>
-        <a class="btn btn-teal" href="demo.html">▶ Watch the example story</a>
         <a class="btn btn-ghost" href="/#datasets">What's in your export</a>
       </div>
     </section>
@@ -527,10 +527,10 @@
     </p>
   </footer>
 
-  <script defer src="js/nav.js?v=20260813a"></script>
+  <script defer src="js/nav.js?v=20260817a"></script>
   <!-- Chart.js loads up front here (unlike metrics.html's on-demand injection):
        this page is nothing but charts, and the file is already precached. -->
   <script defer src="vendor/chart.umd.min.js"></script>
-  <script defer src="js/trainer-model.js?v=20260813a"></script>
+  <script defer src="js/trainer-model.js?v=20260817a"></script>
 </body>
 </html>

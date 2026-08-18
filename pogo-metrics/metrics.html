@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <title>Visualize my journey — POGO Metrics</title>
   <meta name="description" content="Drop your Niantic Pokémon GO data export and watch it become a private, visual story — all in your browser." />
   <meta name="theme-color" content="#0a0d1c">
@@ -28,17 +28,17 @@
   <link rel="preload" href="vendor/fonts/c8e7a734b1.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="preload" href="vendor/fonts/1cd702cd25.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="stylesheet" href="vendor/fonts/fonts.css" />
-  <link rel="stylesheet" href="css/style.css?v=20260813a" />
+  <link rel="stylesheet" href="css/style.css?v=20260817a" />
 </head>
 <body>
   <nav id="topnav" data-active="app"></nav>
 
-  <main>
+  <main id="main">
     <!-- ───────────────────────── upload ───────────────────────── -->
-    <section class="section" id="upload-section" style="border-top:none;padding-top:120px">
+    <section class="section page-head" id="upload-section">
       <div class="center">
         <a class="deck-kicker" href="https://observation-deck.netlify.app/">Observation Deck / POGO Metrics</a>
-        <div class="eyebrow">Step 3 · build your story</div>
+        <div class="eyebrow">Build your story</div>
         <h1 style="margin-top:8px">Drop in your export</h1>
         <p class="section-desc" style="margin:10px auto 28px">
           Add the unzipped Niantic folder, or just the individual files you care about. Each one
@@ -47,9 +47,16 @@
         </p>
       </div>
 
+      <noscript><div class="notice warn" style="margin-bottom:18px"><b>JavaScript is off, so nothing here can work</b> —
+        parsing happens entirely in your browser, which is also why nothing is ever uploaded.
+        Enable JavaScript to build your story.</div></noscript>
       <div id="dropzone">
+        <!-- .zip is deliberately selectable: picking the un-unzipped Niantic ZIP is
+         the most common first attempt, and accepting it routes the user into
+         ingest()'s "that's the ZIP, unzip it first" explainer instead of the
+         iOS Files picker silently greying their export out. -->
         <input id="file-input" type="file" multiple
-               accept=".tsv,.csv,.txt,.json,text/plain,text/csv,text/tab-separated-values,application/json,application/octet-stream" />
+               accept=".tsv,.csv,.txt,.json,.zip,text/plain,text/csv,text/tab-separated-values,application/json,application/zip,application/octet-stream" />
         <input id="folder-input" type="file" webkitdirectory directory multiple hidden />
         <div class="dz-emoji">📦</div>
         <h2>Drop your files or folder here</h2>
@@ -66,14 +73,14 @@
 
       <div class="center" style="margin-top:18px">
         <div class="dz-or" style="margin-bottom:10px">— not ready to upload yet? —</div>
-        <a class="btn btn-ghost" href="demo.html">🎬 See the live example</a>
+        <a class="btn btn-ghost" href="demo.html"><span aria-hidden="true">🎬</span> See the live example</a>
         <div class="dz-hint" style="margin-top:8px">Opens a permanent reference build from a fully anonymized sample export — on its own page.</div>
       </div>
 
       <div id="detected"></div>
 
       <div id="build-row" style="display:none;text-align:center;margin-top:26px">
-        <button class="btn btn-primary" id="build-btn" type="button">Build my dashboard</button>
+        <button class="btn btn-primary" id="build-btn" type="button">Build my story</button>
         <button class="btn btn-ghost" id="clear-btn" type="button">Clear</button>
       </div>
 
@@ -103,9 +110,9 @@
 
   <!-- Chart.js / Leaflet / globe.gl are loaded on demand by app.js when a build
        actually needs them — the upload UI must be interactive immediately. -->
-  <script defer src="js/nav.js?v=20260813a"></script>
-  <script defer src="js/catalog.js?v=20260813a"></script>
-  <script defer src="js/pokedex.js?v=20260813a"></script>
-  <script defer src="js/app.js?v=20260813a"></script>
+  <script defer src="js/nav.js?v=20260817a"></script>
+  <script defer src="js/catalog.js?v=20260817a"></script>
+  <script defer src="js/pokedex.js?v=20260817a"></script>
+  <script defer src="js/app.js?v=20260817a"></script>
 </body>
 </html>
