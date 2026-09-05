@@ -7,7 +7,7 @@
  *     cached copy when offline
  *   • vendor/ (pinned libs, textures, fonts, geojson) → cache-first
  * Bump VERSION on any release to sweep old caches. */
-const VERSION = "pogo-metrics-v20260817a";
+const VERSION = "pogo-metrics-v20260904a";
 const CORE = [
   "/", "favicon.ico", "index.html", "metrics.html", "demo.html", "trainer-model.html", "404.html",
   "css/style.css?v=20260817a", "css/trainer-model.css?v=20260817a",

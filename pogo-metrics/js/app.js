@@ -530,7 +530,7 @@ async function loadDemo() {
     // instead of stranding the visitor on a dead spinner.
     const res = window.DEMO_PAGE && $("results");
     if (res) {
-      res.innerHTML = `<div class="empty-state"><div class="es-emoji">📡</div>
+      res.innerHTML = `<div class="empty-state"><div class="es-icon">${window.ICON ? window.ICON("sparkles") : "📡"}</div>
         <h3 style="margin:10px 0 6px">The live example couldn't load</h3>
         <p>The sample export didn't come through — usually a connection blip.</p></div>`;
       const rb = document.createElement("button");
@@ -542,16 +542,46 @@ async function loadDemo() {
   }
 }
 
+/* ── build console: what each file unlocks ──
+   Visible from the first visit, before a single file is added: every chapter
+   the app can build, which file unlocks it, and — as files arrive — which are
+   lit. The old "N files added" line only spoke after the fact. */
+const GROUP_ICON = { "Your Profile": "user", "Your Activity": "activity", "Your Social World": "users", "Your Spending": "card", "Your Fitness": "activity", "Events": "ticket", "Technical & Device": "phone" };
+function renderUnlocks() {
+  const el = $("unlocks");
+  if (!el || !window.CATALOG) return;
+  const list = window.CATALOG.filter((c) => c.story);
+  const have = (c) => RAW.some((r) => c.match.test(r.name) && !r.oversize && !r.empty && !r.unreadable);
+  const got = list.filter(have).length;
+  const I = (n) => (window.ICON ? window.ICON(n) : "");
+  const short = (t) => { const m = String(t || "").split(/[,.;—(]/)[0].trim(); return m.length > 64 ? m.slice(0, 61) + "…" : m; };
+  el.hidden = false;
+  el.innerHTML = `<div class="ul-head">
+      <div><div class="ml">Build console</div><h3>${got} of ${list.length} chapters unlocked</h3></div>
+      <div class="ul-side">
+        <div class="ul-bar" aria-hidden="true"><i style="width:${Math.round((got / list.length) * 100)}%"></i></div>
+        ${got ? "" : `<a class="btn btn-ghost ul-demo" href="demo.html">${I("play")} Not ready? See the live example</a>`}
+      </div>
+    </div>
+    <div class="ul-grid">${list.map((c) => {
+      const on = have(c), meta = CHAPTER_META[c.icon];
+      return `<div class="ul-item${on ? " on" : ""}" data-hue="${meta ? meta[1] : "teal"}">
+        <span class="ul-ic">${I(meta ? meta[0] : GROUP_ICON[c.group] || "folder")}</span>
+        <div class="ul-t"><b>${esc(c.name)}</b><span class="ul-file">${esc(c.id)}</span><span class="ul-story">${on ? "Unlocked" : "Unlocks"}: ${esc(short(c.story))}</span></div>
+        <span class="ul-st">${on ? I("award") + " Added" : "Not added"}</span>
+      </div>`; }).join("")}</div>`;
+}
 function renderDetected() {
   const el = $("detected");
   if (!el) return; // results-only pages (e.g. the live-example page) skip the picker
+  renderUnlocks();
   const buildRow = $("build-row");
   if (!RAW.length) { el.innerHTML = ""; if (buildRow) buildRow.style.display = "none"; return; }
   const tally = { ready: 0, privacy: 0, noChapter: 0, empty: 0, oversize: 0, unknown: 0 };
   const rows = RAW.map((r) => {
-    let cls = "unknown", status = "Not recognized", name = r.name, icon = "❓", note = "We don't have a story for this file.", kind = "unknown";
+    let cls = "unknown", status = "Not recognized", name = r.name, icon = window.ICON ? window.ICON("search") : "❓", note = "We don't have a story for this file.", kind = "unknown";
     if (r.entry) {
-      name = r.entry.name; icon = r.entry.icon; note = r.entry.summary;
+      name = r.entry.name; icon = window.fileIcon ? window.fileIcon(r.entry.icon, r.entry.group) : r.entry.icon; note = r.entry.summary;
       if (r.entry.story) { cls = "ok"; status = "Ready"; kind = "ready"; }
       // "skipped for privacy" and "we have no chapter for this yet" are very
       // different promises — don't tell someone we ignored a harmless file.
@@ -570,7 +600,11 @@ function renderDetected() {
   }).join("");
   /* An honest summary, not a flat "N files ready": counting a mis-drop as
    * "ready" hid the problem behind a closed disclosure until after Build. */
-  const bits = [`<b>${tally.ready}</b> chapter${tally.ready === 1 ? "" : "s"} ready`];
+  // "chapters" means chapters: count the catalog entries a file unlocked, not
+  // the files that have a story — nine Player_Journey shards are one chapter
+  const chartable = (window.CATALOG || []).filter((c) => c.story);
+  const unlocked = chartable.filter((c) => RAW.some((r) => c.match.test(r.name) && !r.oversize && !r.empty && !r.unreadable)).length;
+  const bits = [`<b>${unlocked}</b> of ${chartable.length} chapters unlocked`];
   if (tally.privacy) bits.push(`${tally.privacy} privacy-skipped`);
   if (tally.noChapter) bits.push(`${tally.noChapter} no chapter yet`);
   if (tally.empty) bits.push(`${tally.empty} empty`);
@@ -1174,15 +1208,54 @@ function parseWayfarer(text) {
 /* `anchor` pins the chapter's #id when the heading can't be trusted to stay
    the same — the trainer card's title contains the player's name, so its slug
    would otherwise differ for every reader and no link to it could be shared. */
+/* Each chapter keeps the emoji it was written with as its KEY, and that key
+ * resolves to a line icon from nav.js's set plus a hue. The hue is the one
+ * thing that tells sixteen otherwise identically-built panels apart at a
+ * glance: it colours the eyebrow, the icon chip, the rail entry and a top
+ * rule, and nothing else — charts keep the shared palette. */
+const CHAPTER_META = {
+  "🎮": ["user", "teal"],      "🗺️": ["log", "yellow"],     "🤝": ["users", "pink"],
+  "🏅": ["award", "yellow"],   "🎒": ["bag", "purple"],     "⏱️": ["clock", "orange"],
+  "🔍": ["search", "pink"],    "📸": ["camera", "purple"],  "📅": ["calendar", "magenta"],
+  "🌍": ["globe", "blue"],     "📍": ["pin", "blue"],       "💳": ["card", "green"],
+  "🏃": ["activity", "orange"], "🎟️": ["ticket", "magenta"], "📱": ["phone", "blue"],
+  "🧭": ["compass", "teal"],
+};
+function chapterMeta(icon, anchor) {
+  if (anchor === "versus-friend") return ["zap", "green"];
+  return CHAPTER_META[icon] || ["sparkles", "teal"];
+}
+function chapterIcon(icon, anchor) {
+  const m = chapterMeta(icon, anchor);
+  return window.ICON ? window.ICON(m[0]) : icon;
+}
 function moduleHTML(icon, title, sub, inner, anchor) {
-  return `<div class="module"${anchor ? ` data-anchor="${anchor}"` : ""}>
-    <div class="mod-head"><span class="mod-icon">${icon}</span><h3>${esc(title)}</h3></div>
+  const hue = chapterMeta(icon, anchor)[1];
+  return `<div class="module" data-hue="${hue}"${anchor ? ` data-anchor="${anchor}"` : ""}>
+    <div class="mod-head"><span class="mod-icon">${chapterIcon(icon, anchor)}</span><h3>${esc(title)}</h3></div>
     ${sub ? `<div class="mod-sub">${sub}</div>` : ""}
     ${inner}</div>`;
 }
+/* An inline sparkline — a tile can carry the shape of its number as well as
+ * the number. Stroke scales with the box, the end-dot is a positioned element
+ * so the stretched viewBox can't squash it into an ellipse. */
+function sparkSVG(arr, cls) {
+  if (!arr || arr.length < 2) return "";
+  const max = Math.max(...arr) || 1, n = arr.length;
+  const pts = arr.map((v, i) => [(i / (n - 1)) * 100, 26 - (v / max) * 22]);
+  const d = pts.map((p, i) => (i ? "L" : "M") + p[0].toFixed(1) + " " + p[1].toFixed(1)).join(" ");
+  const last = pts[n - 1];
+  return `<span class="spark-wrap ${cls || ""}"><svg class="spark" viewBox="0 0 100 28" preserveAspectRatio="none" aria-hidden="true"><path class="sp-fill" d="${d} L100 28 L0 28 Z"/><path class="sp-line" d="${d}"/></svg><i class="sp-end" style="left:calc(${last[0].toFixed(1)}% - 3px);top:calc(${((last[1] / 28) * 100).toFixed(1)}% - 3px)"></i></span>`;
+}
+function alpha(col, a) {
+  const m = /^#([0-9a-f]{3}|[0-9a-f]{6})$/i.exec(String(col || "").trim());
+  if (!m) return col;
+  let h = m[1]; if (h.length === 3) h = h.split("").map((c) => c + c).join("");
+  return `rgba(${parseInt(h.slice(0, 2), 16)},${parseInt(h.slice(2, 4), 16)},${parseInt(h.slice(4, 6), 16)},${a})`;
+}
 function statGrid(items) {
-  return `<div class="stat-grid">${items.map(([v, l, s]) =>
-    `<div class="stat-card"><div class="v">${v}</div><div class="l">${esc(l)}</div>${s ? `<div class="s">${esc(s)}</div>` : ""}</div>`).join("")}</div>`;
+  return `<div class="stat-grid">${items.map(([v, l, s, spark]) =>
+    `<div class="stat-card${spark ? " has-spark" : ""}"><div class="v">${v}</div><div class="l">${esc(l)}</div>${s ? `<div class="s">${esc(s)}</div>` : ""}${spark ? sparkSVG(spark) : ""}</div>`).join("")}</div>`;
 }
 function calloutRow(items) {
   return `<div class="callout-row">${items.map(([v, l]) => `<div class="callout"><b>${v}</b> ${esc(l)}</div>`).join("")}</div>`;
@@ -1215,8 +1288,22 @@ function themeCharts() {
     Chart.defaults.plugins.legend.labels.font = { size: 10 };
     Chart.defaults.plugins.legend.labels.padding = 6;
   }
-  // one bar language for every chart — was 2/3/6 decided chart by chart
-  Chart.defaults.elements.bar.borderRadius = 3;
+  // one mark language for every chart: softly rounded bars, smoothed lines
+  // with no point clutter, a whisper of grid and no axis spine
+  Chart.defaults.elements.bar.borderRadius = 4;
+  Chart.defaults.elements.line.tension = 0.35;
+  Chart.defaults.elements.line.borderWidth = 2;
+  Chart.defaults.elements.point.radius = 0;
+  Chart.defaults.elements.point.hoverRadius = 5;
+  Chart.defaults.elements.point.hitRadius = 12;
+  Chart.defaults.scale.grid.color = "rgba(255,255,255,.055)";
+  if (Chart.defaults.scale.border) Chart.defaults.scale.border.display = false;
+  Chart.defaults.scale.ticks.padding = 6;
+  Chart.overrides.doughnut = Chart.overrides.doughnut || {};
+  Chart.overrides.doughnut.cutout = "66%";
+  Chart.overrides.doughnut.borderWidth = 2;
+  Chart.overrides.doughnut.borderColor = C.panel2 || "#171c47";
+  Chart.overrides.doughnut.hoverOffset = 6;
 
   /* House tooltip: the same surface, border and mono value line as the heat
    * grids' .hw-tip, so the report has ONE tooltip design instead of Chart.js's
@@ -1369,6 +1456,27 @@ function newChart(id, cfg) {
     if (w && w < 340 && cfg.options.scales.y && cfg.options.scales.y.title) cfg.options.scales.y.title.display = false;
   }
   const fallback = (cfg.data && cfg.data.datasets && cfg.data.datasets[0] && cfg.data.datasets[0].label) || "Data chart";
+  /* Line charts get an area fill fading out of their own stroke colour and an
+   * emphasised final point — unless the chart already decided its own. */
+  if (cfg.type === "line" && cfg.data && cfg.data.datasets) {
+    cfg.data.datasets.forEach((ds) => {
+      const col = typeof ds.borderColor === "string" ? ds.borderColor : null;
+      if (!col) return;
+      if (ds.fill === undefined) {
+        ds.fill = true;
+        ds.backgroundColor = (c) => {
+          const area = c.chart.chartArea;
+          if (!area) return "transparent";
+          const g = c.chart.ctx.createLinearGradient(0, area.top, 0, area.bottom);
+          g.addColorStop(0, alpha(col, .26)); g.addColorStop(1, alpha(col, 0));
+          return g;
+        };
+      }
+      if (ds.pointRadius === undefined)
+        ds.pointRadius = (c) => (c.dataIndex === c.dataset.data.length - 1 ? 3.5 : 0);
+      if (ds.pointBackgroundColor === undefined) ds.pointBackgroundColor = col;
+    });
+  }
   const ch = new Chart(cv, cfg);
   try { chartA11y(cv, ch.data, ch.options, fallback); } catch (e) { console.warn("chart a11y", e); }
   /* Charts that change in place — the year-over-year metric switcher — would
@@ -1396,6 +1504,7 @@ function teardown() {
   GLOBE_CLEANUP.forEach((fn) => { try { fn(); } catch (e) {} });
   GLOBE_CLEANUP = [];
   if (COUNT_IO) { COUNT_IO.disconnect(); COUNT_IO = null; }
+  if (SHELL_AC) { SHELL_AC.abort(); SHELL_AC = null; }
   /* Release the parsed export too. Clear and "Start over" used to tear down the
    * charts while leaving every aggregate — trail points, timestamps, fort and
    * gym maps, friend rows — alive in STATE, so the memory a user was trying to
@@ -1418,6 +1527,7 @@ async function build() {
   if (btn) { btn.disabled = true; btn.textContent = "Building…"; }
   const res = $("results");
   res.classList.remove("results-hidden");
+  document.body.classList.remove("has-report");
   res.innerHTML = `<div class="empty-state"><div class="gl-spin" style="margin:0 auto 14px"></div>
     <p id="build-progress">${SAMPLE_DATA || window.DEMO_PAGE ? "Reading the sample export…" : "Reading your files…"}</p>
     <div class="build-bar" aria-hidden="true"><i id="build-bar-fill"></i></div></div>`;
@@ -1480,11 +1590,11 @@ async function build() {
       // Blaming the user's files for what is actually a stale file handle is the
       // wrong story: if nothing could be re-read, say exactly that.
       res.innerHTML = unreadable.length
-        ? `<div class="empty-state"><div class="es-emoji">📂</div>
+        ? `<div class="empty-state"><div class="es-icon">${window.ICON ? window.ICON("folder") : "📂"}</div>
           <h3 style="margin:10px 0 6px">Couldn't re-read your files</h3>
           <p>The export folder may have moved, been deleted, or been renamed since you picked it.
           Add ${unreadable.length === 1 ? esc(unreadable[0]) : "the files"} again to rebuild.</p></div>`
-        : `<div class="empty-state"><div class="es-emoji">🤔</div>
+        : `<div class="empty-state"><div class="es-icon">${window.ICON ? window.ICON("search") : "🤔"}</div>
           <h3 style="margin:10px 0 6px">Nothing to visualize yet</h3>
           <p>None of those files had a story we can tell. Try adding files like <code>Gameplay.txt</code>,
           <code>FriendList.tsv</code>, or your <code>Player_Journey</code> folder.</p></div>`;
@@ -1513,10 +1623,12 @@ async function build() {
     safe(renderSessions);
     safe(renderWayfarer);
 
-    // chapter navigation — anchors into each module, right under the hero
+    // chapter navigation — a rail beside the report on wide screens, a sticky
+    // strip under the nav on narrow ones. Either way it tracks the chapter in
+    // view, so the reader always knows where they are in a sixteen-panel report.
     const mods = [...res.querySelectorAll(".module")];
     if (mods.length >= 3) {
-      const chips = mods.map((m) => {
+      const chips = mods.map((m, i) => {
         const h = m.querySelector(".mod-head h3");
         const icon = m.querySelector(".mod-icon");
         const t = h ? h.textContent.trim() : "Chapter";
@@ -1525,10 +1637,16 @@ async function build() {
         // player, and these ids are meant to be linkable.
         m.id = "ch-" + (m.dataset.anchor
           || t.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, ""));
-        return `<a class="ch-chip" href="#${m.id}">${icon ? icon.textContent + " " : ""}${esc(t)}</a>`;
+        return `<a class="ch-chip" href="#${m.id}" data-hue="${m.dataset.hue || "teal"}" style="--i:${i}">${icon ? icon.innerHTML : ""}<span class="ch-t">${esc(t)}</span><span class="ch-n">${String(i + 1).padStart(2, "0")}</span></a>`;
       }).join("");
+      const playLabel = window.DEMO_PAGE ? "Play the example story" : "Play my story";
       res.querySelector(".res-hero").insertAdjacentHTML("afterend",
-        `<nav class="chapter-nav" aria-label="Chapters">${chips}</nav>`);
+        `<nav class="chapter-nav chapter-rail" aria-label="Chapters">
+           <div class="rail-head">${mods.length} chapters</div>
+           <button class="rail-mode" type="button" aria-pressed="false" title="Read one chapter at a time">${window.ICON ? window.ICON("square") : ""}<span class="ch-t">One at a time</span></button>
+           ${chips}
+           <button class="btn btn-primary rail-play" type="button">${window.ICON ? window.ICON("play") : "▶"} ${playLabel}</button>
+         </nav>`);
       /* Chapter grammar: the landing numbers its sections and the Trainer Model
        * eyebrows its chapters, but the actual product's chapters had neither.
        * Numbered here, after assembly, so the count is right whatever subset of
@@ -1541,6 +1659,7 @@ async function build() {
     }
 
     res.insertAdjacentHTML("beforeend", outro());
+    shellReport(res, mods);
 
     // wire up post-render bits (charts/maps were referenced by id)
     POST.forEach((fn) => { try { fn(); } catch (e) { console.warn(e); } });
@@ -1629,6 +1748,206 @@ let POST = [];
 function later(fn) { POST.push(fn); }
 function safe(fn) { try { const html = fn(); if (html) $("results").insertAdjacentHTML("beforeend", html); } catch (e) { console.warn(fn.name, e); } }
 
+/* ── report shell ─────────────────────────────────────────────────────────
+   Turns the flat run of panels into an application layout: the chapter rail
+   sits beside the report and follows the scroll (a sticky strip on phones),
+   panels fade up as they arrive, and a floating Play button follows phone
+   readers once the masthead has scrolled away. All of it is additive — the
+   panels themselves are untouched, so every chart, anchor and share card
+   keeps working exactly as before. */
+let SHELL_AC = null;
+function shellReport(res, mods) {
+  document.body.classList.add("has-report");
+  const hero = res.querySelector(".res-hero");
+  const rail = res.querySelector(".chapter-rail");
+  // Everything that is not the masthead or the rail becomes the report body,
+  // which is what lets the rail take its own grid column on wide screens.
+  const body = document.createElement("div");
+  body.className = "report-body";
+  [...res.children].filter((c) => c !== hero && c !== rail).forEach((c) => body.appendChild(c));
+  res.appendChild(body);
+
+  if (SHELL_AC) SHELL_AC.abort();
+  SHELL_AC = new AbortController();
+  const sig = { signal: SHELL_AC.signal, passive: true };
+
+  // rail play button — the toolbar's #story-btn is wired by wireToolbar
+  const rp = rail && rail.querySelector(".rail-play");
+  if (rp) rp.addEventListener("click", () => storyMode(), sig);
+
+  // scroll-spy: the last chapter whose top has passed the nav is the current one
+  if (rail && mods.length) {
+    const links = mods.map((m) => rail.querySelector(`a[href="#${m.id}"]`));
+    let cur = -1, tick = false;
+    const mark = (i) => {
+      if (cur >= 0 && links[cur]) { links[cur].classList.remove("cur"); links[cur].removeAttribute("aria-current"); }
+      cur = i;
+      const a = links[cur];
+      if (!a) return;
+      a.classList.add("cur"); a.setAttribute("aria-current", "true");
+      if (rail.scrollWidth > rail.clientWidth + 6)
+        rail.scrollTo({ left: a.offsetLeft - (rail.clientWidth - a.offsetWidth) / 2, behavior: scrollBehavior() });
+      else if (rail.scrollHeight > rail.clientHeight + 6)
+        rail.scrollTo({ top: a.offsetTop - rail.clientHeight / 2 + a.offsetHeight / 2, behavior: scrollBehavior() });
+    };
+
+    /* ── reader mode: one chapter at a time ──
+       A phone reader faces ~28,000px of report. In reader mode only the
+       current chapter is shown, with previous/next at its foot; the rail
+       switches chapters instead of scrolling to them. Charts are re-measured
+       on every switch because a canvas laid out while hidden has no size. */
+    let READER = false, RCUR = 0;
+    const navH = () => parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--nav-h")) || 80;
+    const readerNav = document.createElement("div");
+    readerNav.className = "reader-nav";
+    body.appendChild(readerNav);
+    const remeasure = () => requestAnimationFrame(() => {
+      CHARTS.forEach((c) => { try { c.resize(); } catch (e) {} });
+      if (MAP) { try { MAP.invalidateSize(); } catch (e) {} }
+      dispatchEvent(new Event("resize"));
+    });
+    const I = (n) => (window.ICON ? window.ICON(n) : "");
+    const setChapter = (i, scroll) => {
+      RCUR = Math.max(0, Math.min(mods.length - 1, i));
+      mods.forEach((m, j) => m.classList.toggle("cur-ch", j === RCUR));
+      mods[RCUR].classList.add("in");
+      document.body.classList.toggle("last-ch", RCUR === mods.length - 1);
+      const t = (m) => { const h = m.querySelector(".mod-head h3"); return h ? h.childNodes[0].textContent.trim() : "Chapter"; };
+      readerNav.innerHTML = `
+        <button class="btn btn-ghost rn-prev" type="button" ${RCUR === 0 ? "disabled" : ""}>${I("left")} <span>${RCUR > 0 ? esc(t(mods[RCUR - 1])) : "Start"}</span></button>
+        <span class="rn-pos">${String(RCUR + 1).padStart(2, "0")} / ${String(mods.length).padStart(2, "0")}</span>
+        <button class="btn btn-teal rn-next" type="button" ${RCUR === mods.length - 1 ? "disabled" : ""}><span>${RCUR < mods.length - 1 ? esc(t(mods[RCUR + 1])) : "The end"}</span> ${I("right")}</button>`;
+      readerNav.querySelector(".rn-prev").onclick = () => setChapter(RCUR - 1, true);
+      readerNav.querySelector(".rn-next").onclick = () => setChapter(RCUR + 1, true);
+      mark(RCUR);
+      try { history.replaceState(null, "", "#" + mods[RCUR].id); } catch (e) {}
+      if (scroll) window.scrollTo({ top: body.getBoundingClientRect().top + scrollY - navH() - 10, behavior: scrollBehavior() });
+      remeasure();
+    };
+    const setReader = (on) => {
+      READER = !!on;
+      document.body.classList.toggle("reader-mode", READER);
+      const btn = rail.querySelector(".rail-mode");
+      if (btn) {
+        btn.setAttribute("aria-pressed", String(READER));
+        btn.title = READER ? "Show every chapter" : "Read one chapter at a time";
+        btn.innerHTML = `${I(READER ? "rows" : "square")}<span class="ch-t">${READER ? "Show all" : "One at a time"}</span>`;
+      }
+      if (READER) setChapter(cur >= 0 ? cur : 0, true);
+      else {
+        mods.forEach((m) => m.classList.remove("cur-ch"));
+        document.body.classList.remove("last-ch");
+        remeasure();
+        const m = mods[RCUR];
+        if (m) requestAnimationFrame(() => window.scrollTo({ top: m.getBoundingClientRect().top + scrollY - navH() - 10, behavior: "auto" }));
+      }
+      announce(READER ? "Reading one chapter at a time." : "Showing every chapter.");
+    };
+    const modeBtn = rail.querySelector(".rail-mode");
+    if (modeBtn) modeBtn.addEventListener("click", () => setReader(!READER), sig);
+    links.forEach((a, i) => a && a.addEventListener("click", (e) => {
+      if (!READER) return;
+      e.preventDefault();
+      setChapter(i, true);
+    }, sig));
+
+    const spy = () => {
+      tick = false;
+      if (READER) return;
+      const line = navH() + 140;
+      let i = mods.findIndex((m) => m.getBoundingClientRect().top > line) - 1;
+      if (i < -1) i = mods.length - 1;                  // past the last one
+      if (i < 0 && mods[0].getBoundingClientRect().top <= innerHeight * .6) i = 0;
+      if (i === cur) return;
+      mark(i);
+    };
+    const onScroll = () => { if (!tick) { tick = true; requestAnimationFrame(spy); } };
+    addEventListener("scroll", onScroll, sig);
+    addEventListener("resize", onScroll, sig);
+    requestAnimationFrame(spy);
+  }
+
+  // reveal: panels fade up as they enter, once — never for reduced motion.
+  // A timer shows anything an observer never got to, so nothing can stay hidden.
+  if (!REDUCED_MOTION && "IntersectionObserver" in window) {
+    const io = new IntersectionObserver((ents) => {
+      ents.forEach((en) => { if (en.isIntersecting) { en.target.classList.add("in"); io.unobserve(en.target); } });
+    }, { rootMargin: "0px 0px -6% 0px", threshold: 0.02 });
+    mods.forEach((m) => {
+      // a panel already on screen at build time must not blink in
+      if (m.getBoundingClientRect().top < innerHeight) return;
+      m.classList.add("reveal"); io.observe(m);
+    });
+    const fallback = setTimeout(() => mods.forEach((m) => m.classList.add("in")), 2500);
+    SHELL_AC.signal.addEventListener("abort", () => { io.disconnect(); clearTimeout(fallback); });
+  }
+
+  /* stat grids: pick the column count whose last row is fullest, so no row
+     ends with one or two orphaned tiles. A small penalty for fewer columns
+     keeps nine tiles at 5 + 4 rather than three rows of three. */
+  const balance = () => {
+    res.querySelectorAll(".stat-grid").forEach((g) => {
+      const n = g.children.length;
+      const w = g.clientWidth || 900;
+      const maxCols = Math.min(5, Math.floor((w + 10) / 182));
+      if (n < 4 || maxCols < 3) { g.classList.remove("balanced"); g.style.removeProperty("--cols"); return; }
+      let best = maxCols, bestScore = -1;
+      for (let c = maxCols; c >= 3; c--) {
+        const r = n % c;
+        const score = (r === 0 ? 1 : r / c) - (maxCols - c) * 0.12;
+        if (score > bestScore + 1e-9) { bestScore = score; best = c; }
+      }
+      g.style.setProperty("--cols", best);
+      g.classList.add("balanced");
+    });
+  };
+  balance();
+  addEventListener("resize", balance, sig);
+  SHELL_AC.signal.addEventListener("abort", () => res.querySelectorAll(".stat-grid.balanced").forEach((g) => g.classList.remove("balanced")));
+
+  mountUploadStrip();
+
+  // floating Play for phones, shown once the masthead's own button is gone
+  if (hero && "IntersectionObserver" in window) {
+    const fab = document.createElement("button");
+    fab.type = "button"; fab.className = "fab-play";
+    fab.innerHTML = `${window.ICON ? window.ICON("play") : "▶"}<span>${window.DEMO_PAGE ? "Play the story" : "Play my story"}</span>`;
+    fab.addEventListener("click", () => storyMode(), sig);
+    res.appendChild(fab);
+    const fio = new IntersectionObserver((ents) => {
+      fab.classList.toggle("on", !ents[0].isIntersecting && ents[0].boundingClientRect.top < 0);
+    }, { threshold: 0 });
+    fio.observe(hero);
+    SHELL_AC.signal.addEventListener("abort", () => fio.disconnect());
+  }
+}
+
+/* ── upload page, once a report exists ──
+   The dropzone, the console and their copy used to stay above the masthead
+   for the life of the report. Now they fold into one strip — the counts, Add
+   more, and a toggle that brings the full picker and console back. */
+function mountUploadStrip() {
+  const sec = $("upload-section");
+  if (!sec) return;
+  let strip = sec.querySelector(".up-strip");
+  if (!strip) { strip = document.createElement("div"); strip.className = "up-strip"; sec.prepend(strip); }
+  const chartable = (window.CATALOG || []).filter((c) => c.story);
+  const unlocked = chartable.filter((c) => RAW.some((r) => c.match.test(r.name) && !r.oversize && !r.empty && !r.unreadable)).length;
+  const I = (n) => (window.ICON ? window.ICON(n) : "");
+  const open = sec.classList.contains("up-open");
+  strip.innerHTML = `<div class="us-sum">${I("folder")}<span><b>${RAW.length}</b> file${RAW.length === 1 ? "" : "s"} added · <b>${unlocked} of ${chartable.length}</b> chapters unlocked</span></div>
+    <div class="us-act">
+      <button class="btn btn-teal" type="button" id="us-add">${I("plus")} Add more files</button>
+      <button class="btn btn-ghost" type="button" id="us-more" aria-expanded="${open}">${I(open ? "rows" : "list")} ${open ? "Hide files & console" : "Files & console"}</button>
+    </div>`;
+  strip.querySelector("#us-add").addEventListener("click", () => { const b = $("browse-btn"); if (b) b.click(); });
+  strip.querySelector("#us-more").addEventListener("click", (e) => {
+    const on = sec.classList.toggle("up-open");
+    e.currentTarget.setAttribute("aria-expanded", String(on));
+    e.currentTarget.innerHTML = `${I(on ? "rows" : "list")} ${on ? "Hide files & console" : "Files & console"}`;
+  });
+}
+
 function resHero() {
   const p = STATE.profile;
   const name = p && p.username ? esc(p.username) : "Your";
@@ -1645,22 +1964,43 @@ function resHero() {
   // the story button; the real app gets the full set. The label matches the
   // header button and the intro copy that points at it — the story isn't
   // "mine" on a page built from someone invented.
+  const I = (n) => (window.ICON ? window.ICON(n) : "");
   const toolbar = window.DEMO_PAGE
     ? `<div class="res-toolbar">
-       <button class="btn btn-primary" id="story-btn" type="button">▶ Play the example story</button>
+       <button class="btn btn-primary" id="story-btn" type="button">${I("play")} Play the example story</button>
      </div>`
     : `<div class="res-toolbar">
-       <button class="btn btn-primary" id="story-btn" type="button"><span aria-hidden="true">▶</span> Play my story</button>
-       <button class="btn btn-teal" id="journey-btn" type="button"><span aria-hidden="true">⬇</span> Journey card</button>
-       <button class="btn btn-ghost" id="json-btn" type="button"><span aria-hidden="true">🧾</span> My numbers</button>
-       <button class="btn btn-ghost" id="poster-btn" type="button"><span aria-hidden="true">🖼</span> Poster</button>
-       <button class="btn btn-teal" id="addmore-btn" type="button"><span aria-hidden="true">＋</span> Add more files</button>
-       <button class="btn btn-ghost" id="restart-btn" type="button"><span aria-hidden="true">↺</span> Start over</button>
+       <button class="btn btn-primary" id="story-btn" type="button">${I("play")} Play my story</button>
+       <button class="btn btn-teal" id="journey-btn" type="button">${I("download")} Journey card</button>
+       <button class="btn btn-ghost" id="json-btn" type="button">${I("receipt")} My numbers</button>
+       <button class="btn btn-ghost" id="poster-btn" type="button">${I("image")} Poster</button>
+       <button class="btn btn-teal" id="addmore-btn" type="button">${I("plus")} Add more files</button>
+       <button class="btn btn-ghost" id="restart-btn" type="button">${I("rotate")} Start over</button>
      </div>`;
+  // masthead: a trainer identity block instead of a centred heading — the
+  // report is about a person, and the page should open the way a profile does
+  const initial = p && p.username ? esc(String(p.username).trim().charAt(0).toUpperCase()) : I("user");
+  const meta = [];
+  if (p && p.level) meta.push(`${I("award")} Level ${fmt(p.level)}`);
+  if (p && p.startYear) meta.push(`${I("calendar")} Trainer since ${esc(p.startYear)}`);
+  if (e.days && e.days.size) meta.push(`${I("activity")} ${fmt(e.days.size)} days played`);
+  meta.push(`${I("list")} ${chapters} chapter${chapters > 1 ? "s" : ""}`);
+  const mks = monthSpan(Object.keys(e.byMonth || {}));
+  const series = mks.map((mk) => Object.values(e.byMonth[mk] || {}).reduce((a, b) => a + b, 0));
+  const spark = series.length > 2
+    ? `<div class="rh-spark">${sparkSVG(series, "rh")}<span class="rh-spark-l">Actions per month · ${fmtMonth(mks[0])} → ${fmtMonth(mks[mks.length - 1])}</span></div>`
+    : "";
   return `<div class="res-hero">
-    <div class="eyebrow">${window.DEMO_PAGE ? "Live example · sample data" : "Your Pokémon GO metrics"}</div>
-    <h2>${who} journey, visualized</h2>
-    <p>${intro}</p>
+    <div class="rh-id">
+      <div class="rh-avatar" aria-hidden="true">${initial}</div>
+      <div class="rh-text">
+        <div class="eyebrow">${window.DEMO_PAGE ? "Live example · sample data" : "Your Pokémon GO metrics"}</div>
+        <h2>${who} journey, visualized</h2>
+        <p>${intro}</p>
+        <div class="rh-meta">${meta.map((m) => `<span>${m}</span>`).join("")}</div>
+        ${spark}
+      </div>
+    </div>
     ${toolbar}
   </div>`;
 }
@@ -1684,7 +2024,7 @@ function wireToolbar() {
     if (!r.dataset.armed) {
       r.dataset.armed = "1";
       r.textContent = "⚠ Really start over?";
-      setTimeout(() => { if (r.isConnected) { delete r.dataset.armed; r.textContent = "↺ Start over"; } }, 4000);
+      setTimeout(() => { if (r.isConnected) { delete r.dataset.armed; r.innerHTML = (window.ICON ? window.ICON("rotate") : "↺") + " Start over"; } }, 4000);
       return;
     }
     teardown();
@@ -1693,6 +2033,7 @@ function wireToolbar() {
     clearError();
     $("results").classList.add("results-hidden");
     $("results").innerHTML = "";
+    document.body.classList.remove("has-report");
     $("upload-section").scrollIntoView({ behavior: scrollBehavior() });
   };
 }
@@ -1876,6 +2217,24 @@ function storySlides(year) {
   return s;
 }
 
+/* a line icon for each story beat, keyed on the slide's kicker */
+function storyIcon(k) {
+  k = String(k || "").toUpperCase();
+  if (/DAY ONE|YEAR IN DAYS/.test(k)) return "calendar";
+  if (/CATCH/.test(k)) return "sparkles";
+  if (/BIGGEST DAY/.test(k)) return "award";
+  if (/HOUR/.test(k)) return "clock";
+  if (/WORLD/.test(k)) return "globe";
+  if (/DEDICATION|ON FOOT/.test(k)) return "activity";
+  if (/NOT ALONE/.test(k)) return "users";
+  if (/WAR CHEST/.test(k)) return "card";
+  if (/LENS/.test(k)) return "camera";
+  if (/TRAINER TYPE/.test(k)) return "user";
+  if (/AMONG/.test(k)) return "trending";
+  if (/SINCE THEN|^YOUR \d{4}/.test(k)) return "list";
+  if (/AND (THAT WAS|COUNTING)/.test(k)) return "book";
+  return "sparkles";
+}
 function storyMode(year) {
   const slides = storySlides(year);
   if (!slides.length) return;
@@ -1980,13 +2339,14 @@ function storyMode(year) {
     const finale = !sl.finale ? "" : `<div class="story-cta">
       ${window.DEMO_PAGE
         ? `<a class="btn btn-primary" href="metrics.html">Build my own story</a>`
-        : (Object.keys(STATE.ev.dayCounts).length ? `<button class="btn btn-primary" id="story-journey" type="button"><span aria-hidden="true">⬇</span> My journey card</button>` : "")}
+        : (Object.keys(STATE.ev.dayCounts).length ? `<button class="btn btn-primary" id="story-journey" type="button">${window.ICON ? window.ICON("download") : ""} My journey card</button>` : "")}
       <button class="btn btn-ghost" id="story-back" type="button">Back to my chapters</button></div>`;
     stage.innerHTML = `<div class="story-slide${dir > 0 ? " fwd" : dir < 0 ? " bwd" : ""}">
+      <div class="story-ic" style="--hue:${g1}" aria-hidden="true">${window.ICON ? window.ICON(storyIcon(sl.kicker)) : ""}</div>
       <div class="story-kicker">${sl.kicker}</div>
       ${sl.num != null ? `<div class="story-big mono" data-n="${sl.num}">${REDUCED_MOTION ? fmt(sl.num) : "0"}</div>` : `<div class="story-big">${sl.big}</div>`}
       <div class="story-label">${sl.label}</div>
-      ${!sl.finale && !SAMPLE_DATA && idx > 0 ? `<div class="story-share-row"><button class="btn btn-ghost story-share" type="button"><span aria-hidden="true">📤</span> Share this</button></div>` : ""}
+      ${!sl.finale && !SAMPLE_DATA && idx > 0 ? `<div class="story-share-row"><button class="btn btn-ghost story-share" type="button">${window.ICON ? window.ICON("share") : ""} Share this</button></div>` : ""}
       ${finale}</div>`;
     const bigEl = stage.querySelector("[data-n]");
     if (bigEl && !REDUCED_MOTION) {
@@ -2493,8 +2853,10 @@ function renderActivity() {
 
   // Aim for a tidy 8-card grid (2 rows of 4) to match the trainer card.
   const stats = [
-    [fmt(total), "Logged actions", "spins, catches, raids, berries, battles"],
-    [fmt(activeDays), "Active days", "days with at least one action"],
+    [fmt(total), "Logged actions", "spins, catches, raids, berries, battles",
+      months.map((mk) => Object.values(e.byMonth[mk] || {}).reduce((a, b) => a + b, 0))],
+    [fmt(activeDays), "Active days", "days with at least one action",
+      months.map((mk) => Object.keys(e.dayCounts).filter((d) => d.startsWith(mk)).length)],
     [busiestType ? fmt(e.totals[busiestType]) : "0", busiestType ? busiestType + " (top action)" : "—", "your most-repeated action"],
     [fmt(avgPerDay), "Avg / active day", "actions on a day you played"],
     [busiestDay ? fmt(busiestN) : "—", "Busiest day", busiestDay ? "actions on " + fmtDate(parseTS(busiestDay)) : ""],
@@ -2716,7 +3078,7 @@ function renderCompare() {
 
   return moduleHTML("🤝", `${esc(me)} vs ${them}`,
     `Two journeys, side by side — built from a stats file exported by this site (no locations inside, nothing uploaded). `
-    + `Want your own to send back? Hit <b>🧾 My numbers</b> in the toolbar.`,
+    + `Want your own to send back? Hit <b>${window.ICON ? window.ICON("receipt") : ""} My numbers</b> in the toolbar.`,
     inner, "versus-friend");
 }
 
@@ -2787,15 +3149,17 @@ function renderRecords() {
   if (mile.length) {
     inner += `<hr class="mod-divider"><h4 class="mod-h4">Next milestones</h4>
       <div class="mod-sub" style="margin-bottom:12px">At your pace from the last few months — a reason to come back with next year's export.</div>
-      <div class="gen-bars">${mile.slice(0, 4).map((m) => `
-        <div class="gen-row">
-          <div class="gname">${esc(m.label)}</div>
+      <div class="ms-list">${mile.slice(0, 4).map((m) => `
+        <div class="ms-row">
+          <div class="ms-top">
+            <span class="ms-l">${esc(m.label)}</span>
+            <span class="ms-v">${fmt(m.toGo)} to ${fmt(m.target)}${m.eta
+              ? ` · ~${m.eta.toLocaleDateString(undefined, { month: "short", year: "numeric" })}
+                 <button class="linkish ms-ics" type="button" data-label="${esc(m.label)}" data-target="${m.target}" data-eta="${m.eta.toISOString()}"
+                   aria-label="Calendar reminder for ${esc(m.label)} reaching ${fmt(m.target)}">${window.ICON ? window.ICON("calendar") : "📅"}</button>`
+              : " · on pause"}</span>
+          </div>
           <div class="gen-bar-track"><div class="gen-bar-fill" style="width:${Math.min(100, m.current / m.target * 100).toFixed(1)}%"></div></div>
-          <div class="gval">${fmt(m.toGo)} to ${fmt(m.target)}${m.eta
-            ? ` · ~${m.eta.toLocaleDateString(undefined, { month: "short", year: "numeric" })}
-               <button class="linkish ms-ics" type="button" data-label="${esc(m.label)}" data-target="${m.target}" data-eta="${m.eta.toISOString()}"
-                 aria-label="Calendar reminder for ${esc(m.label)} reaching ${fmt(m.target)}"><span aria-hidden="true">📅</span></button>`
-            : " · on pause"}</div>
         </div>`).join("")}</div>`;
   }
 
@@ -3848,7 +4212,7 @@ function renderWorldUnavailable() {
     : "This browser has WebGL switched off, and the flat-map fallback didn't load either.";
   let inner = stats.length ? statGrid(stats) : "";
   inner += `<div class="empty-state" style="margin-top:14px">
-    <div class="es-emoji">🌍</div>
+    <div class="es-icon">${window.ICON ? window.ICON("globe") : "🌍"}</div>
     <h3 style="margin:10px 0 6px">Your map couldn't be drawn</h3>
     <p>${esc(why)} Your location data parsed perfectly — there is just nothing to draw it into yet.
     Retrying only re-fetches that library from this site; your files are still only in this tab.</p>
@@ -4000,8 +4364,8 @@ function renderGlobe() {
   if (arcs.length) subBits.push(`${fmt(arcs.length)} remote-raid arcs`);
   if (paths.length) subBits.push(`a ${fmt(paths.length)}-day GPS trail`);
 
-  const html = `<div class="module globe-module">
-    <div class="mod-head"><span class="mod-icon">🌍</span><h3>Your world in 3D</h3></div>
+  const html = `<div class="module globe-module" data-hue="blue">
+    <div class="mod-head"><span class="mod-icon">${chapterIcon("🌍")}</span><h3>Your world in 3D</h3></div>
     <div class="mod-sub">${subBits.join(" · ")}. Drag to spin, scroll to zoom — every arc is a remote raid from where you stood to a gym somewhere on Earth.</div>
     <div class="globe-wrap" id="${P}wrap">
     <div class="globe-stage">
@@ -5006,21 +5370,27 @@ document.addEventListener("DOMContentLoaded", () => {
      * element the cursor crosses. */
     let dragDepth = 0;
     const dragHasFiles = (e) => e.dataTransfer && [...(e.dataTransfer.types || [])].includes("Files");
+    // the whole page is the target, so say so: a veil the moment a file drag enters
+    const veilEl = document.createElement("div");
+    veilEl.className = "drop-veil"; veilEl.setAttribute("aria-hidden", "true");
+    veilEl.innerHTML = `<div>${window.ICON ? window.ICON("upload") : ""}<b>Drop anywhere to add to your story</b><span>Read on this device only — nothing is uploaded</span></div>`;
+    document.body.appendChild(veilEl);
+    const veil = (on) => veilEl.classList.toggle("on", !!on);
     document.addEventListener("dragover", (e) => e.preventDefault());
     document.addEventListener("dragenter", (e) => {
       if (!dragHasFiles(e)) return;
       dragDepth++;
-      dz.classList.add("drag");
+      dz.classList.add("drag"); veil(true);
     });
     document.addEventListener("dragleave", () => {
-      if (--dragDepth <= 0) { dragDepth = 0; dz.classList.remove("drag"); }
+      if (--dragDepth <= 0) { dragDepth = 0; dz.classList.remove("drag"); veil(false); }
     });
     // An aborted drag (Esc mid-drag) fires neither dragleave nor drop
-    window.addEventListener("dragend", () => { dragDepth = 0; dz.classList.remove("drag"); });
+    window.addEventListener("dragend", () => { dragDepth = 0; dz.classList.remove("drag"); veil(false); });
     document.addEventListener("drop", async (e) => {
       e.preventDefault();
       dragDepth = 0;
-      dz.classList.remove("drag");
+      dz.classList.remove("drag"); veil(false);
       const items = e.dataTransfer.items;
       const files = items && items.length && items[0].webkitGetAsEntry ? await collectFiles(items) : [...e.dataTransfer.files];
       if (files.length) ingest(files);
@@ -5032,6 +5402,7 @@ document.addEventListener("DOMContentLoaded", () => {
     });
 
     $("build-btn").addEventListener("click", build);
+    renderUnlocks();
     // Clear means clear: the file queue AND anything already on screen. For a
     // privacy tool, leaving the built dashboard up after "Clear" is a betrayal.
     const title0 = document.title;
@@ -5044,6 +5415,7 @@ document.addEventListener("DOMContentLoaded", () => {
       const res = $("results");
       res.innerHTML = "";
       res.classList.add("results-hidden");
+      document.body.classList.remove("has-report");
     });
     // Neither iOS nor Android phones have a real folder picker (webkitdirectory
     // is ignored) — hide the button rather than let it degrade into a

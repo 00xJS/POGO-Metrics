@@ -51,7 +51,7 @@
   });
 
   /* ── state ─────────────────────────────────────────────────────────── */
-  const state = { sens: new Set(), doing: new Set(), group: new Set(), gps: false, q: "", sort: "default", density: "cards" };
+  const state = { sens: new Set(), doing: new Set(), group: new Set(), gps: false, q: "", sort: "default", density: "list" };
 
   /* ── markup ────────────────────────────────────────────────────────── */
   const tile = (v, k, filter) =>
@@ -111,8 +111,8 @@
         </label>
         <div class="ctl"><span class="rail-l" id="dens-l">Detail</span>
           <div class="dens" role="radiogroup" aria-labelledby="dens-l">
-            <button role="radio" aria-checked="false" data-d="list" type="button" tabindex="-1">List</button>
-            <button role="radio" aria-checked="true"  data-d="cards" type="button" tabindex="0">Cards</button>
+            <button role="radio" aria-checked="true" data-d="list" type="button" tabindex="0">List</button>
+            <button role="radio" aria-checked="false" data-d="cards" type="button" tabindex="-1">Cards</button>
             <button role="radio" aria-checked="false" data-d="full" type="button" tabindex="-1">Full</button>
           </div>
         </div>
@@ -133,7 +133,7 @@
     const sens = SENS.find((s) => s.k === c.sensitivity) || SENS[1];
     return `<article class="fcard spine-${c.sensitivity}" id="f-${slug(c.id)}" data-id="${esc(c.id)}">
       <div class="fc-head">
-        <span class="fc-emoji" aria-hidden="true">${c.icon}</span>
+        <span class="fc-emoji fc-ic" aria-hidden="true">${window.fileIcon ? window.fileIcon(c.icon, c.group) : c.icon}</span>
         <div class="fc-id">
           <h3 class="fc-name">${esc(c.name)}</h3>
           <div class="fc-file">${esc(c.id)}</div>
@@ -179,7 +179,7 @@
       <tbody>${C.map((c) => {
         const sens = SENS.find((s) => s.k === c.sensitivity) || SENS[1];
         return `<tr data-id="${esc(c.id)}">
-          <td><span aria-hidden="true">${c.icon}</span> <b>${esc(c.name)}</b><span class="lt-file">${esc(c.id)}</span></td>
+          <td><span class="lt-ic" aria-hidden="true">${window.fileIcon ? window.fileIcon(c.icon, c.group) : c.icon}</span> <b>${esc(c.name)}</b><span class="lt-file">${esc(c.id)}</span></td>
           <td class="lt-mono">${esc(c.group)}</td>
           <td><span class="chip-dot" style="background:${sens.color}" aria-hidden="true"></span>${sens.label}</td>
           <td class="lt-story">${c.story ? esc(c.story) : '<span class="lt-ign">Ignored</span>'}</td>
@@ -282,7 +282,7 @@
     if (state.gps) p.push("gps=1");
     if (state.q) p.push("q=" + encodeURIComponent(state.q));
     if (state.sort !== "default") p.push("sort=" + state.sort);
-    if (state.density !== "cards") p.push("d=" + state.density);
+    if (state.density !== "list") p.push("d=" + state.density);
     // Never turn a clean landing-page URL into a deep link. Without this guard the
     // very first apply() rewrites "/" to "/#datasets", so anyone who copies or
     // reloads the address lands in section 04 and skips the hero entirely.

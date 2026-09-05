@@ -28,40 +28,79 @@
   <link rel="preload" href="vendor/fonts/c8e7a734b1.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="preload" href="vendor/fonts/1cd702cd25.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="stylesheet" href="vendor/fonts/fonts.css" />
-  <link rel="stylesheet" href="css/style.css?v=20260817a" />
+  <link rel="stylesheet" href="css/style.css?v=20260904a" />
 </head>
 <body>
   <nav id="topnav" data-active="home"></nav>
 
-  <!-- ───────────────────────── hero ───────────────────────── -->
+  <!-- ───────────────────────── hero: the product, beside the pitch ───────────────────────── -->
   <header id="hero">
-    <div class="hero-inner">
-      <a class="deck-kicker" href="https://observation-deck.netlify.app/">Observation Deck / POGO Metrics</a>
-      <div class="eyebrow">Your data · your story</div>
-      <h1>Your <span class="yellow">Pokémon&nbsp;GO</span> journey, visualized.</h1>
-      <p class="hero-sub">
-        Niantic keeps years of your trainer life — every catch, raid, friendship, step and
-        purchase. Request your free data export, drop the files here, and watch them turn into a
-        digestible story of your whole adventure — ending in a <b>tappable, Wrapped-style recap</b>
-        you can play back and share.
-      </p>
-      <div class="hero-cta">
-        <a class="btn btn-teal" href="demo.html"><span aria-hidden="true">▶</span> Watch the example story</a>
-        <a class="btn btn-primary" href="metrics.html">Visualize my journey</a>
+    <div class="hero-inner hero-split">
+      <div class="hero-copy">
+        <a class="deck-kicker" href="https://observation-deck.netlify.app/">Observation Deck / POGO Metrics</a>
+        <div class="eyebrow">Your data · your story</div>
+        <h1>Your <span class="yellow">Pokémon&nbsp;GO</span> journey, visualized.</h1>
+        <p class="hero-sub">
+          Niantic keeps years of your trainer life — every catch, raid, friendship, step and
+          purchase. Request your free export, drop the files here, and get a sixteen-chapter
+          report that ends in a <b>tappable, Wrapped-style story</b> you can play back and share.
+        </p>
+        <div class="hero-cta">
+          <a class="btn btn-primary" href="metrics.html">Visualize my journey</a>
+          <a class="btn btn-teal" href="demo.html"><span aria-hidden="true" data-icon="play"></span> Watch the example story</a>
+        </div>
+        <!-- Most first visits happen BEFORE the ~7-day Niantic wait has even been
+             started — the funnel's real first step gets its own line rather than
+             competing as a third button. -->
+        <p class="hero-helper">No export yet? <a href="#request">Request it from Niantic</a> — free,
+          official, takes about a week. Curious what's inside one? <a href="#datasets">See every file →</a></p>
+        <div class="privacy-ribbon">
+          <span aria-hidden="true" data-icon="lock"></span> <span><b>100% private.</b> Your files never leave your device — there is no server, no upload, no account.</span>
+        </div>
       </div>
-      <!-- Most first visits happen BEFORE the ~7-day Niantic wait has even been
-           started — the funnel's real first step gets its own line rather than
-           competing as a third button. -->
-      <p class="hero-helper">No export yet? <a href="#request">Request it from Niantic</a> — free,
-        official, takes about a week. Curious what's inside one? <a href="#datasets">See every file →</a></p>
-      <div class="privacy-ribbon">
-        🔒 <span><b>100% private.</b> Your files never leave your device — there is no server, no upload, no account.</span>
+
+      <!-- A working miniature of the report, built by js/landing.js from
+           data/sample-preview.json — the anonymized sample export's own
+           numbers. The slide below is real and stands if the fetch never lands. -->
+      <div class="hero-preview" id="hero-preview">
+        <div class="hp-top">
+          <span class="hp-live"><i aria-hidden="true"></i> Live preview · sample export</span>
+          <a href="demo.html">Full example →</a>
+        </div>
+        <div class="hp-mast">
+          <div class="hp-avatar" aria-hidden="true">A</div>
+          <div class="hp-id">
+            <div class="hp-name">AshDemo’s journey</div>
+            <div class="hp-meta">Level 80 · since 2017 · 831 days played</div>
+          </div>
+          <span class="hp-count" aria-hidden="true">3 / 14</span>
+        </div>
+        <div class="hp-story" id="hp-story" tabindex="0" role="group" aria-label="Story preview. Tap the right side for the next slide, the left side for the previous one." style="--wash:#6f92ff">
+          <div class="hp-prog" id="hp-prog" aria-hidden="true"></div>
+          <div class="hp-slide">
+            <div class="hp-kicker">SINCE THEN</div>
+            <div class="hp-big mono">13,905</div>
+            <div class="hp-label">actions in the game's log — every spin, catch, raid and battle</div>
+          </div>
+        </div>
+        <div class="hp-spark">
+          <svg id="hp-spark" viewBox="0 0 300 48" preserveAspectRatio="none" aria-hidden="true"></svg>
+          <div class="hp-spark-l"><span>Jun ’23</span><span>Actions per month</span><span>Jun ’26</span></div>
+        </div>
+        <div class="hp-tiles" id="hp-tiles">
+          <div><b>5,679</b><span>caught</span></div>
+          <div><b>2,766</b><span>raids</span></div>
+          <div><b>412</b><span>friends</span></div>
+          <div><b>1,247</b><span>places</span></div>
+        </div>
       </div>
     </div>
   </header>
 
+  <nav class="page-subnav" id="subnav" aria-label="On this page"></nav>
+
   <main id="main">
-    <!-- ───────────────────────── how it works ───────────────────────── -->
+    <!-- ───────────────────────── 01 how it works ───────────────────────── -->
     <section class="section" id="how">
       <h2><span class="num">01</span>How it works</h2>
       <p class="section-desc">
@@ -70,81 +109,142 @@
       </p>
       <div class="steps">
         <div class="step">
+          <span class="step-ic" data-icon="receipt" aria-hidden="true"></span>
           <span class="n">STEP 1</span>
           <h3>Ask Niantic for your data</h3>
           <p>Every player has the right to a full copy of their account data. You request it once and it arrives as a download link, usually within a week.</p>
         </div>
         <div class="step">
+          <span class="step-ic" data-icon="upload" aria-hidden="true"></span>
           <span class="n">STEP 2</span>
           <h3>Drop in your files</h3>
           <p>Unzip the export and drag in the whole folder — or just the one file you're curious about, like <code>FriendList.tsv</code>. Add one, some, or all of them.</p>
         </div>
         <div class="step">
+          <span class="step-ic" data-icon="play" aria-hidden="true"></span>
           <span class="n">STEP 3</span>
           <h3>Meet your metrics — then play your story</h3>
-          <p>Each file you add lights up a new chapter — your activity rhythm, your map, your friendships, your spending. Then hit <b>▶ Play my story</b> for a full-screen, tappable recap of your whole trainer life, and download a card to share.</p>
+          <p>Each file you add lights up a new chapter — your activity rhythm, your map, your friendships, your spending. Then hit <b>Play my story</b> for a full-screen, tappable recap, and download a card to share.</p>
         </div>
       </div>
-    </section>
 
-    <!-- ───────────────────────── request your data ───────────────────────── -->
-    <section class="section" id="request">
-      <h2><span class="num">02</span>Get your export from Niantic</h2>
-      <p class="section-desc">
-        This is a free, official right you have under privacy laws like GDPR and CCPA — not a
-        hack or a third-party tool. Here's the quickest path.
-      </p>
-      <ol class="req-list">
-        <li><b>Open Pokémon GO and tap the Poké Ball.</b> <span>That opens the main menu. Tap the <b>Settings</b> gear in the top-right.</span></li>
-        <li><b>Tap <b>Help</b> (top-right), then “Chat with us.”</b> <span>Start a <b>New Conversation</b> with the support assistant.</span></li>
-        <li><b>Choose “My account,” then “Request my data.”</b> <span>It will ask whether your account is a kids login (answer yes/no).</span></li>
-        <li><b>Confirm the request.</b> <span>An automated message asks you to confirm — tap <b>Continue</b> to submit your data request.</span></li>
-        <li><b>Wait up to 7 days for their reply.</b> <span>Niantic responds with a download link (valid for 7 days) and a <b>password</b> to open the file.</span></li>
-        <li><b>Unzip it — this is the step that trips people up.</b>
-          <span>The download is a <b>password-protected ZIP</b>, and the password is in Niantic's message.
-          <b>On a computer:</b> double-click it and type the password — Windows and macOS both handle this.
-          <b>On an iPhone or iPad:</b> the Files app <i>cannot</i> open a password-protected ZIP, so email or
-          AirDrop the file to a computer, or install a ZIP app that supports passwords. Inside you'll find
-          <code>.tsv</code>, <code>.csv</code>, <code>.txt</code> and <code>.json</code> files — exactly what
-          this site reads. Then hit <a href="metrics.html">Visualize my journey</a>.</span></li>
-      </ol>
-      <div class="notice" style="margin-top:18px">
-        <b>Tip:</b> the export is a snapshot in time. Some files (like your GPS trail or fitness data)
-        only cover a short recent window, so the sooner you request after a big trip or event, the
-        richer that part of your story will be. Not ready? <a href="demo.html">See a live example first →</a>
-      </div>
-      <div class="notice" style="margin-top:12px">
-        <b>Just sent your request?</b> The wait is up to a week — and the download link Niantic sends
-        expires after 7 days. <button type="button" class="linkish" id="ics-reminder"><span aria-hidden="true">📅</span> Download a
-        calendar reminder</button> to check back, and bookmark this page now so your story is one
-        tap away.
+      <!-- ── the request flow, drawn as the screens you'll actually see ── -->
+      <div class="walk" id="request">
+        <div class="walk-head">
+          <h3>Getting the export from Niantic — the quickest path</h3>
+          <p>A free, official right under privacy laws like GDPR and CCPA — not a hack or a third-party tool. Four screens in the game, then one email.</p>
+        </div>
+        <div class="walk-row">
+          <figure class="phone">
+            <div class="ph-screen ph-map">
+              <div class="ph-notch"></div>
+              <div class="ph-mapfx"></div>
+              <div class="ph-gear" data-icon="gear" aria-hidden="true"></div>
+              <div class="ph-callout">Settings</div>
+              <div class="ph-ball"></div>
+            </div>
+            <figcaption><b>1 · Open the menu</b>Tap the Poké Ball, then the <b>Settings</b> gear in the top-right.</figcaption>
+          </figure>
+          <figure class="phone">
+            <div class="ph-screen ph-list">
+              <div class="ph-notch"></div>
+              <div class="ph-title">Settings</div>
+              <div class="ph-row">Account</div>
+              <div class="ph-row sel">Help <span>›</span></div>
+              <div class="ph-row sel2">Chat with us</div>
+              <div class="ph-row">New conversation</div>
+            </div>
+            <figcaption><b>2 · Help, then chat</b>Tap <b>Help</b> (top-right), then <b>Chat with us</b> and start a new conversation.</figcaption>
+          </figure>
+          <figure class="phone">
+            <div class="ph-screen ph-chat">
+              <div class="ph-notch"></div>
+              <div class="ph-bub them">How can we help?</div>
+              <div class="ph-bub me">My account</div>
+              <div class="ph-bub me">Request my data</div>
+              <div class="ph-bub them">Is this a kids account?<br>Tap Continue to confirm.</div>
+              <div class="ph-btn">Continue</div>
+            </div>
+            <figcaption><b>3 · Ask for it</b>Choose <b>My account</b>, then <b>Request my data</b>. Answer the kids-login question and tap <b>Continue</b>.</figcaption>
+          </figure>
+          <figure class="phone">
+            <div class="ph-screen ph-mail">
+              <div class="ph-notch"></div>
+              <div class="ph-mailhead"><span data-icon="receipt" aria-hidden="true"></span> Your data is ready</div>
+              <div class="ph-mailline">Download link · valid for 7 days</div>
+              <div class="ph-zip"><span data-icon="folder" aria-hidden="true"></span> PokemonGO_export.zip</div>
+              <div class="ph-pass">password ••••••••</div>
+              <div class="ph-btn">Download</div>
+            </div>
+            <figcaption><b>4 · Within a week</b>Niantic replies with a download link (valid 7 days) and a <b>password</b> to open the file.</figcaption>
+          </figure>
+        </div>
+        <div class="walk-note">
+          <span class="wn-ic" data-icon="folder" aria-hidden="true"></span>
+          <div>
+            <b>Unzip it — this is the step that trips people up.</b> The download is a password-protected
+            ZIP, and the password is in Niantic's message. <b>On a computer:</b> double-click it and type the
+            password — Windows and macOS both handle this. <b>On an iPhone or iPad:</b> the Files app <i>cannot</i>
+            open a password-protected ZIP, so email or AirDrop the file to a computer, or install a ZIP app that
+            supports passwords. Inside you'll find <code>.tsv</code>, <code>.csv</code>, <code>.txt</code> and
+            <code>.json</code> files — exactly what this site reads. Then hit <a href="metrics.html">Visualize my journey</a>.
+          </div>
+        </div>
+        <div class="notice-row">
+          <div class="notice">
+            <b>Tip:</b> the export is a snapshot in time. Some files (like your GPS trail or fitness data)
+            only cover a short recent window, so the sooner you request after a big trip or event, the
+            richer that part of your story will be. Not ready? <a href="demo.html">See a live example first →</a>
+          </div>
+          <div class="notice">
+            <b>Just sent your request?</b> The wait is up to a week — and the download link Niantic sends
+            expires after 7 days. <button type="button" class="linkish" id="ics-reminder"><span aria-hidden="true" data-icon="calendar"></span> Download a
+            calendar reminder</button> to check back, and bookmark this page now so your story is one
+            tap away.
+          </div>
+        </div>
       </div>
     </section>
 
     <!-- ───────────────────────── privacy principles ───────────────────────── -->
     <section class="section" id="privacy">
-      <h2><span class="num">03</span>Privacy, by design</h2>
+      <h2><span class="num">02</span>Privacy, by design</h2>
       <p class="section-desc">
         Your export is intimate — it can describe where you live, who you know, and what you
         spend. By design, this was built so you never have to upload or share any of it.
       </p>
       <div class="priv-grid">
         <div class="priv-card">
-          <div class="pi">🖥️</div>
+          <div class="pi" data-icon="monitor"></div>
           <h3>It all runs locally</h3>
           <p>Parsing and charts happen entirely in your browser with JavaScript. There is no backend to send your files to — close the tab and it's gone.</p>
         </div>
         <div class="priv-card">
-          <div class="pi">🙈</div>
+          <div class="pi" data-icon="eyeoff"></div>
           <h3>We ignore the scary bits</h3>
           <p>Your export also holds your email, IP addresses and advertising IDs. Nothing here ever shows them, charts them, or writes them to a file — the visualizations only touch the parts that tell a story.</p>
         </div>
         <div class="priv-card">
-          <div class="pi">📤</div>
+          <div class="pi" data-icon="map"></div>
           <h3>Your map is the exception</h3>
           <p>Your locations <b>are</b> mapped — that's the whole point of the globe. It's drawn on your device and published nowhere, but it does show where you play, so give any screenshot a look before you share it.</p>
         </div>
       </div>
+    </section>
+
+    <!-- ───────────────────────── dataset catalog ───────────────────────── -->
+    <section class="section" id="datasets">
+      <h2><span class="num">03</span>What's in your export — file by file</h2>
+      <p class="section-desc">
+        Niantic keeps all of this on you, and hands it over as a stack of plainly-named files.
+        Here's what each one actually contains, how revealing it is, and the story this site can
+        build from it. Add only the ones you're comfortable with.
+      </p>
+      <div id="catalog" class="deck" data-density="list"></div>
+      <p class="section-desc" style="margin-top:26px">
+        That's your export, file by file. When you're ready, the app turns whichever of them you
+        choose into your own chapters — <a href="metrics.html">visualize my journey →</a>
+      </p>
     </section>
 
     <!-- ───────────────────────── trainer model ───────────────────────── -->
@@ -156,6 +256,10 @@
         level cap does to trainer numbers: the level-50 wall of the 2025 game, and the fresh
         record under today's cap of 80. Plus a benchmark to see where you stand against them.
       </p>
+      <figure class="tm-mini" id="tm-mini" hidden>
+        <svg viewBox="0 0 640 120" preserveAspectRatio="none" aria-hidden="true"></svg>
+        <figcaption><span>Trainers per level · one friends list, February 2025</span><b>the level-50 wall</b></figcaption>
+      </figure>
       <div class="stat-grid">
         <div class="stat-card">
           <div class="v">306,606</div>
@@ -174,35 +278,22 @@
         </div>
       </div>
       <div class="hero-cta" style="margin-top:22px">
-        <a class="btn btn-teal" href="trainer-model.html"><span aria-hidden="true">📈</span> Explore the Trainer Model</a>
+        <a class="btn btn-teal" href="trainer-model.html"><span aria-hidden="true" data-icon="trending"></span> Explore the Trainer Model</a>
       </div>
     </section>
 
-    <!-- ───────────────────────── dataset catalog ───────────────────────── -->
-    <section class="section" id="datasets">
-      <h2><span class="num">05</span>What's in your export — file by file</h2>
-      <p class="section-desc">
-        Niantic keeps all of this on you, and hands it over as a stack of plainly-named files.
-        Here's what each one actually contains, how revealing it is, and the story this site can
-        build from it. Add only the ones you're comfortable with.
-      </p>
-      <div id="catalog" class="deck" data-density="cards"></div>
-      <p class="section-desc" style="margin-top:26px">
-        That's your export, file by file. When you're ready, the app turns whichever of them you
-        choose into your own chapters — <a href="metrics.html">visualize my journey →</a>
-      </p>
-    </section>
-
-    <!-- ───────────────────────── final CTA ───────────────────────── -->
-    <section class="section" id="ready">
-      <h2><span class="num">06</span>Ready when you are</h2>
-      <p class="section-desc">
-        Add as little as a single file or your whole export — it all stays on your device.
-        Curious first? Play the example story and see exactly what you'd get.
-      </p>
-      <div class="hero-cta">
-        <a class="btn btn-teal" href="demo.html"><span aria-hidden="true">▶</span> Watch the example story</a>
-        <a class="btn btn-primary" href="metrics.html">Visualize my journey</a>
+    <!-- ───────────────────────── closing band ───────────────────────── -->
+    <section class="cta-band" id="ready">
+      <div class="cb-inner">
+        <div>
+          <div class="eyebrow">Ready when you are</div>
+          <h2>Add a single file, or the whole export.</h2>
+          <p>It all stays on your device. Curious first? Play the example story and see exactly what you'd get.</p>
+        </div>
+        <div class="hero-cta">
+          <a class="btn btn-primary" href="metrics.html">Visualize my journey</a>
+          <a class="btn btn-ghost" href="demo.html"><span aria-hidden="true" data-icon="play"></span> Watch the example story</a>
+        </div>
       </div>
     </section>
   </main>
@@ -224,9 +315,10 @@
     </p>
   </footer>
 
-  <script defer src="js/nav.js?v=20260817a"></script>
-  <script defer src="js/catalog.js?v=20260817a"></script>
-  <script defer src="js/catalog-ui.js?v=20260817a"></script>
+  <script defer src="js/nav.js?v=20260904a"></script>
+  <script defer src="js/catalog.js?v=20260904a"></script>
+  <script defer src="js/catalog-ui.js?v=20260904a"></script>
+  <script defer src="js/landing.js?v=20260904a"></script>
   <script>
     // "Check for my Niantic export" — a 7-days-from-now reminder, generated on
     // the device as a plain .ics download. No calendar service, no request.

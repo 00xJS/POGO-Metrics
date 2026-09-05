@@ -28,7 +28,7 @@
   <link rel="preload" href="vendor/fonts/c8e7a734b1.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="preload" href="vendor/fonts/1cd702cd25.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="stylesheet" href="vendor/fonts/fonts.css" />
-  <link rel="stylesheet" href="css/style.css?v=20260817a" />
+  <link rel="stylesheet" href="css/style.css?v=20260904a" />
 </head>
 <body>
   <nav id="topnav" data-active="app"></nav>
@@ -58,7 +58,7 @@
         <input id="file-input" type="file" multiple
                accept=".tsv,.csv,.txt,.json,.zip,text/plain,text/csv,text/tab-separated-values,application/json,application/zip,application/octet-stream" />
         <input id="folder-input" type="file" webkitdirectory directory multiple hidden />
-        <div class="dz-emoji">📦</div>
+        <div class="dz-icon" data-icon="upload"></div>
         <h2>Drop your files or folder here</h2>
         <p>Drag the whole unzipped export, or pick out one file like <code>FriendList.tsv</code></p>
         <div class="dz-or">— or —</div>
@@ -71,13 +71,9 @@
 
       <div class="upload-privacy">🔒 Everything is processed in your browser. No file ever leaves this device.</div>
 
-      <div class="center" style="margin-top:18px">
-        <div class="dz-or" style="margin-bottom:10px">— not ready to upload yet? —</div>
-        <a class="btn btn-ghost" href="demo.html"><span aria-hidden="true">🎬</span> See the live example</a>
-        <div class="dz-hint" style="margin-top:8px">Opens a permanent reference build from a fully anonymized sample export — on its own page.</div>
-      </div>
 
       <div id="detected"></div>
+      <div id="unlocks" class="unlocks" hidden></div>
 
       <div id="build-row" style="display:none;text-align:center;margin-top:26px">
         <button class="btn btn-primary" id="build-btn" type="button">Build my story</button>
@@ -110,9 +106,9 @@
 
   <!-- Chart.js / Leaflet / globe.gl are loaded on demand by app.js when a build
        actually needs them — the upload UI must be interactive immediately. -->
-  <script defer src="js/nav.js?v=20260817a"></script>
-  <script defer src="js/catalog.js?v=20260817a"></script>
-  <script defer src="js/pokedex.js?v=20260817a"></script>
-  <script defer src="js/app.js?v=20260817a"></script>
+  <script defer src="js/nav.js?v=20260904a"></script>
+  <script defer src="js/catalog.js?v=20260904a"></script>
+  <script defer src="js/pokedex.js?v=20260904a"></script>
+  <script defer src="js/app.js?v=20260904a"></script>
 </body>
 </html>

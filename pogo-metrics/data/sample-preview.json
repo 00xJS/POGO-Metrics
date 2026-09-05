@@ -1,0 +1,31 @@
+{
+  "generated": "2026-09-03",
+  "note": "Compact preview of the anonymized sample export, for the landing page hero. No locations. Regenerate from the Live Example after a new sample export.",
+  "profile": { "username": "AshDemo", "level": 80, "startYear": "2017", "distanceWalkedKm": 20255 },
+  "daysPlayed": 831,
+  "firstDay": "2023-06-12",
+  "lastDay": "2026-06-10",
+  "totals": { "Spins": 2596, "GO Plus catches": 2575, "Encounters": 1572, "Raids": 2766, "Gym battles": 815, "Berries fed": 1323, "Deploys": 726, "Incense": 774, "Lures": 758 },
+  "monthly": [["2023-06",227],["2023-08",5],["2023-10",19],["2023-11",428],["2023-12",2],["2024-01",23],["2024-02",263],["2024-03",599],["2024-04",297],["2024-05",313],["2024-06",506],["2024-07",491],["2024-08",610],["2024-09",478],["2024-10",339],["2024-11",166],["2024-12",239],["2025-01",277],["2025-02",318],["2025-03",626],["2025-04",475],["2025-05",473],["2025-06",591],["2025-07",738],["2025-08",730],["2025-09",413],["2025-10",665],["2025-11",824],["2025-12",539],["2026-01",419],["2026-02",901],["2026-03",377],["2026-04",258],["2026-05",258],["2026-06",18]],
+  "places": 1247,
+  "friends": 412,
+  "coinsBought": 1052900,
+  "streak": 198,
+  "archetype": { "name": "The Patron", "line": "you back the habit properly", "emoji": "💎" },
+  "slides": [
+    { "kicker": "POGO METRICS PRESENTS", "big": "AshDemo", "label": "this is your story", "grad": 0 },
+    { "kicker": "DAY ONE", "big": "Jun 12, 2023", "label": "1,179 days ago, your log begins", "grad": 1 },
+    { "kicker": "SINCE THEN", "num": 13905, "label": "actions in the game's log — every spin, catch, raid and battle", "grad": 2 },
+    { "kicker": "GOTTA CATCH 'EM ALL", "num": 5679, "label": "Pokémon caught — map, incense, lure and GO Plus combined", "grad": 3 },
+    { "kicker": "YOUR BIGGEST DAY", "num": 172, "label": "actions on Feb 28, 2026", "grad": 4 },
+    { "kicker": "YOUR HOUR", "big": "Wednesdays, 6 PM", "label": "when you play the most, in your local time", "grad": 5 },
+    { "kicker": "YOUR WORLD", "num": 1247, "label": "places you've played — raiding 18,540 km from home", "grad": 6 },
+    { "kicker": "DEDICATION", "num": 198, "label": "days in a row, without missing one", "grad": 7 },
+    { "kicker": "NOT ALONE", "num": 412, "label": "friends on the journey", "grad": 8 },
+    { "kicker": "THE WAR CHEST", "num": 1052900, "label": "PokéCoins bought", "grad": 9 },
+    { "kicker": "ON FOOT", "num": 75, "label": "kilometres walked with the game open", "grad": 10 },
+    { "kicker": "YOUR TRAINER TYPE", "big": "The Patron", "label": "you back the habit properly — computed from the whole journey", "grad": 5 },
+    { "kicker": "AMONG TRAINERS", "big": "top 10%", "label": "Level 80 — ahead of 90% of 493 real trainers in the Trainer Model cohort", "grad": 4 },
+    { "kicker": "AND COUNTING", "big": "4 years of adventure", "label": "this was the sample trainer — imagine yours", "grad": 11 }
+  ]
+}
