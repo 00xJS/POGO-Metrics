@@ -188,6 +188,21 @@ function chartDefaults() {
   Chart.defaults.plugins.tooltip.padding = 10;
   Chart.defaults.plugins.tooltip.cornerRadius = 8;
   if (REDUCED_MOTION) Chart.defaults.animation = false;
+  // the same mark language as the report's charts (app.js themeCharts)
+  Chart.defaults.elements.bar.borderRadius = 4;
+  Chart.defaults.elements.line.tension = 0.35;
+  Chart.defaults.elements.line.borderWidth = 2;
+  Chart.defaults.elements.point.hoverRadius = 5;
+  Chart.defaults.elements.point.hitRadius = 12;
+  Chart.defaults.scale.grid.color = "rgba(255,255,255,.055)";
+  if (Chart.defaults.scale.border) Chart.defaults.scale.border.display = false;
+  Chart.defaults.scale.ticks.padding = 6;
+}
+function alphaOf(col, a) {
+  const m = /^#([0-9a-f]{3}|[0-9a-f]{6})$/i.exec(String(col || "").trim());
+  if (!m) return col;
+  let x = m[1]; if (x.length === 3) x = x.split("").map((c) => c + c).join("");
+  return `rgba(${parseInt(x.slice(0, 2), 16)},${parseInt(x.slice(2, 4), 16)},${parseInt(x.slice(4, 6), 16)},${a})`;
 }
 
 /* ── ported from app.js's chartA11y/srTable: a canvas is a wall of silent
@@ -244,6 +259,23 @@ function chartA11y(cv, data, options) {
 
 function mount(id, config) {
   CHARTS[id]?.destroy();
+  /* line series get an area fill fading out of their own colour, unless the
+   * chart already chose one — the report's charts do the same */
+  if (config && config.type === "line" && config.data && config.data.datasets) {
+    config.data.datasets.forEach((ds) => {
+      if (ds.type && ds.type !== "line") return;
+      const col = typeof ds.borderColor === "string" ? ds.borderColor : null;
+      if (!col || ds.fill !== undefined) return;
+      ds.fill = true;
+      ds.backgroundColor = (c) => {
+        const area = c.chart.chartArea;
+        if (!area) return "transparent";
+        const g = c.chart.ctx.createLinearGradient(0, area.top, 0, area.bottom);
+        g.addColorStop(0, alphaOf(col, .22)); g.addColorStop(1, alphaOf(col, 0));
+        return g;
+      };
+    });
+  }
   const ch = new Chart($(id), config);
   CHARTS[id] = ch;
   const cv = $(id);
@@ -1606,4 +1638,40 @@ async function init() {
   }
 }
 
-document.addEventListener("DOMContentLoaded", init);
+/* ── page shell: the chapter rail and reveal-on-scroll, before any data ── */
+function shellPage() {
+  const host = $("chapter-nav");
+  const chapters = [...document.querySelectorAll("main.tmodel .chapter")];
+  if (host && window.chapterRail && chapters.length) {
+    window.chapterRail(host, chapters.map((el) => ({
+      el,
+      label: (el.querySelector(".sec-head h2") || {}).textContent || el.id,
+      icon: (el.querySelector(".sec-ic") || {}).dataset ? el.querySelector(".sec-ic").dataset.icon : "book",
+      hue: el.dataset.hue || "teal",
+      num: ((el.querySelector(".sec-head .eyebrow") || {}).textContent || "").match(/^\s*(\d+)/)?.[1],
+      attr: el.id === "era2" || el.id === "story" ? " data-era2" : "",
+    })), { head: "Chapters" });
+  }
+  // wide tables scroll sideways on phones — fade the clipped edge so it shows
+  document.querySelectorAll(".table-scroll").forEach((el) => {
+    const edge = () => {
+      el.classList.toggle("scrollable", el.scrollWidth > el.clientWidth + 6);
+      el.classList.toggle("at-end", el.scrollLeft + el.clientWidth >= el.scrollWidth - 6);
+    };
+    edge();
+    el.addEventListener("scroll", edge, { passive: true });
+    addEventListener("resize", edge);
+    if (window.MutationObserver) new MutationObserver(edge).observe(el, { childList: true, subtree: true });
+  });
+  if (!REDUCED_MOTION && "IntersectionObserver" in window) {
+    const io = new IntersectionObserver((ents) => {
+      ents.forEach((en) => { if (en.isIntersecting) { en.target.classList.add("in"); io.unobserve(en.target); } });
+    }, { rootMargin: "0px 0px -6% 0px", threshold: 0.02 });
+    chapters.forEach((el) => {
+      if (el.hidden || el.getBoundingClientRect().top < innerHeight) return;
+      el.classList.add("reveal"); io.observe(el);
+    });
+    setTimeout(() => chapters.forEach((el) => el.classList.add("in")), 2500);
+  }
+}
+document.addEventListener("DOMContentLoaded", () => { shellPage(); init(); });

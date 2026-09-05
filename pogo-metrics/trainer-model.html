@@ -28,8 +28,8 @@
   <link rel="preload" href="vendor/fonts/c8e7a734b1.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="preload" href="vendor/fonts/1cd702cd25.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="stylesheet" href="vendor/fonts/fonts.css" />
-  <link rel="stylesheet" href="css/style.css?v=20260817a" />
-  <link rel="stylesheet" href="css/trainer-model.css?v=20260817a" />
+  <link rel="stylesheet" href="css/style.css?v=20260904a" />
+  <link rel="stylesheet" href="css/trainer-model.css?v=20260904a" />
 </head>
 <body>
   <nav id="topnav" data-active="model"></nav>
@@ -51,27 +51,33 @@
           and see why the tidy straight-line model this project started with falls apart exactly
           where most players live.
         </p>
-        <div class="hero-cta" style="justify-content:center;margin-bottom:18px">
+        <div class="hero-cta" style="justify-content:center">
           <a class="btn btn-teal" href="#era2">Today's game →</a>
           <a class="btn btn-ghost" href="#standing">Where you stand →</a>
         </div>
-        <nav class="chapter-nav" id="chapter-nav" aria-label="Chapters">
-          <a class="ch-chip" href="#cohort">01 · Cohort</a>
-          <a class="ch-chip" href="#explorer">02 · Explorer</a>
-          <a class="ch-chip" href="#wall">03 · The 50 wall</a>
-          <a class="ch-chip" href="#report">04 · Report card</a>
-          <a class="ch-chip" href="#playstyle">05 · Playstyle</a>
-          <a class="ch-chip" href="#era2" hidden data-era2>06 · New era</a>
-          <a class="ch-chip" href="#standing">07 · Where you stand</a>
-          <a class="ch-chip" href="#story" hidden data-era2>08 · The story</a>
-        </nav>
-        <div class="notice" style="margin:20px auto 0;max-width:900px;text-align:left">
-          <b>Two eras, never mixed.</b> Chapters 01–05 describe the 2025 game, when the level cap
-          was 50. Pokémon GO has since rebalanced XP and raised the cap to 80, so those levels are
-          <i>not</i> comparable to the current game — chapter 06 starts the record over with a
-          fresh snapshot of the same friends list under the new cap.
+        <!-- the chapter rail is built by trainer-model.js beside the chapters below -->
+
+      </div>
+    </section>
+
+    <div class="tm-shell">
+    <nav id="chapter-nav" aria-label="Chapters"></nav>
+    <div class="report-body">
+    <!-- ── 0 · before you read ─────────────────────────────────────────── -->
+    <section class="chapter" id="preface" data-hue="teal">
+      <div class="sec-head"><span class="sec-ic" data-icon="book" aria-hidden="true"></span>
+        <div class="eyebrow">00 — Before you read</div>
+        <h2>Two eras, never mixed</h2>
+        <p>Chapters 01–05 describe the 2025 game, when the level cap was 50. Pokémon GO has since
+          rebalanced XP and raised the cap to 80, so those levels are <i>not</i> comparable to the
+          current game — chapter 06 starts the record over with a fresh snapshot of the same
+          friends list under the new cap.</p>
+      </div>
+      <div class="tm-preface">
+        <div class="panel">
+          <div class="panel-body"><div id="era-summary"></div></div>
         </div>
-        <div class="notice" style="margin:12px auto 0;max-width:900px;text-align:left">
+        <div class="notice">
           <b>Where these numbers come from.</b> Nothing here is anyone's data export. Every figure
           about a <em>trainer</em> is what their public profile already shows their friends —
           level, catches, battles won and distance walked. A profile also carries an XP figure:
@@ -84,13 +90,12 @@
           <a href="/#privacy">chapter 03 on the landing page</a>: your own export never leaves
           your device.
         </div>
-        <div id="era-summary" style="max-width:620px;margin:22px auto 0;text-align:left"></div>
       </div>
     </section>
 
     <!-- ── 1 · cohort ─────────────────────────────────────────────────── -->
-    <section class="chapter" id="cohort">
-      <div class="sec-head">
+    <section class="chapter" id="cohort" data-hue="teal">
+      <div class="sec-head"><span class="sec-ic" data-icon="users" aria-hidden="true"></span>
         <div class="eyebrow">01 — The cohort</div>
         <h2>Who's in this dataset</h2>
         <p>
@@ -149,8 +154,8 @@
     </section>
 
     <!-- ── 2 · explorer ───────────────────────────────────────────────── -->
-    <section class="chapter" id="explorer">
-      <div class="sec-head">
+    <section class="chapter" id="explorer" data-hue="blue">
+      <div class="sec-head"><span class="sec-ic" data-icon="trending" aria-hidden="true"></span>
         <div class="eyebrow">02 — The explorer</div>
         <h2>Level vs. everything else</h2>
         <p>
@@ -194,8 +199,8 @@
     </section>
 
     <!-- ── 3 · the level 50 wall ──────────────────────────────────────── -->
-    <section class="chapter" id="wall">
-      <div class="sec-head">
+    <section class="chapter" id="wall" data-hue="orange">
+      <div class="sec-head"><span class="sec-ic" data-icon="chart" aria-hidden="true"></span>
         <div class="eyebrow">03 — The ceiling</div>
         <h2>The level-50 wall</h2>
         <p>
@@ -219,8 +224,8 @@
     </section>
 
     <!-- ── 4 · report card ────────────────────────────────────────────── -->
-    <section class="chapter" id="report">
-      <div class="sec-head">
+    <section class="chapter" id="report" data-hue="yellow">
+      <div class="sec-head"><span class="sec-ic" data-icon="receipt" aria-hidden="true"></span>
         <div class="eyebrow">04 — Model report card</div>
         <h2>How well does any of this actually predict?</h2>
         <p>
@@ -263,8 +268,8 @@
     </section>
 
     <!-- ── 5 · playstyle ──────────────────────────────────────────────── -->
-    <section class="chapter" id="playstyle">
-      <div class="sec-head">
+    <section class="chapter" id="playstyle" data-hue="purple">
+      <div class="sec-head"><span class="sec-ic" data-icon="zap" aria-hidden="true"></span>
         <div class="eyebrow">05 — Playstyle</div>
         <h2>Ratios don't care what level you are</h2>
         <p>
@@ -296,8 +301,8 @@
     </section>
 
     <!-- ── 6 · the new era (cap 80) — appears only once era2.json exists ── -->
-    <section class="chapter" id="era2" hidden>
-      <div class="sec-head">
+    <section class="chapter" id="era2" data-hue="green" hidden>
+      <div class="sec-head"><span class="sec-ic" data-icon="sparkles" aria-hidden="true"></span>
         <div class="eyebrow">06 — The new era</div>
         <h2>Level 80: the rebalanced game</h2>
         <p>
@@ -382,8 +387,8 @@
     </section>
 
     <!-- ── 7 · where you stand — one form, both eras ────────────────────── -->
-    <section class="chapter" id="standing">
-      <div class="sec-head">
+    <section class="chapter" id="standing" data-hue="pink">
+      <div class="sec-head"><span class="sec-ic" data-icon="award" aria-hidden="true"></span>
         <div class="eyebrow">07 — Benchmark yourself</div>
         <h2>Where do you stand?</h2>
         <p>
@@ -421,8 +426,8 @@
     </section>
 
     <!-- ── 8 · the ladder story — appears with the era-2 data ──────────── -->
-    <section class="chapter" id="story" hidden>
-      <div class="sec-head">
+    <section class="chapter" id="story" data-hue="magenta" hidden>
+      <div class="sec-head"><span class="sec-ic" data-icon="book" aria-hidden="true"></span>
         <div class="eyebrow">08 — The story</div>
         <h2>The ladder, in plain numbers</h2>
         <p>
@@ -497,11 +502,13 @@
         kilometre, every friendship — and it never has to leave your device to do it.
       </p>
       <div class="hero-cta">
-        <a class="btn btn-teal" href="demo.html"><span aria-hidden="true">▶</span> Watch the example story</a>
+        <a class="btn btn-teal" href="demo.html"><span aria-hidden="true" data-icon="play"></span> Watch the example story</a>
         <a class="btn btn-primary" href="metrics.html">Visualize my journey</a>
         <a class="btn btn-ghost" href="/#datasets">What's in your export</a>
       </div>
     </section>
+    </div><!-- /.report-body -->
+    </div><!-- /.tm-shell -->
 
   </main>
 
@@ -527,10 +534,10 @@
     </p>
   </footer>
 
-  <script defer src="js/nav.js?v=20260817a"></script>
+  <script defer src="js/nav.js?v=20260904a"></script>
   <!-- Chart.js loads up front here (unlike metrics.html's on-demand injection):
        this page is nothing but charts, and the file is already precached. -->
   <script defer src="vendor/chart.umd.min.js"></script>
-  <script defer src="js/trainer-model.js?v=20260817a"></script>
+  <script defer src="js/trainer-model.js?v=20260904a"></script>
 </body>
 </html>
