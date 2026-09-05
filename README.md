@@ -69,21 +69,29 @@ Once your story is built (it builds itself moments after a drop), the toolbar ab
   the Trainer Model's real cohort. Every stat slide has a **Share this** button that renders
   that one number as a phone-story-sized (1080×1920) image straight into the share sheet, and
   each card in the Year-over-year chapter has a **▶ Play <year>'s story** of its own.
-- **⬇ Journey card** — your entire journey as one shareable PNG: headline totals, a month-by-month
+- **Journey card** — your entire journey as one shareable PNG: headline totals, a month-by-month
   chart with a legend, and auto-awarded badges (your trainer type leads them). The Year-over-year
   chapter offers the same thing per year.
-- **🖼 Poster** — a print-ready 2480×3508 PNG for the wall: your name, lifetime numbers, and one
+- **Poster** — a print-ready 2480×3508 PNG for the wall: your name, lifetime numbers, and one
   calendar heat-strip for every year of the journey. (The report also carries print styles now,
   so plain Cmd+P works too.)
-- **🧾 My numbers** — a JSON dump of every figure the app computed, for anyone who'd rather have
+- **My numbers** — a JSON dump of every figure the app computed, for anyone who'd rather have
   the data than the pictures. **Location data is deliberately excluded** — no GPS trail, no stop or
   activity coordinates, no cities, no countries. Those stay in the browser. Everything else,
   including your trainer profile, is in the file, so treat it like you would any personal export.
-- **＋ Add more files** — drop in the rest of your export later and the new chapters appear
+- **Add more files** — drop in the rest of your export later and the new chapters appear
   alongside the ones you already have.
 
 On the globe, **▶ Replay my journey** plays your whole history chronologically — spots,
 remote-raid arcs and the GPS trail accumulate month by month under a date ticker.
+
+### Finding your way around
+
+A chapter rail sits beside the report (a strip under the nav on phones) and follows the scroll,
+so you always know where you are in sixteen chapters. **One at a time** at the top of the rail
+switches to reader mode: a single chapter with previous and next at its foot. On the upload page,
+a **build console** lists every chapter and the file that unlocks it before you add a thing, and
+lights them up as files land; once a report exists the picker folds into one strip.
 
 ## Privacy, concretely
 
@@ -111,7 +119,7 @@ This is the whole point, so it should be checkable rather than promised:
   loads and parses an export — and the research layer draws — with no network at all. The 3D
   globe's assets are large and cache on first use instead, so the globe chapter needs one online
   build before it too works offline.
-- **You can audit all of it** — it's ~6,000 lines of vanilla JavaScript in this repo, no build step.
+- **You can audit all of it** — it's ~8,400 lines of vanilla JavaScript in this repo, no build step.
 
 ## Getting your data from Niantic
 
@@ -144,7 +152,8 @@ pogo-metrics/          the deployed site (netlify.toml publishes this folder as-
 │   ├── app.js         the engine — parsers + every chapter
 │   ├── catalog.js     knowledge base: one entry per file in a Niantic export
 │   ├── catalog-ui.js  the filterable catalog on the landing page
-│   ├── nav.js         shared top navigation
+│   ├── landing.js     landing page: live preview, section sub-nav, level-50 histogram
+│   ├── nav.js         shared top navigation, icon set and chapter-rail builder
 │   ├── pokedex.js     name → National Dex map (gens 1–3)
 │   └── trainer-model.js   the Trainer Model dashboard engine
 ├── css/style.css      the site-wide stylesheet — no preprocessor

@@ -56,6 +56,15 @@ friends-list cohort behind the Trainer Model page.)
   - **App_Sessions / App_Installs** → sessions, devices, login cities and countries
   - **SupportInteractions\*.tsv** → ticket count and subjects (never the message bodies)
   - **LiveEventRegistrationHistory** → ticketed events; **wayfarer_player_data.json** → contributions
+  Around the chapters, `shellReport()` turns the flat run of panels into an application layout:
+  a trainer masthead with a monthly sparkline, a sticky chapter rail with scroll-spy (a column
+  beside the report on wide screens, a strip under the nav on phones), a **reader mode** toggle
+  that shows one chapter at a time with previous/next, a stat-grid balancer that picks the column
+  count with the fullest last row, panels that fade up as they arrive, and a floating Play button
+  for phones. On `metrics.html`, `renderUnlocks()` draws the **build console** — every chapter
+  and the file that unlocks it, lit as files land — and `mountUploadStrip()` folds the picker into
+  one strip once a report exists. Each chapter carries one hue (`CHAPTER_META`) for its eyebrow,
+  icon chip and top rule.
   Beyond the chapters, `app.js` also drives four things the toolbar exposes once a build finishes:
   `storyMode()` (a full-screen Wrapped-style recap, also `demo.html`'s hero CTA and promised twice
   on `index.html`), `downloadJourneyCard()` and `downloadYearCard()` (canvas-rendered shareable
@@ -63,7 +72,7 @@ friends-list cohort behind the Trainer Model page.)
   `downloadStatsJSON()`. That last one writes `STATE.profile` to disk and deliberately omits every
   location field; if you add a stat to it, keep that split intact and update the `note` string it
   embeds.
-- **`js/catalog-ui.js`** — The "Filter Deck" that renders the catalog on the landing page.
+- **`js/catalog-ui.js`** — The "Filter Deck" that renders the catalog on the landing page (list density by default).
   Every file is on screen with **nothing nested** — no `<details>` anywhere. Three of the four
   stat tiles double as filters (the file-count tile is a plain stat), three chip rails slice by
   sensitivity / what-we-do / group, a
@@ -82,7 +91,15 @@ friends-list cohort behind the Trainer Model page.)
   story-mode styles. The story never converts totals into
   time-to-level — the data has no timestamps, and it says so. Its page-only styles live in
   `css/trainer-model.css`, scoped under `.tmodel` so they can't leak into the rest of the site.
-- **`js/nav.js`** — Shared top nav (`data-active="home|guide|demo|model|app"`).
+- **`js/nav.js`** — Shared top nav (`data-active="home|guide|demo|model|app"`), plus the
+  site's inline SVG icon set (`window.ICON(name)`, hydration of any `[data-icon]` element,
+  and `window.fileIcon()` for the catalog's files) and `window.chapterRail()`, the rail
+  builder the Trainer Model page shares.
+- **`js/landing.js`** — The landing page's live preview: a miniature of the report masthead and
+  story player cycling through real slides from `data/sample-preview.json` (a compact summary of
+  the sample export — no locations; regenerate it from the Live Example after a new sample), the
+  section sub-nav that follows the scroll, and the trainers-per-level histogram in section 04,
+  drawn from the Trainer Model's own `trainers.json`.
 
 The world chapter prefers a 3D globe (vendored globe.gl); when WebGL isn't available it
 falls back to a flat Leaflet heatmap with the same data.
