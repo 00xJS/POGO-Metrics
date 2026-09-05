@@ -19,9 +19,10 @@
   ];
   const sub = $("subnav");
   if (sub) {
+    // Sections only — the site nav directly above already carries the yellow
+    // "Visualize my journey", and a second one here stacked under it.
     sub.innerHTML = SECTIONS.map(([id, label]) =>
-      `<a class="ch-chip" href="#${id}"><span class="ch-t">${label}</span></a>`).join("")
-      + `<a class="ch-chip sub-cta" href="metrics.html">${window.ICON ? window.ICON("sparkles") : ""}<span class="ch-t">Visualize my journey</span></a>`;
+      `<a class="ch-chip" href="#${id}"><span class="ch-t">${label}</span></a>`).join("");
     const links = [...sub.querySelectorAll("a[href^='#']")];
     const hero = $("hero");
     let tick = false;
