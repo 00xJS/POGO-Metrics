@@ -1715,3 +1715,48 @@ body.has-report #upload-section { padding-top: calc(var(--nav-h, 80px) + 24px); 
 
 /* trainer model · wide tables fade their clipped edge */
 .tmodel .table-scroll.scrollable:not(.at-end) { -webkit-mask-image: linear-gradient(90deg, #000 calc(100% - 36px), transparent); mask-image: linear-gradient(90deg, #000 calc(100% - 36px), transparent); }
+
+/* ─── Niantic → Scopely · before/after panel under the landing catalog (2026-09-05) ─── */
+.era { margin-top: 28px; padding: 22px 22px 18px; border-radius: var(--radius-card); background: var(--panel); border: 1px solid var(--line); }
+.era-head { display: flex; gap: 14px; align-items: flex-start; margin-bottom: 14px; }
+.era-ic { flex: none; width: 40px; height: 40px; border-radius: 12px; display: grid; place-items: center; background: rgba(255, 154, 68, .12); border: 1px solid rgba(255, 154, 68, .3); color: var(--orange); }
+.era-ic .ico { width: 20px; height: 20px; }
+.era-head h3 { margin: 2px 0 4px; font-size: 1.1875rem; }
+.era-head p { margin: 0; color: var(--ink-dim); font-size: .9375rem; }
+.era-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+.era-table { width: 100%; min-width: 640px; border-collapse: collapse; font-size: .84375rem; }
+.era-table th { text-align: left; font-family: var(--mono); font-size: .65625rem; letter-spacing: .1em; text-transform: uppercase; color: var(--ink-faint); padding: 8px 10px; border-bottom: 1px solid var(--line); white-space: nowrap; font-weight: 600; }
+.era-table td { padding: 9px 10px; border-bottom: 1px solid var(--line); color: var(--ink-dim); vertical-align: top; }
+.era-table tbody tr:last-child td { border-bottom: 0; }
+.era-table td:first-child { color: var(--ink); font-weight: 600; }
+.era-table code { font-size: .78125rem; }
+.era-v { display: inline-block; font-family: var(--mono); font-size: .625rem; letter-spacing: .1em; text-transform: uppercase; padding: 3px 8px; border-radius: var(--radius-pill); white-space: nowrap; }
+.era-v.same { color: var(--green); background: rgba(61, 220, 132, .12); border: 1px solid rgba(61, 220, 132, .35); }
+.era-v.diff { color: var(--orange); background: rgba(255, 154, 68, .12); border: 1px solid rgba(255, 154, 68, .35); }
+.era-v.new { color: var(--accent); background: rgba(65, 216, 198, .12); border: 1px solid rgba(65, 216, 198, .35); }
+.era-foot { margin: 14px 0 0; color: var(--ink-dim); font-size: .9375rem; }
+.era-foot b { color: var(--ink); }
+@media (max-width: 700px) { .era { padding: 16px; } .era-head { flex-direction: column; gap: 10px; } }
+
+/* ─── globe timeline · play, pause, step and scrub the journey month by month (2026-09-06) ─── */
+.globe-timeline { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-top: 10px; padding: 10px 12px; border-radius: 12px; background: var(--panel); border: 1px solid var(--line); }
+.tl-btn { background: rgba(65,216,198,.14); border: 1px solid var(--accent); color: var(--accent); border-radius: 9px; padding: 6px 10px; font: 700 .8125rem var(--sans); cursor: pointer; line-height: 1; transition: background .12s; }
+.tl-btn:hover { background: rgba(65,216,198,.26); }
+.tl-play { width: 40px; height: 34px; display: grid; place-items: center; font-size: .875rem; }
+.tl-step { padding: 8px 10px; }
+.tl-range { flex: 1 1 200px; min-width: 140px; accent-color: var(--accent); height: 28px; cursor: pointer; }
+.tl-label { display: flex; flex-direction: column; min-width: 100px; line-height: 1.15; }
+.tl-label b { font-family: var(--mono); color: var(--ink); font-size: .9375rem; }
+.tl-label .mono { font-family: var(--mono); font-size: .65625rem; color: var(--ink-faint); letter-spacing: .06em; white-space: nowrap; }
+.tl-mode { display: inline-flex; border: 1px solid var(--line); border-radius: 999px; overflow: hidden; }
+.tl-mode button { background: transparent; border: 0; color: var(--ink-dim); padding: 7px 11px; font: 600 .75rem var(--sans); cursor: pointer; }
+.tl-mode button[aria-pressed="true"] { background: rgba(65,216,198,.16); color: var(--accent); }
+.tl-follow { display: inline-flex; align-items: center; gap: 6px; font-size: .75rem; color: var(--ink-dim); cursor: pointer; user-select: none; }
+.tl-follow input { accent-color: var(--accent); }
+.tl-stats { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+.tl-stats .gh-stat { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 6px 10px; min-width: 88px; }
+.tl-stats .gh-stat.ev { border-color: rgba(255,203,5,.45); }
+.tl-stats .gh-stat.ev .v { color: var(--accent2); font-size: .8125rem; }
+.globe-wrap:fullscreen .globe-timeline, .globe-wrap:fullscreen .tl-stats { margin: 8px 12px 0; }
+.globe-wrap:fullscreen .tl-stats { margin-bottom: 8px; }
+@media (max-width: 560px) { .tl-label { min-width: 72px; } .tl-follow { display: none; } .tl-mode button { padding: 7px 8px; } }

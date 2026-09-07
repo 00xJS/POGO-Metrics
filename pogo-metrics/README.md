@@ -1,7 +1,7 @@
 # POGO Metrics
 
-A privacy-first, **bring-your-own-data** web app: drop your official Niantic Pokémon GO
-data export into the browser and get a beautiful, digestible summary & dashboard
+A privacy-first, **bring-your-own-data** web app: drop your official Pokémon GO
+data export (Niantic's format, shipped unchanged by Scopely) into the browser and get a beautiful, digestible summary & dashboard
 of your trainer journey. Nothing is uploaded — every file is parsed locally with JavaScript,
 and the site ships **none of your data**. (The only datasets in the repo are `sample-export/`, a fully
 anonymized sample used by the Live Example page, and `data/trainer-model/`, the anonymized
@@ -9,11 +9,13 @@ friends-list cohort behind the Trainer Model page.)
 
 ## Pages
 
-- **`index.html`** — Landing + guide. Hero, "how it works", how to request your export from
-  Niantic (the in-app Poké Ball → Settings → Help flow), privacy principles, and a full
+- **`index.html`** — Landing + guide. Hero, "how it works", how to request your export
+  in-game (the Poké Ball → Settings → Help flow — unchanged under Scopely), privacy principles, and a full
   **dataset catalog** (data from `js/catalog.js`, rendered by `js/catalog-ui.js`) that teaches
-  what every file in a Niantic export contains, how sensitive it is, and what story this site
-  can build from it.
+  what every file in an export contains, how sensitive it is, and what story this site
+  can build from it — plus a **Niantic → Scopely before/after panel** measured on two real exports
+  (June and August 2026): same files, same columns, same retention windows; only the folder name
+  and the wait changed, and Campfire gained an export of its own.
 - **`metrics.html`** — The app. Drag-and-drop (files *or* a whole folder — anywhere on the
   page), client-side parse, and a per-file story that now **builds itself** moments after a
   drop. Each recognised file lights up its own chapter, so uploading only `FriendList.tsv`
@@ -34,9 +36,9 @@ friends-list cohort behind the Trainer Model page.)
 
 ## Code
 
-- **`js/catalog.js`** — The knowledge base: one entry per Niantic export file (friendly name,
+- **`js/catalog.js`** — The knowledge base: one entry per export file (friendly name,
   filename matcher, what it contains, raw column names, sensitivity rating + note, the story it
-  unlocks, and Niantic's rough retention window). Shared by the landing catalog and the app's
+  unlocks, and its rough retention window). Shared by the landing catalog and the app's
   file detection.
 - **`js/app.js`** — The engine. Reads each `File` with `.text()`, routes it by filename to a
   parser, accumulates into a single `STATE`, then renders independent story chapters:
@@ -56,6 +58,24 @@ friends-list cohort behind the Trainer Model page.)
   - **App_Sessions / App_Installs** → sessions, devices, login cities and countries
   - **SupportInteractions\*.tsv** → ticket count and subjects (never the message bodies)
   - **LiveEventRegistrationHistory** → ticketed events; **wayfarer_player_data.json** → contributions
+  - **The Campfire export** (`<codename>_<yyyymmdd>_<hhmmss>.csv` — one CSV, ten sections, quoted
+    multi-line messages; recognised by name or by its first line) → meetups hosted, RSVP'd and
+    attended (show-up rate), what kinds of events get you out, club chat by month, and your Campfire
+    circle. **Counts and dates only**: `parseCampfire` drops every message, name, title, coordinate
+    and the IP address as it reads, and `test-parsers` asserts no string reaches `STATE.campfire`.
+
+  Two things about `Player_Journey` worth knowing. Every event ships as a **pair**:
+  `Pokestop_spin1.csv` is the trailing ~15 months with precise positions, and `Pokestop_spin2.csv` the
+  trailing ~3 years of the *same* events with every position blurred to a cell a few kilometres wide
+  (measured against the GPS trail: a median 230 m off in the "1" file, 4.1 km in the "2"). So the
+  long file is the timeline and the precise file is the map: `parsePlayerJourney` reads a "1" file
+  in full, then its "2" twin with the shared window skipped and its blurred positions kept out of
+  the map and the stop rankings (raid distances still use them — a few km is nothing against the
+  50 km that makes a raid remote). Before this, a whole-folder drop counted fifteen months twice
+  and ranked a blurred cell with 37,000 "visits" as the top stop. And `Player_Journey.zip` itself
+  has no password, so `ingest()` opens it in the browser with a small central-directory reader over
+  the native `DecompressionStream`; only the outer download is encrypted, and that one is recognised
+  by its flag and explained rather than opened.
   Around the chapters, `shellReport()` turns the flat run of panels into an application layout:
   a trainer masthead with a monthly sparkline, a sticky chapter rail with scroll-spy (a column
   beside the report on wide screens, a strip under the nav on phones), a **reader mode** toggle
@@ -77,7 +97,7 @@ friends-list cohort behind the Trainer Model page.)
   stat tiles double as filters (the file-count tile is a plain stat), three chip rails slice by
   sensitivity / what-we-do / group, a
   LIST · CARDS · FULL density switch controls how much of each entry shows, and the search box
-  indexes the raw Niantic column names and echoes the matching fragment back (typing `latitude`
+  indexes the raw column names and echoes the matching fragment back (typing `latitude`
   surfaces the two files that carry it, quoting `Player_Latitude`). Filter state round-trips
   through the URL hash — no storage, no requests.
 - **`js/pokedex.js`** — Name → National Dex map for gens 1–3, recovering region-of-origin
@@ -174,6 +194,13 @@ and timing are preserved so the story still feels real.
 It then checks its own work: every file it wrote is re-read, and it deletes the output rather than
 shipping if any redacted identifier, email, IP or real coordinate value survived. **No real
 personal data is present in `sample-export/`**, and that is verified on every run.
+
+One file is the exception to "derived from a real export": the Campfire CSV
+(`AshDemo_20260812_120000.csv`) is invented outright by `tools/campfire-sample.mjs` from a seeded
+generator — a Campfire export is mostly other people's words plus the coordinates of every meetup
+attended, which is nothing a scrubber should be trusted with. The scrubber writes it too, so a
+regeneration keeps it. `tools/test-parsers.mjs` covers all of it: the Campfire goldens, the
+Player_Journey pair rule, and a ZIP round trip through the app's own reader.
 
 > An earlier version translated every coordinate by one global offset. That is not anonymization —
 > a rigid translation preserves every distance and bearing, so the published demo was one

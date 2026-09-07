@@ -4,12 +4,12 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <title>Visualize my journey — POGO Metrics</title>
-  <meta name="description" content="Drop your Niantic Pokémon GO data export and watch it become a private, visual story — all in your browser." />
+  <meta name="description" content="Drop your Pokémon GO data export and watch it become a private, visual story — all in your browser." />
   <meta name="theme-color" content="#0a0d1c">
   <meta property="og:type" content="website">
   <meta property="og:site_name" content="POGO Metrics">
   <meta property="og:title" content="Visualize my journey — POGO Metrics">
-  <meta property="og:description" content="Drop in your Niantic Pokémon GO export and watch it become a private, visual story — all in your browser.">
+  <meta property="og:description" content="Drop in your Pokémon GO export and watch it become a private, visual story — all in your browser.">
   <meta property="og:url" content="https://pogo-metrics.netlify.app/metrics.html">
   <meta property="og:image" content="https://pogo-metrics.netlify.app/og-image.png">
   <meta property="og:image:width" content="1200">
@@ -17,7 +17,7 @@
   <meta property="og:image:alt" content="POGO Metrics — your Pokémon GO journey, visualized.">
   <meta name="twitter:card" content="summary_large_image">
   <meta name="twitter:title" content="Visualize my journey — POGO Metrics">
-  <meta name="twitter:description" content="Drop in your Niantic Pokémon GO export and watch it become a private, visual story — all in your browser.">
+  <meta name="twitter:description" content="Drop in your Pokémon GO export and watch it become a private, visual story — all in your browser.">
   <meta name="twitter:image" content="https://pogo-metrics.netlify.app/og-image.png">
   <link rel="canonical" href="https://pogo-metrics.netlify.app/metrics.html">
 
@@ -28,7 +28,7 @@
   <link rel="preload" href="vendor/fonts/c8e7a734b1.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="preload" href="vendor/fonts/1cd702cd25.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="stylesheet" href="vendor/fonts/fonts.css" />
-  <link rel="stylesheet" href="css/style.css?v=20260904b" />
+  <link rel="stylesheet" href="css/style.css?v=20260905a" />
 </head>
 <body>
   <nav id="topnav" data-active="app"></nav>
@@ -41,9 +41,9 @@
         <div class="eyebrow">Build your story</div>
         <h1 style="margin-top:8px">Drop in your export</h1>
         <p class="section-desc" style="margin:10px auto 28px">
-          Add the unzipped Niantic folder, or just the individual files you care about. Each one
-          you add unlocks another chapter below. Don't have your data yet?
-          <a href="index.html#request">Request it from Niantic →</a>
+          Add the unzipped export folder — the <code>Player_Journey.zip</code> inside it is opened for you —
+          or just the individual files you care about. Each one you add unlocks another chapter below.
+          Don't have your data yet? <a href="index.html#request">Request it in-game →</a>
         </p>
       </div>
 
@@ -51,7 +51,7 @@
         parsing happens entirely in your browser, which is also why nothing is ever uploaded.
         Enable JavaScript to build your story.</div></noscript>
       <div id="dropzone">
-        <!-- .zip is deliberately selectable: picking the un-unzipped Niantic ZIP is
+        <!-- .zip is deliberately selectable: Player_Journey.zip is opened in the browser, and picking the un-unzipped download ZIP is
          the most common first attempt, and accepting it routes the user into
          ingest()'s "that's the ZIP, unzip it first" explainer instead of the
          iOS Files picker silently greying their export out. -->
@@ -66,7 +66,7 @@
           <button class="btn btn-teal" id="browse-btn" type="button">Choose files</button>
           <button class="btn btn-ghost" id="folder-btn" type="button">Choose a folder</button>
         </div>
-        <div class="dz-hint">.tsv · .csv · .txt · .json — read locally, never uploaded</div>
+        <div class="dz-hint">.tsv · .csv · .txt · .json · Player_Journey.zip — read locally, never uploaded</div>
       </div>
 
       <div class="upload-privacy">🔒 Everything is processed in your browser. No file ever leaves this device.</div>
@@ -106,9 +106,9 @@
 
   <!-- Chart.js / Leaflet / globe.gl are loaded on demand by app.js when a build
        actually needs them — the upload UI must be interactive immediately. -->
-  <script defer src="js/nav.js?v=20260904b"></script>
-  <script defer src="js/catalog.js?v=20260904b"></script>
-  <script defer src="js/pokedex.js?v=20260904b"></script>
-  <script defer src="js/app.js?v=20260904b"></script>
+  <script defer src="js/nav.js?v=20260905a"></script>
+  <script defer src="js/catalog.js?v=20260905a"></script>
+  <script defer src="js/pokedex.js?v=20260905a"></script>
+  <script defer src="js/app.js?v=20260905a"></script>
 </body>
 </html>

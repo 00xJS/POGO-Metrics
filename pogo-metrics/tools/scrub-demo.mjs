@@ -275,12 +275,26 @@ function nearby([lat, lon], km) {
 console.log(`  synthetic world: ${PLACES.atlas.size} places, ${GYMS.atlas.size} gyms across ${1 + AWAY.length} cities`);
 
 for (const [type, cap] of EVENT_TYPES) {
-  let header = null, body = [];
-  for (const suffix of ["1", "2"]) {
-    const lines = readLines(path.join(PJ_SRC, `${type}${suffix}.csv`));
-    if (!lines) continue;
-    if (!header) header = lines[0];
-    for (let i = 1; i < lines.length; i++) if (lines[i].trim()) body.push(lines[i]);
+  /* The pair, as the export ships it: "1" is the trailing ~15 months with
+   * precise positions, "2" the trailing ~3 years of the SAME events with every
+   * position blurred to a few kilometres. Concatenating them (as this used to)
+   * counted fifteen months twice and let a blurred cell top the stop rankings.
+   * Take the "1" rows, add only the "2" rows older than the "1" window, and
+   * remember which were precise so both files can be written back out the way
+   * a real export has them — the demo then carries the same pair the app has
+   * to reconcile. */
+  let header = null;
+  const body = [], precise = new Set();
+  const one = readLines(path.join(PJ_SRC, `${type}1.csv`)), two = readLines(path.join(PJ_SRC, `${type}2.csv`));
+  const tsOf = (line) => Date.parse(line.slice(line.lastIndexOf(",") + 1).trim().replace(/\s+UTC$/, "Z").replace(" ", "T"));
+  let w0 = Infinity, w1 = -Infinity;
+  if (one) {
+    header = one[0];
+    for (let i = 1; i < one.length; i++) if (one[i].trim()) { body.push(one[i]); precise.add(one[i]); const t = tsOf(one[i]); if (t < w0) w0 = t; if (t > w1) w1 = t; }
+  }
+  if (two) {
+    if (!header) header = two[0];
+    for (let i = 1; i < two.length; i++) if (two[i].trim()) { const t = tsOf(two[i]); if (isNaN(t) || t < w0 || t > w1) body.push(two[i]); }
   }
   if (!header) continue;
   const cols = header.split(",");
@@ -289,7 +303,9 @@ for (const [type, cap] of EVENT_TYPES) {
   const gLatI = cols.findIndex((c) => /(Gym|Fort)_Latitude/i.test(c));
   const gLonI = cols.findIndex((c) => /(Gym|Fort)_Longitude/i.test(c));
   const isGym = /Gym_Latitude/i.test(header);
-  const sampled = strideSample(body, cap).map((line) => {
+  const picked = strideSample(body, cap);
+  const isPrecise = picked.map((l) => precise.has(l));
+  const sampled = picked.map((line) => {
     const c = line.split(",");
     /* Raids are the one event where the two coordinates must RELATE to each
      * other — the app calls a raid remote when the player is ≥50 km from the
@@ -313,7 +329,12 @@ for (const [type, cap] of EVENT_TYPES) {
     if (gLatI >= 0 && gLonI >= 0) { const p = mapPlace(c[gLatI], c[gLonI]); if (p) [c[gLatI], c[gLonI]] = fix6(p); }
     return c.join(",");
   });
-  write(`Player_Journey/${type}1.csv`, [header, ...sampled].join("\n"));
+  /* "1": the precise rows only. "2": every row, positions snapped to a ~4 km
+   * grid the way the export blurs them. */
+  const blur = (line) => line.split(",").map((c, i) => (i < cols.length - 1 && /^-?\d+\.\d+$/.test(c.trim()) ? (Math.round(parseFloat(c) / 0.04) * 0.04).toFixed(6) : c)).join(",");
+  const preciseRows = sampled.filter((_, i) => isPrecise[i]);
+  if (preciseRows.length) write(`Player_Journey/${type}1.csv`, [header, ...preciseRows].join("\n"));
+  write(`Player_Journey/${type}2.csv`, [header, ...sampled.map(blur)].join("\n"));
 }
 
 /* ---------- GameplayLocationHistory.tsv → a synthetic walk ----------

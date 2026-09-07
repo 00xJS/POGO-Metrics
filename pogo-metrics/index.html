@@ -4,12 +4,12 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <title>POGO Metrics — visualize your Pokémon GO journey</title>
-  <meta name="description" content="Turn your official Niantic Pokémon GO data export into a beautiful, private, digestible story of your trainer journey. Everything runs in your browser — nothing is uploaded." />
+  <meta name="description" content="Turn your official Pokémon GO data export into a beautiful, private, digestible story of your trainer journey. Everything runs in your browser — nothing is uploaded." />
   <meta name="theme-color" content="#0a0d1c">
   <meta property="og:type" content="website">
   <meta property="og:site_name" content="POGO Metrics">
   <meta property="og:title" content="POGO Metrics — visualize your Pokémon GO journey">
-  <meta property="og:description" content="Turn your official Niantic Pokémon GO data export into a private, visual story of your trainer journey. Runs entirely in your browser — nothing is uploaded.">
+  <meta property="og:description" content="Turn your official Pokémon GO data export into a private, visual story of your trainer journey. Runs entirely in your browser — nothing is uploaded.">
   <meta property="og:url" content="https://pogo-metrics.netlify.app/">
   <meta property="og:image" content="https://pogo-metrics.netlify.app/og-image.png">
   <meta property="og:image:width" content="1200">
@@ -17,7 +17,7 @@
   <meta property="og:image:alt" content="POGO Metrics — your Pokémon GO journey, visualized.">
   <meta name="twitter:card" content="summary_large_image">
   <meta name="twitter:title" content="POGO Metrics — visualize your Pokémon GO journey">
-  <meta name="twitter:description" content="Turn your official Niantic Pokémon GO data export into a private, visual story of your trainer journey. Runs entirely in your browser — nothing is uploaded.">
+  <meta name="twitter:description" content="Turn your official Pokémon GO data export into a private, visual story of your trainer journey. Runs entirely in your browser — nothing is uploaded.">
   <meta name="twitter:image" content="https://pogo-metrics.netlify.app/og-image.png">
   <link rel="canonical" href="https://pogo-metrics.netlify.app/">
 
@@ -28,7 +28,7 @@
   <link rel="preload" href="vendor/fonts/c8e7a734b1.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="preload" href="vendor/fonts/1cd702cd25.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="stylesheet" href="vendor/fonts/fonts.css" />
-  <link rel="stylesheet" href="css/style.css?v=20260904b" />
+  <link rel="stylesheet" href="css/style.css?v=20260905a" />
 </head>
 <body>
   <nav id="topnav" data-active="home"></nav>
@@ -41,19 +41,19 @@
         <div class="eyebrow">Your data · your story</div>
         <h1>Your <span class="yellow">Pokémon&nbsp;GO</span> journey, visualized.</h1>
         <p class="hero-sub">
-          Niantic keeps years of your trainer life — every catch, raid, friendship, step and
-          purchase. Request your free export, drop the files here, and get a sixteen-chapter
+          Pokémon GO keeps years of your trainer life — every catch, raid, friendship, step and
+          purchase. Request your free export, drop the files here, and get a seventeen-chapter
           report that ends in a <b>tappable, Wrapped-style story</b> you can play back and share.
         </p>
         <div class="hero-cta">
           <a class="btn btn-primary" href="metrics.html">Visualize my journey</a>
           <a class="btn btn-teal" href="demo.html"><span aria-hidden="true" data-icon="play"></span> Watch the example story</a>
         </div>
-        <!-- Most first visits happen BEFORE the ~7-day Niantic wait has even been
+        <!-- Most first visits happen BEFORE the support wait has even been
              started — the funnel's real first step gets its own line rather than
              competing as a third button. -->
-        <p class="hero-helper">No export yet? <a href="#request">Request it from Niantic</a> — free,
-          official, takes about a week. Curious what's inside one? <a href="#datasets">See every file →</a></p>
+        <p class="hero-helper">No export yet? <a href="#request">Request it in-game</a> — free and
+          official; allow a few weeks. Curious what's inside one? <a href="#datasets">See every file →</a></p>
         <div class="privacy-ribbon">
           <span aria-hidden="true" data-icon="lock"></span> <span><b>100% private.</b> Your files never leave your device — there is no server, no upload, no account.</span>
         </div>
@@ -104,21 +104,21 @@
     <section class="section" id="how">
       <h2><span class="num">01</span>How it works</h2>
       <p class="section-desc">
-        Three steps, about ten minutes of your time, and one ~7-day wait on Niantic. No coding,
+        Three steps, about ten minutes of your time, and one wait on support — a day to a few weeks. No coding,
         no spreadsheets — and you can stop at any single file.
       </p>
       <div class="steps">
         <div class="step">
           <span class="step-ic" data-icon="receipt" aria-hidden="true"></span>
           <span class="n">STEP 1</span>
-          <h3>Ask Niantic for your data</h3>
-          <p>Every player has the right to a full copy of their account data. You request it once and it arrives as a download link, usually within a week.</p>
+          <h3>Ask for your data</h3>
+          <p>Every player has the right to a full copy of their account data. You request it once, in-game, and it arrives as a download link — within a day under Niantic, and up to a few weeks since Scopely took over the game.</p>
         </div>
         <div class="step">
           <span class="step-ic" data-icon="upload" aria-hidden="true"></span>
           <span class="n">STEP 2</span>
           <h3>Drop in your files</h3>
-          <p>Unzip the export and drag in the whole folder — or just the one file you're curious about, like <code>FriendList.tsv</code>. Add one, some, or all of them.</p>
+          <p>Unzip the download and drag in the whole folder — the <code>Player_Journey.zip</code> inside it is opened for you — or just the one file you're curious about, like <code>FriendList.tsv</code>. Add one, some, or all of them.</p>
         </div>
         <div class="step">
           <span class="step-ic" data-icon="play" aria-hidden="true"></span>
@@ -131,8 +131,8 @@
       <!-- ── the request flow, drawn as the screens you'll actually see ── -->
       <div class="walk" id="request">
         <div class="walk-head">
-          <h3>Getting the export from Niantic — the quickest path</h3>
-          <p>A free, official right under privacy laws like GDPR and CCPA — not a hack or a third-party tool. Four screens in the game, then one email.</p>
+          <h3>Getting the export — the quickest path</h3>
+          <p>A free, official right under privacy laws like GDPR and CCPA — not a hack or a third-party tool. Four screens in the game, then one email. Scopely runs Pokémon GO now, but the screens, the automated replies and the files are the same ones Niantic built.</p>
         </div>
         <div class="walk-row">
           <figure class="phone">
@@ -176,18 +176,20 @@
               <div class="ph-pass">password ••••••••</div>
               <div class="ph-btn">Download</div>
             </div>
-            <figcaption><b>4 · Within a week</b>Niantic replies with a download link (valid 7 days) and a <b>password</b> to open the file.</figcaption>
+            <figcaption><b>4 · Then you wait</b>Support replies with a download link (valid 7 days) and a <b>password</b> to open the file — a day under Niantic, about a month for our first Scopely-era request.</figcaption>
           </figure>
         </div>
         <div class="walk-note">
           <span class="wn-ic" data-icon="folder" aria-hidden="true"></span>
           <div>
             <b>Unzip it — this is the step that trips people up.</b> The download is a password-protected
-            ZIP, and the password is in Niantic's message. <b>On a computer:</b> double-click it and type the
+            ZIP, and the password is in the message. <b>On a computer:</b> double-click it and type the
             password — Windows and macOS both handle this. <b>On an iPhone or iPad:</b> the Files app <i>cannot</i>
             open a password-protected ZIP, so email or AirDrop the file to a computer, or install a ZIP app that
             supports passwords. Inside you'll find <code>.tsv</code>, <code>.csv</code>, <code>.txt</code> and
-            <code>.json</code> files — exactly what this site reads. Then hit <a href="metrics.html">Visualize my journey</a>.
+            <code>.json</code> files — exactly what this site reads — plus a second archive, <code>Player_Journey.zip</code>,
+            which has no password: leave it be, it's opened for you when you drop the folder. Since the Scopely handover the
+            folder carries a long random ID instead of “Pokemon GO Data”, which is normal. Then hit <a href="metrics.html">Visualize my journey</a>.
           </div>
         </div>
         <div class="notice-row">
@@ -197,8 +199,8 @@
             richer that part of your story will be. Not ready? <a href="demo.html">See a live example first →</a>
           </div>
           <div class="notice">
-            <b>Just sent your request?</b> The wait is up to a week — and the download link Niantic sends
-            expires after 7 days. <button type="button" class="linkish" id="ics-reminder"><span aria-hidden="true" data-icon="calendar"></span> Download a
+            <b>Just sent your request?</b> The wait has run from a day (Niantic, June 2026) to about four weeks
+            (Scopely, August 2026) — and the download link expires 7 days after it lands. <button type="button" class="linkish" id="ics-reminder"><span aria-hidden="true" data-icon="calendar"></span> Download a
             calendar reminder</button> to check back, and bookmark this page now so your story is one
             tap away.
           </div>
@@ -236,11 +238,38 @@
     <section class="section" id="datasets">
       <h2><span class="num">03</span>What's in your export — file by file</h2>
       <p class="section-desc">
-        Niantic keeps all of this on you, and hands it over as a stack of plainly-named files.
+        Pokémon GO keeps all of this on you, and hands it over as a stack of plainly-named files — the
+        same stack under Scopely as under Niantic.
         Here's what each one actually contains, how revealing it is, and the story this site can
         build from it. Add only the ones you're comfortable with.
       </p>
       <div id="catalog" class="deck" data-density="list"></div>
+      <!-- ── Niantic → Scopely: the before/after, measured on two real exports (Jun + Aug 2026) ── -->
+      <div class="era" id="scopely">
+        <div class="era-head">
+          <span class="era-ic" data-icon="rotate" aria-hidden="true"></span>
+          <div>
+            <div class="ml">Before / after</div>
+            <h3>Niantic → Scopely: what changed in the export</h3>
+            <p>Scopely took over Pokémon GO in 2025. We diffed a June 2026 export (Niantic) against an August 2026 one (Scopely) — every file, every column header, every timestamp format — so you don't have to wonder whether yours will work here.</p>
+          </div>
+        </div>
+        <div class="era-scroll"><table class="era-table">
+          <thead><tr><th>What</th><th>Under Niantic · Jun 2026</th><th>Under Scopely · Aug 2026</th><th>Verdict</th></tr></thead>
+          <tbody>
+            <tr><td>Files</td><td>22 files, plus a 21-file <code>Player_Journey.zip</code></td><td>The same 22, the same 21</td><td><span class="era-v same">Unchanged</span></td></tr>
+            <tr><td>Column headers</td><td>Every raw column, as catalogued above</td><td>Identical — some still say “Niantic”, e.g. <code>Date of first Niantic friendship start</code></td><td><span class="era-v same">Unchanged</span></td></tr>
+            <tr><td>Timestamps</td><td>UTC, in three formats</td><td>The same three formats</td><td><span class="era-v same">Unchanged</span></td></tr>
+            <tr><td>How far back files go</td><td>15 months and 3 years of events, ~2 months of GPS, ~3 weeks of fitness, ~4 months of social</td><td>The same windows, just moved forward</td><td><span class="era-v same">Unchanged</span></td></tr>
+            <tr><td>Positions in the journey files</td><td>Precise in the 15-month “1” files; blurred to a few km in the 3-year “2” files</td><td>The same split — checked against the GPS trail in both</td><td><span class="era-v same">Unchanged</span></td></tr>
+            <tr><td>In-game request</td><td>Help → Chat with us → My account → Request my data</td><td>The same screens, the same automated replies</td><td><span class="era-v same">Unchanged</span></td></tr>
+            <tr><td>Folder name</td><td><code>Pokemon GO Data</code></td><td>A long random ID, e.g. <code>3f9a1c2e-…</code></td><td><span class="era-v diff">Cosmetic</span></td></tr>
+            <tr><td>Turnaround</td><td>About a day</td><td>About four weeks, for our one request so far</td><td><span class="era-v diff">Slower</span></td></tr>
+            <tr><td>Campfire</td><td>Not in the export</td><td>Still not — but the Campfire app now has its own export, and this site reads it</td><td><span class="era-v new">New chapter</span></td></tr>
+          </tbody>
+        </table></div>
+        <p class="era-foot"><b>So a Scopely-era export drops in exactly like a Niantic one.</b> Add your Campfire CSV alongside it for one more chapter — meetups, club chat and your Campfire circle, counts and dates only.</p>
+      </div>
       <p class="section-desc" style="margin-top:26px">
         That's your export, file by file. When you're ready, the app turns whichever of them you
         choose into your own chapters — <a href="metrics.html">visualize my journey →</a>
@@ -315,12 +344,12 @@
     </p>
   </footer>
 
-  <script defer src="js/nav.js?v=20260904b"></script>
-  <script defer src="js/catalog.js?v=20260904b"></script>
-  <script defer src="js/catalog-ui.js?v=20260904b"></script>
-  <script defer src="js/landing.js?v=20260904b"></script>
+  <script defer src="js/nav.js?v=20260905a"></script>
+  <script defer src="js/catalog.js?v=20260905a"></script>
+  <script defer src="js/catalog-ui.js?v=20260905a"></script>
+  <script defer src="js/landing.js?v=20260905a"></script>
   <script>
-    // "Check for my Niantic export" — a 7-days-from-now reminder, generated on
+    // "Check for my Pokémon GO export" — a 7-days-from-now reminder, generated on
     // the device as a plain .ics download. No calendar service, no request.
     document.addEventListener("DOMContentLoaded", () => {
       // The hero says "drop the files here" — a literal drop on THIS page must
@@ -343,7 +372,7 @@
           "BEGIN:VEVENT", "UID:" + stamp + "@pogo-metrics",
           "DTSTAMP:" + stamp, "DTSTART;VALUE=DATE:" + ymd,
           "SUMMARY:Check for your Pokémon GO data export",
-          "DESCRIPTION:Niantic's reply usually lands within a week — and the download link they send expires 7 days later. Grab the ZIP\\, then visualize it at https://pogo-metrics.netlify.app/",
+          "DESCRIPTION:Support's reply has taken anywhere from a day to a month — and the download link expires 7 days after it lands. Grab the ZIP\\, then visualize it at https://pogo-metrics.netlify.app/",
           "URL:https://pogo-metrics.netlify.app/", "END:VEVENT", "END:VCALENDAR",
         ].join("\r\n");
         const url = URL.createObjectURL(new Blob([ics], { type: "text/calendar" }));
