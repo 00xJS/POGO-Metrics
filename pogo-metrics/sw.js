@@ -7,16 +7,16 @@
  *     cached copy when offline
  *   • vendor/ (pinned libs, textures, fonts, geojson) → cache-first
  * Bump VERSION on any release to sweep old caches. */
-const VERSION = "pogo-metrics-v20260904b";
+const VERSION = "pogo-metrics-v20260905a";
 const CORE = [
   "/", "favicon.ico", "index.html", "metrics.html", "demo.html", "trainer-model.html", "404.html",
-  "css/style.css?v=20260904b", "css/trainer-model.css?v=20260904b",
-  "js/nav.js?v=20260904b", "js/catalog.js?v=20260904b", "js/catalog-ui.js?v=20260904b",
-  "js/pokedex.js?v=20260904b", "js/app.js?v=20260904b", "js/trainer-model.js?v=20260904b",
+  "css/style.css?v=20260905a", "css/trainer-model.css?v=20260905a",
+  "js/nav.js?v=20260905a", "js/catalog.js?v=20260905a", "js/catalog-ui.js?v=20260905a",
+  "js/pokedex.js?v=20260905a", "js/app.js?v=20260905a", "js/trainer-model.js?v=20260905a",
   // The landing's live preview and section sub-nav, and the compact sample
   // summary the preview is built from — an installed app opened offline gets
   // the same hero, not the static fallback slide.
-  "js/landing.js?v=20260904b", "data/sample-preview.json",
+  "js/landing.js?v=20260905a", "data/sample-preview.json",
   // The Trainer Model page draws entirely from these two files, so an installed
   // app opened offline still gets the full research layer.
   "data/trainer-model/trainers.json", "data/trainer-model/era2.json",

@@ -67,7 +67,7 @@
 
   root.innerHTML = `
     <div class="deck-stats">
-      ${tile(stats.total, "files in export", "")}
+      ${tile(stats.total, "files catalogued", "")}
       ${tile(stats.high, "high sensitivity", "high")}
       ${tile(stats.ignored, "we never read", "ignored")}
       ${tile(stats.gps, "contain your GPS", "gps")}

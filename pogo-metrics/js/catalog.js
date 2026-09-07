@@ -1,6 +1,9 @@
-/* catalog.js — the knowledge base about every file in a Niantic Pokémon GO
- * GDPR/data export. Used by the landing page (to teach people what Niantic
- * stores) and by the app (to recognize uploaded files and label their story).
+/* catalog.js — the knowledge base about every file in a Pokémon GO GDPR/data
+ * export. Niantic built the export; since Scopely took over the game in 2025 it
+ * ships the same files with the same columns (diffed June vs August 2026 — see
+ * the before/after panel on the landing page). Used by the landing page (to
+ * teach people what the game stores) and by the app (to recognize uploaded
+ * files and label their story).
  *
  * Each entry:
  *   id        canonical filename (or folder for Player_Journey)
@@ -10,11 +13,11 @@
  *   group     bucket used for grouping in the catalog UI
  *   summary   one-line description
  *   contains  plain-English list of what's inside
- *   columns   the actual raw column names Niantic ships (transparency)
+ *   columns   the actual raw column names the export ships (transparency)
  *   sensitivity 'high' | 'medium' | 'low'  — how revealing the RAW file is
  *   sensitivityNote  why
  *   story     what THIS site can build from it (null = nothing chartable)
- *   retention rough note on how far back Niantic's copy goes
+ *   retention rough note on how far back the export's copy goes
  */
 window.CATALOG = [
   {
@@ -54,12 +57,13 @@ window.CATALOG = [
       "Gym battles, berries fed, Pokémon deployed",
       "Incense and Lure encounters",
       "A timestamp and your GPS position for most events",
+      "Each event twice over: a “1” file (about the last 15 months, precise positions) and a “2” file (about the last 3 years — the same events, with every position blurred to a cell a few kilometres wide)",
     ],
     columns: ["Player_Latitude", "Player_Longitude", "Gym_Latitude", "Gym_Longitude", "Fort_Latitude", "Fort_Longitude", "Timestamp"],
     sensitivity: "high",
-    sensitivityNote: "Precise coordinates and timestamps for thousands of events — this can reveal your home, work and daily routine. Handle with care.",
+    sensitivityNote: "Precise coordinates and timestamps for thousands of events (in the “1” files — the “2” files blur every position to a few kilometres) — this can reveal your home, work and daily routine. Handle with care.",
     story: "The big one: your activity timeline month-by-month, your hour-of-week play rhythm, totals for every action type, remote-raid detection (how far your raids reached), and a heatmap of where you played.",
-    retention: "Niantic keeps roughly the last 3 years of events.",
+    retention: "Two files per event: the “1” file holds about the last 15 months with precise positions; the “2” file about the last 3 years with positions blurred to a few km. This site takes the timeline from the long one and the map from the precise one, and counts the months they share once.",
   },
   {
     id: "GameplayLocationHistory.tsv",
@@ -71,7 +75,7 @@ window.CATALOG = [
     contains: ["A timestamp", "Latitude and longitude reported by the game"],
     columns: ["Date and Time", "Latitude of location reported by game", "Longitude of location reported by game"],
     sensitivity: "high",
-    sensitivityNote: "The single most sensitive file — a literal map of your movements. Niantic only keeps a short window, but treat it carefully.",
+    sensitivityNote: "The single most sensitive file — a literal map of your movements. Only a short window is kept, but treat it carefully.",
     story: "A day-by-day GPS trail drawn on the map, showing your routes and the area you covered.",
     retention: "Short rolling window — usually the last ~2 months only.",
   },
@@ -87,7 +91,7 @@ window.CATALOG = [
       "The date your friendship started",
       "Who sent the friend request",
       "How you connected (QR, nearby, Friend Graph…)",
-      "Which Niantic games you share",
+      "Which Niantic-era games you share (Pokémon GO, Campfire…)",
     ],
     columns: ["Friend's codename", "Date of friendship start", "Friendship initiated by", "Friendship Source", "Nickname", "Games they are Friends in"],
     sensitivity: "medium",
@@ -120,7 +124,7 @@ window.CATALOG = [
     columns: ["Action", "Timestamp", "Codename", "Result"],
     sensitivity: "medium",
     sensitivityNote: "Includes other trainers' codenames.",
-    story: "Your invite funnel — how many requests you sent vs. accepted vs. declined in Niantic's recent window.",
+    story: "Your invite funnel — how many requests you sent vs. accepted vs. declined in the export's recent window.",
     retention: "Short rolling window — about the last 4 months.",
   },
   {
@@ -167,7 +171,7 @@ window.CATALOG = [
     contains: ["Logging timestamp", "Steps walked", "Distance in meters", "Calories burned", "Exercise duration", "Wheelchair distance"],
     columns: ["Date and time of logging (UTC)", "Steps walked", "Distance travelled (meters)", "Calories burned", "Exercise duration (minutes)", "Wheelchair distance (meters)"],
     sensitivity: "medium",
-    sensitivityNote: "Health-adjacent activity data. Niantic only keeps a short window.",
+    sensitivityNote: "Health-adjacent activity data. Only a short window is kept.",
     story: "Your movement: daily steps and distance, totals, and fun real-world equivalents (marathons, etc.).",
     retention: "Short rolling window — about the last 3 weeks.",
   },
@@ -225,7 +229,7 @@ window.CATALOG = [
     sensitivity: "low",
     sensitivityNote: "References and dates only — never the picture itself, and never where it was taken. The least revealing file in the export.",
     story: "Your photo album: how many GO Snapshots you've taken, the months you shot the most, and your single biggest photo day.",
-    retention: "Rolling window — roughly the last two years.",
+    retention: "Both exports we measured start in April 2024 and the newer one kept everything since — it grows rather than rolls.",
   },
   {
     id: "wayfarer_player_data.json",
@@ -265,7 +269,7 @@ window.CATALOG = [
     contains: ["Ticket transfer records (usually empty)"],
     columns: ["Event details", "Ticket info", "Date"],
     sensitivity: "low",
-    sensitivityNote: "Usually empty. Niantic ships the file either way.",
+    sensitivityNote: "Usually empty. The export ships the file either way.",
     story: null,
     retention: "As applicable.",
   },
@@ -279,7 +283,7 @@ window.CATALOG = [
     contains: ["Refund records (usually empty)"],
     columns: ["Event details", "Refund amount", "Date"],
     sensitivity: "low",
-    sensitivityNote: "Usually empty. Niantic ships the file either way.",
+    sensitivityNote: "Usually empty. The export ships the file either way.",
     story: null,
     retention: "As applicable.",
   },
@@ -289,13 +293,36 @@ window.CATALOG = [
     name: "Support Interactions",
     icon: "🛟",
     group: "Technical & Device",
-    summary: "Your support tickets with Niantic.",
+    summary: "Your support tickets with Pokémon GO support — including the one that produced this export.",
     contains: ["Ticket number and title", "Date and time", "(message content — ignored here)"],
     columns: ["Date and time", "Ticket number and title", "Message content", "Custom Fields", "Meta data"],
     sensitivity: "medium",
     sensitivityNote: "Message bodies can contain anything you wrote to support. This site reads only the date and the subject line, never the text.",
-    story: "How many times you've contacted Niantic, when, and what about — including the ticket that produced this very export.",
+    story: "How many times you've contacted support, when, and what about — including the ticket that produced this very export.",
     retention: "Support history.",
+  },
+  {
+    id: "Campfire export (.csv)",
+    // Named after the trainer, not the product: <codename>_<yyyymmdd>_<hhmmss>.csv
+    match: /campfire|_\d{8}_\d{6}\.csv$/i,
+    name: "Campfire export",
+    icon: "🔥",
+    group: "Your Social World",
+    summary: "A separate export from the Campfire app — your clubs, meetups, club chat and Campfire friends, in one ten-section CSV.",
+    contains: [
+      "Clubs you belong to and channels you created, with links",
+      "Every chat message you sent, with its timestamp and full text",
+      "Your Campfire friends, how you connected, and who asked",
+      "Meetups you hosted — with RSVP and check-in counts, the venue's coordinates and an admin link",
+      "Meetups you RSVP'd to, and the ones you checked into",
+      "Comments and map posts you made, with their text",
+      "(also: your last recorded IP address — ignored here)",
+    ],
+    columns: ["Name", "URL", "Chatv2 Message Id", "Sent At", "Message", "Codename", "Friendship source", "Initiated by me", "Event Id", "Event Title", "Event Start Time", "Event End Time", "Event Description", "Event Latlng (latitude,longitude)", "RSVP count", "Check-in count", "isCA/CL", "Admin URL", "Comment Id", "Parent Id", "Parent Type", "Created At", "Updated At", "Comment Body", "Ip Address", "Time Last Recorded", "Post Id", "Post Body"],
+    sensitivity: "high",
+    sensitivityNote: "The full text of everything you wrote in Campfire, other people's codenames, the coordinates of every meetup you joined or hosted, and your IP address. This site keeps only counts and dates from it — no message, name, title, coordinate or IP is retained or shown.",
+    story: "Your Campfire chapter: meetups hosted, RSVP'd and actually attended (your show-up rate), what kinds of events get you out the door, how much you chat with your clubs month by month, and your Campfire circle.",
+    retention: "Everything since you joined Campfire — not a rolling window. Requested separately, from the Campfire app; it is not part of the Pokémon GO export.",
   },
   {
     id: "AccountInformation.txt",

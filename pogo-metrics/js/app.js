@@ -278,7 +278,9 @@ function freshState() {
       stamps: [], forts: new Map(), gyms: new Map(),
       raidTotal: 0, raidRemote: 0, raidMaxKm: 0, raidKmSum: 0, raidWithDist: 0,
       raidArcs: new Map(), raidGymBins: new Map(), remoteRaidsByYear: {},
-      geoFirst: new Map(), arcFirst: new Map(),   // first-seen month per spot/arc — feeds the globe replay
+      geoFirst: new Map(), arcFirst: new Map(),   // first-seen month per spot/arc — feeds the globe timeline
+      geoMonths: new Map(), arcMonths: new Map(), // per-spot / per-arc tallies by month — the timeline's "this month only" view
+      win: {}, blurredRows: 0,   // span of each event's precise "1" file; rows whose blurred positions were kept off the map
     },
     trail: [], trailCount: 0, trailStride: 1,
     bag: null,
@@ -296,6 +298,7 @@ function freshState() {
     installs: { count: 0, first: null, devices: {} },
     liveEvents: [],
     wayfarer: null,
+    campfire: null,          // counts and months only — see parseCampfire
   };
 }
 let STATE = freshState();
@@ -352,6 +355,56 @@ function showError(msg, trustedHTML) {
 }
 function clearError() { const el = $("upload-error"); if (el) el.style.display = "none"; }
 
+/* ── ZIP support ──
+ * The export carries a second archive inside it: Player_Journey.zip, the nine
+ * activity logs that make the biggest chapters. Only the OUTER download is
+ * password-protected — the inner one is plain deflate — yet every visitor was
+ * told to unzip it by hand before those files would register, the step the
+ * guide never quite got people through. Browsers can inflate deflate streams
+ * natively now, so a small central-directory reader is all it takes to open
+ * it here: no library, nothing fetched, nothing leaves the tab. The outer
+ * download is recognised by its encryption flag and still gets the
+ * "unzip it on a computer" explainer. Measured on a real export: 21 entries,
+ * all method 8, no encryption, no ZIP64. */
+const ZIP_OK = typeof DecompressionStream === "function";
+async function unzipFile(file) {
+  const buf = new Uint8Array(await file.arrayBuffer());
+  const dv = new DataView(buf.buffer, buf.byteOffset, buf.byteLength);
+  // The end-of-central-directory record sits in the last 64 KB + 22 bytes.
+  let eocd = -1;
+  for (let i = buf.length - 22; i >= Math.max(0, buf.length - 65557); i--) {
+    if (dv.getUint32(i, true) === 0x06054b50) { eocd = i; break; }
+  }
+  if (eocd < 0) throw new Error("not a zip");
+  const count = dv.getUint16(eocd + 10, true);
+  let off = dv.getUint32(eocd + 16, true);
+  const dec = new TextDecoder();
+  const entries = [];
+  for (let k = 0; k < count && off + 46 <= buf.length; k++) {
+    if (dv.getUint32(off, true) !== 0x02014b50) break;
+    const flags = dv.getUint16(off + 8, true), method = dv.getUint16(off + 10, true);
+    const csize = dv.getUint32(off + 20, true), usize = dv.getUint32(off + 24, true);
+    const nLen = dv.getUint16(off + 28, true), xLen = dv.getUint16(off + 30, true), cLen = dv.getUint16(off + 32, true);
+    const lho = dv.getUint32(off + 42, true);
+    if (csize === 0xffffffff || usize === 0xffffffff || lho === 0xffffffff) throw new Error("zip64 archives are not supported");
+    entries.push({ name: dec.decode(buf.subarray(off + 46, off + 46 + nLen)), method, csize, usize, lho, encrypted: !!(flags & 1) });
+    off += 46 + nLen + xLen + cLen;
+  }
+  return { entries, buf, dv };
+}
+async function zipEntryFile(z, e) {
+  const { buf, dv } = z;
+  if (dv.getUint32(e.lho, true) !== 0x04034b50) throw new Error("bad local header for " + e.name);
+  const nLen = dv.getUint16(e.lho + 26, true), xLen = dv.getUint16(e.lho + 28, true);
+  const start = e.lho + 30 + nLen + xLen;
+  const data = buf.subarray(start, start + e.csize);
+  const name = e.name.split("/").pop();
+  if (e.method === 0) return new File([data], name);
+  if (e.method !== 8) throw new Error("unsupported compression method " + e.method + " in " + e.name);
+  const inflated = await new Response(new Blob([data]).stream().pipeThrough(new DecompressionStream("deflate-raw"))).blob();
+  return new File([inflated], name);
+}
+
 async function collectFiles(items) {
   /* recurse DataTransferItem entries so dropping a folder works */
   const out = [];
@@ -390,18 +443,47 @@ async function ingest(files) {
    * of surprise. */
   const gen = DATA_GEN;
   const stale = () => gen !== DATA_GEN;
-  const all = [...files].filter((f) => f && f.name);
+  const dropped = [...files].filter((f) => f && f.name);
+  /* Open any archive that can be opened here. Player_Journey.zip has no
+   * password, so it is inflated in the browser and its files join the drop.
+   * The outer download IS password-protected: it is recognised by its
+   * encryption flag and left in the list so the explainer below can say so. */
+  const all = [];
+  const opened = [];      // [archive name, files inside]
+  let lockedZip = false;
+  for (const f of dropped) {
+    if (!/\.zip$/i.test(f.name) || !ZIP_OK || f.size > 200 * 1024 * 1024) { all.push(f); continue; }
+    try {
+      const z = await unzipFile(f);
+      if (stale()) return;
+      if (z.entries.some((e) => e.encrypted)) { lockedZip = true; all.push(f); continue; }
+      const inner = z.entries.filter((e) => !e.name.endsWith("/") && /\.(tsv|csv|txt|json)$/i.test(e.name));
+      if (!inner.length) { all.push(f); continue; }
+      for (const e of inner) all.push(await zipEntryFile(z, e));
+      opened.push([base(f.name), inner.length]);
+    } catch (err) { console.warn("Could not open", f.name, err); all.push(f); }
+  }
+  if (stale()) return;
   const list = all.filter((f) => /\.(tsv|csv|txt|json)$/i.test(f.name));
   if (!list.length) {
-    // The single most common first attempt: dropping the ZIP Niantic sent, unopened.
+    // The single most common first attempt: dropping the ZIP support sent, unopened.
     if (all.some((f) => /\.zip$/i.test(f.name)))
-      showError('That looks like the ZIP file Niantic sent you — it needs unzipping first, with the password from their message. '
+      showError((lockedZip || ZIP_OK
+        ? 'That looks like the password-protected ZIP support sent you — it needs unzipping first, with the password from their message. '
+        : 'That looks like the ZIP support sent you — this browser can\'t open archives here, so unzip it first. ')
         + (/iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1)
           ? 'Heads up: the iPhone Files app <b>cannot</b> open a password-protected ZIP — email or AirDrop it to a computer, unzip it there, then come back. '
           : 'Double-click it, type the password, then drop the unzipped folder here. ')
         + '<a href="index.html#request">Full instructions →</a>', true);
     else showError("No .tsv / .csv / .txt / .json files found in what you dropped.");
     return;
+  }
+  // The archive itself stays in the list, marked as opened, so the reader can
+  // see where twenty-one extra files came from.
+  for (const [zn, n] of opened) {
+    const rec = { name: zn, text: null, entry: null, container: n };
+    const i = RAW.findIndex((r) => r.name.toLowerCase() === zn.toLowerCase());
+    if (i >= 0) RAW[i] = rec; else RAW.push(rec);
   }
   /* Reading a whole folder is seconds of silent awaits — put the dropzone into
    * a visible reading state so the drop never looks ignored. Restored in the
@@ -413,8 +495,8 @@ async function ingest(files) {
   try {
     for (const f of list) {
       const name = base(f.name);
-      const entry = window.catalogFor(name)
-        // the app's own stats export is not a Niantic file, but it has a chapter
+      let entry = window.catalogFor(name)
+        // the app's own stats export is not an export file, but it has a chapter
         || (/^pogo-metrics-stats.*\.json$/i.test(name)
           ? { name: "Friend's stats (from this site)", icon: "🤝", story: true, sensitivity: "low",
               summary: "A stats JSON exported by POGO Metrics — unlocks the You vs. friend chapter." }
@@ -444,7 +526,10 @@ async function ingest(files) {
       // export stops costing ~72 MB of retained UTF-16 for the tab's lifetime.
       // Several files (sweepstakes, leaderboards, refunds) arrive containing
       // nothing but "No data found." — that isn't a file we failed to read, it's
-      // Niantic saying there's nothing on record, and the list should say so.
+      // the export saying there's nothing on record, and the list should say so.
+      // A Campfire export is named after the trainer, not the product — when the
+      // name gave nothing away, its first line does.
+      if (!entry && /^\uFEFF?User'?s Clubs/.test(text.slice(0, 40))) entry = window.catalogFor("campfire.csv");
       const rec = { name, text, entry, file: f, empty: /^\s*No data found\.?\s*$/i.test(text) };
       if (existing >= 0) RAW[existing] = rec; else RAW.push(rec);
       added++;
@@ -461,7 +546,9 @@ async function ingest(files) {
     const names = skippedExt.slice(0, 4).map((f) => esc(f.name)).join(", ");
     showError(`${skippedExt.length} file${skippedExt.length > 1 ? "s" : ""} in that drop ${skippedExt.length > 1 ? "aren't formats" : "isn't a format"} this site reads (${names}${skippedExt.length > 4 ? ", …" : ""})`
       + (skippedExt.some((f) => /\.zip$/i.test(f.name))
-        ? " — the ZIP needs unzipping first; the files inside it are what you want to add."
+        ? (lockedZip
+          ? " — that ZIP is password-protected, so it needs unzipping first; the files inside it are what you want to add."
+          : " — that ZIP couldn't be opened here; unzip it first, the files inside it are what you want to add.")
         : " — only .tsv / .csv / .txt / .json carry chapters."), true);
   }
   renderDetected();
@@ -577,7 +664,7 @@ function renderDetected() {
   renderUnlocks();
   const buildRow = $("build-row");
   if (!RAW.length) { el.innerHTML = ""; if (buildRow) buildRow.style.display = "none"; return; }
-  const tally = { ready: 0, privacy: 0, noChapter: 0, empty: 0, oversize: 0, unknown: 0 };
+  const tally = { ready: 0, privacy: 0, noChapter: 0, empty: 0, oversize: 0, unknown: 0, container: 0 };
   const rows = RAW.map((r) => {
     let cls = "unknown", status = "Not recognized", name = r.name, icon = window.ICON ? window.ICON("search") : "❓", note = "We don't have a story for this file.", kind = "unknown";
     if (r.entry) {
@@ -588,7 +675,13 @@ function renderDetected() {
       else if (r.entry.sensitivity === "high") { cls = "skip"; status = "Skipped (privacy)"; kind = "privacy"; }
       else { cls = "skip"; status = "No chapter yet"; kind = "noChapter"; }
     }
-    if (r.empty) { cls = "skip"; status = "Empty — nothing on record"; note = "Niantic sent this file with no rows in it."; kind = "empty"; }
+    if (r.container) { cls = "ok"; status = `Opened — ${r.container} files inside added`; icon = window.ICON ? window.ICON("folder") : "🗂️"; note = "Not password-protected, so it was opened right here in your browser."; kind = "container"; }
+    else if (r.entry && PJ_PAIR.test(base(r.name)) && pjTwinPresent(r.name)) {
+      note = /2\.csv$/i.test(r.name)
+        ? "The 3-year timeline. Its positions are blurred to a few km in the export itself, so its “1” twin draws the map; the months they share are counted once."
+        : "Precise positions for the last ~15 months — this file draws your map and ranks your stops; its “2” twin stretches the timeline to 3 years.";
+    }
+    if (r.empty) { cls = "skip"; status = "Empty — nothing on record"; note = "The export shipped this file with no rows in it."; kind = "empty"; }
     if (r.oversize) { cls = "skip"; status = `Too large (${r.oversize} MB) — skipped`; kind = "oversize"; }
     if (r.unreadable) { cls = "unknown"; status = "Couldn't read — add it again"; note = "The browser couldn't open this file. Pick or drop it once more."; kind = "unknown"; }
     tally[kind]++;
@@ -633,8 +726,12 @@ async function routeFile(name, text) {
     if (/gameplay\.txt$/i.test(n)) return parseGameplay(text);
     if (PJ_EVENTS.some(([re]) => re.test(n)) || /^(pokestop_spin|sfida_capture|map_pokemon_encounter|join_raid_lobby|gym_battle|feed_pokemon|deploy_pokemon|incense_encounter|lure_encounter)\d*\.csv$/i.test(n)) {
       const hit = PJ_EVENTS.find(([re]) => re.test(n));
-      // awaited, not just returned, so a rejection lands in the catch below
-      if (hit) return await parsePlayerJourney(hit[1], text);
+      if (hit) {
+        const m = PJ_PAIR.exec(base(n));
+        const two = !!(m && m[2] === "2"), twin = m ? pjTwinPresent(n) : false;
+        // awaited, not just returned, so a rejection lands in the catch below
+        return await parsePlayerJourney(hit[1], text, { blurred: two, skipWindow: two && twin, mapOK: !(two && twin) });
+      }
     }
     if (/gameplaylocationhistory\.tsv$/i.test(n)) return await parseLocation(text);
     if (/friendlist\.tsv$/i.test(n)) return parseFriends(text);
@@ -651,12 +748,46 @@ async function routeFile(name, text) {
     // files over chat and each gets a You-vs-them chapter — no server involved.
     if (/^pogo-metrics-stats.*\.json$/i.test(n)) return parseCompare(text);
     if (/imagedata\.txt$/i.test(n)) return parsePhotos(text);
+    // Campfire's export is named after the trainer (<codename>_<date>_<time>.csv),
+    // so it is recognised by its shape as well as its name.
+    if (/campfire|_\d{8}_\d{6}\.csv$/i.test(n) || /^\uFEFF?User'?s Clubs/.test(text.slice(0, 40))) return parseCampfire(text);
     if (/supportinteractions\d*\.tsv$/i.test(n)) return parseSupport(text);
   } catch (e) {
     console.warn("Failed to parse", name, e);
   }
 }
 function markLoaded(label) { if (!STATE.loaded.includes(label)) STATE.loaded.push(label); }
+
+/* Every Player_Journey event ships as a PAIR — Pokestop_spin1.csv beside
+ * Pokestop_spin2.csv — and they are not halves. Measured on two real exports
+ * (June 2026 under Niantic, August 2026 under Scopely) and checked against the
+ * GPS trail in GameplayLocationHistory.tsv:
+ *   "1"  the trailing ~15 months, positions PRECISE — a median 230 m from the
+ *        trail at the same minute (a spin happens within ~80 m of its stop).
+ *   "2"  the trailing ~3 years of the SAME events (every "1" timestamp is in
+ *        it), with every position blurred to a cell a few kilometres wide — a
+ *        median 4.1 km from the trail, never within 100 m, and 159 distinct
+ *        "stops" for 86,000 spins where the precise file holds 1,266.
+ * So the two files answer different questions: the long one is the timeline,
+ * the precise one is the map. A whole-folder drop used to parse both as if
+ * they were independent — fifteen months counted twice, and a blurred cell
+ * with 37,584 "visits" topping the regular-haunts list.
+ * The rule: a "1" file is parsed in full. Its "2" twin is parsed with the "1"
+ * window skipped (those events are already counted) and with its positions
+ * kept out of the map and the stop/gym rankings — a blurred cell is not a
+ * stop. Raid distances still use them: a few kilometres is nothing against
+ * the 50 km that makes a raid remote. A "2" file dropped on its own keeps its
+ * blurred positions for the map (a 4 km blur is invisible on a globe) but
+ * still never ranks them as stops. */
+const PJ_PAIR = /^(pokestop_spin|sfida_capture|map_pokemon_encounter|join_raid_lobby|gym_battle|feed_pokemon|deploy_pokemon|incense_encounter|lure_encounter)([12])\.csv$/i;
+function pjTwinPresent(name) {
+  const m = PJ_PAIR.exec(base(name));
+  if (!m) return false;
+  const twin = (m[1] + (m[2] === "1" ? "2" : "1") + ".csv").toLowerCase();
+  return RAW.some((r) => r.name.toLowerCase() === twin && !r.oversize && !r.empty && !r.unreadable);
+}
+/* Build order: "1" files before their "2" twins, so the window to skip is known. */
+function pjOrder(name) { const m = PJ_PAIR.exec(base(name)); return m && m[2] === "2" ? 1 : 0; }
 
 /* ───────────────────────────── parsers ───────────────────────────── */
 function parseGameplay(text) {
@@ -823,13 +954,19 @@ function parseRecentLog(text) {
 
 /* The single biggest parse in the app — ~446k rows across the Player_Journey
  * files, and the reason a build used to lock the page. Streams and yields. */
-async function parsePlayerJourney(label, text) {
+async function parsePlayerJourney(label, text, opts = {}) {
   const e = STATE.ev;
-  let n = 0;
+  const win = opts.skipWindow ? e.win[label] : null;   // the precise twin's span — those events are already counted
+  const places = !opts.blurred;                         // only precise positions may rank as stops and gyms
+  const mapOK = opts.mapOK !== false;                   // blurred positions draw the map only when nothing better exists
+  let n = 0, first = null, last = null;
   await eachRow(text, "x.csv", (row) => {
     const ts = parseTS(row.Timestamp);
     if (!ts) return;
+    if (win && ts >= win.first && ts <= win.last) return;
     n++;
+    if (!first || ts < first) first = ts;
+    if (!last || ts > last) last = ts;
     if (!e.first || ts < e.first) e.first = ts;
     if (!e.last || ts > e.last) e.last = ts;
     const mk = monthKey(ts);
@@ -843,18 +980,24 @@ async function parsePlayerJourney(label, text) {
     let hasLoc = false;
     if (!isNaN(lat) && !isNaN(lon) && (lat || lon)) {
       hasLoc = true;
-      const key = lat.toFixed(3) + "," + lon.toFixed(3);
-      e.geo.set(key, (e.geo.get(key) || 0) + 1);
-      if (!e.geoFirst.has(key)) e.geoFirst.set(key, mk);
-      let kc = e.geoKind.get(key);
-      if (!kc) { kc = {}; e.geoKind.set(key, kc); }
-      kc[label] = (kc[label] || 0) + 1;
+      if (mapOK) {
+        const key = lat.toFixed(3) + "," + lon.toFixed(3);
+        e.geo.set(key, (e.geo.get(key) || 0) + 1);
+        // the EARLIEST month, not the first file parsed — event files arrive in any order
+        if (!e.geoFirst.has(key) || mk < e.geoFirst.get(key)) e.geoFirst.set(key, mk);
+        let gm = e.geoMonths.get(key);
+        if (!gm) { gm = {}; e.geoMonths.set(key, gm); }
+        gm[mk] = (gm[mk] || 0) + 1;
+        let kc = e.geoKind.get(key);
+        if (!kc) { kc = {}; e.geoKind.set(key, kc); }
+        kc[label] = (kc[label] || 0) + 1;
+      } else e.blurredRows++;
     }
     /* Fort_/Gym_ coordinates identify the actual PokéStop or gym — the export
      * has carried them all along and nothing ever read them. Binned to ~11 m so
      * GPS scatter around one real stop collapses to a single place. */
     const flat = parseFloat(row.Fort_Latitude), flon = parseFloat(row.Fort_Longitude);
-    if (!isNaN(flat) && !isNaN(flon) && (flat || flon)) {
+    if (places && !isNaN(flat) && !isNaN(flon) && (flat || flon)) {
       const fk = flat.toFixed(4) + "," + flon.toFixed(4);
       const f = e.forts.get(fk);
       if (f) { f.n++; if (ts < f.first) f.first = ts; if (ts > f.last) f.last = ts; }
@@ -863,7 +1006,7 @@ async function parsePlayerJourney(label, text) {
     if (label === "Raids") {
       e.raidTotal++;
       const glat = parseFloat(row.Gym_Latitude), glon = parseFloat(row.Gym_Longitude);
-      if (!isNaN(glat) && !isNaN(glon) && (glat || glon)) {
+      if (places && !isNaN(glat) && !isNaN(glon) && (glat || glon)) {
         const gk = glat.toFixed(4) + "," + glon.toFixed(4);
         const g = e.gyms.get(gk);
         if (g) { g.n++; if (ts < g.first) g.first = ts; if (ts > g.last) g.last = ts; }
@@ -878,7 +1021,10 @@ async function parsePlayerJourney(label, text) {
           e.remoteRaidsByYear[ts.getUTCFullYear()] = (e.remoteRaidsByYear[ts.getUTCFullYear()] || 0) + 1;
           const ak = `${lat.toFixed(1)},${lon.toFixed(1)},${glat.toFixed(1)},${glon.toFixed(1)}`;
           e.raidArcs.set(ak, (e.raidArcs.get(ak) || 0) + 1);
-          if (!e.arcFirst.has(ak)) e.arcFirst.set(ak, mk);
+          if (!e.arcFirst.has(ak) || mk < e.arcFirst.get(ak)) e.arcFirst.set(ak, mk);
+          let am = e.arcMonths.get(ak);
+          if (!am) { am = {}; e.arcMonths.set(ak, am); }
+          am[mk] = (am[mk] || 0) + 1;
           const gk = `${glat.toFixed(1)},${glon.toFixed(1)}`;
           e.raidGymBins.set(gk, (e.raidGymBins.get(gk) || 0) + 1);
         }
@@ -886,6 +1032,7 @@ async function parsePlayerJourney(label, text) {
     }
   });
   e.totals[label] = (e.totals[label] || 0) + n;
+  if (n && !opts.blurred) e.win[label] = { first, last };
   if (n) markLoaded("Player Journey events");
 }
 
@@ -1204,13 +1351,124 @@ function parseWayfarer(text) {
   } catch (e) { /* ignore malformed */ }
 }
 
+/* ── Campfire (<codename>_<yyyymmdd>_<hhmmss>.csv) ──
+ * Campfire's data export is one CSV holding ten sections back to back — clubs,
+ * channels, every message you sent, friends, meetups you hosted, RSVP'd to and
+ * checked into, comments, posts, and your last IP address — each introduced by
+ * a title line and its own header. Message bodies are quoted and span lines,
+ * so this is the one file the line-based splitter cannot read; a small
+ * RFC 4180 scanner walks it instead.
+ *
+ * COUNTS AND DATES ONLY. This file is mostly other people's words plus the
+ * coordinates of every meetup you went to. Nothing below keeps a message, a
+ * codename, a title, a URL, a coordinate or the IP: each row is reduced to a
+ * month, a kind and a tally as it is read, and the text is dropped. */
+function csvRecords(text) {
+  const recs = [];
+  let row = [], cell = "", q = false, i = 0;
+  text = text.replace(/^﻿/, "");
+  const n = text.length;
+  while (i < n) {
+    const ch = text[i];
+    if (q) {
+      if (ch === '"') { if (text[i + 1] === '"') { cell += '"'; i++; } else q = false; }
+      else cell += ch;
+    } else if (ch === '"') q = true;
+    else if (ch === ",") { row.push(cell); cell = ""; }
+    else if (ch === "\n" || ch === "\r") {
+      if (ch === "\r" && text[i + 1] === "\n") i++;
+      row.push(cell); recs.push(row); row = []; cell = "";
+    } else cell += ch;
+    i++;
+  }
+  if (cell.length || row.length) { row.push(cell); recs.push(row); }
+  return recs;
+}
+/* The kind of meetup, from its title. Only the kind survives — never the title. */
+const CF_KINDS = [
+  [/raid hour/i, "Raid Hour"], [/raid day/i, "Raid Day"], [/community day/i, "Community Day"],
+  [/spotlight/i, "Spotlight Hour"], [/max battle|dynamax|gigantamax|max monday/i, "Max Battle"],
+  [/go fest/i, "GO Fest"], [/go tour/i, "GO Tour"], [/research day|hatch day/i, "Research & Hatch Days"],
+  [/rocket|giovanni|shadow raid/i, "Team GO Rocket"], [/raid/i, "Other raids"],
+];
+/* "2024-07-04 00:51:20.541 +0000 UTC" → the shape parseTS already reads fast */
+function cfTime(s) { return String(s || "").replace(/\s\+0000\s+UTC$/, " UTC"); }
+function parseCampfire(text) {
+  const recs = csvRecords(text);
+  const cf = {
+    clubs: 0, channels: 0, posts: 0, comments: 0,
+    messages: 0, msgMonthly: {}, msgHours: Array(24).fill(0), msgFirst: null, msgLast: null,
+    friends: 0, friendSources: {}, friendsYouAsked: 0, friendsTheyAsked: 0,
+    hosted: 0, hostedRsvps: 0, hostedCheckins: 0, hostedMonthly: {},
+    rsvps: 0, rsvpMonthly: {}, checkins: 0, checkinMonthly: {}, checkinDays: new Set(),
+    kinds: {}, kindsRsvp: {}, first: null, last: null,
+  };
+  const seen = { hosted: new Set(), rsvp: new Set(), checkin: new Set() };
+  let section = null, header = null;
+  const isTitle = (r) => r.length === 1 && /^User('s|-Created)?\s+[A-Z]/.test(r[0].trim());
+  const touch = (ts) => { if (!cf.first || ts < cf.first) cf.first = ts; if (!cf.last || ts > cf.last) cf.last = ts; };
+  const kindOf = (t) => { for (const [re, k] of CF_KINDS) if (re.test(t)) return k; return "Meetups & other"; };
+  const bump = (o, k) => { o[k] = (o[k] || 0) + 1; };
+  for (const r of recs) {
+    if (!r.some((c) => c.trim())) continue;
+    if (isTitle(r)) { section = r[0].trim().toLowerCase(); header = null; continue; }
+    if (!section) continue;
+    if (!header) { header = r.map((h) => h.trim()); continue; }
+    const row = {};
+    header.forEach((h, j) => (row[h] = (r[j] || "").trim()));
+    if (section.includes("clubs")) { if (row.Name || r[0]) cf.clubs++; }
+    else if (section.includes("channels")) { if (row.Name || r[0]) cf.channels++; }
+    else if (section.includes("sent messages")) {
+      const ts = parseTS(cfTime(row["Sent At"] || r[1]));
+      if (!ts) continue;
+      cf.messages++; touch(ts);
+      bump(cf.msgMonthly, monthKey(ts));
+      cf.msgHours[ts.getUTCHours()]++;
+      if (!cf.msgFirst || ts < cf.msgFirst) cf.msgFirst = ts;
+      if (!cf.msgLast || ts > cf.msgLast) cf.msgLast = ts;
+    }
+    else if (section.includes("friends")) {
+      const src = (row["Friendship source"] || r[1] || "").trim();
+      if (!/^[A-Z_]+$/.test(src)) continue;   // not a friend row
+      cf.friends++; bump(cf.friendSources, src);
+      if (/^true$/i.test(row["Initiated by me"] || r[2] || "")) cf.friendsYouAsked++; else cf.friendsTheyAsked++;
+    }
+    else if (/meetups|rsvps|checkins/.test(section)) {
+      const ts = parseTS(cfTime(row["Event Start Time"] || r[2]));
+      if (!ts) continue;
+      const id = row["Event Id"] || r[0] || String(ts.getTime());
+      const mk = monthKey(ts), kind = kindOf(row["Event Title"] || "");
+      const rs = +(row["RSVP count"] || 0) || 0, ci = +(row["Check-in count"] || 0) || 0;
+      touch(ts);
+      if (section.includes("meetups")) {
+        if (seen.hosted.has(id)) continue; seen.hosted.add(id);
+        cf.hosted++; cf.hostedRsvps += rs; cf.hostedCheckins += ci; bump(cf.hostedMonthly, mk);
+      } else if (section.includes("rsvps")) {
+        if (seen.rsvp.has(id)) continue; seen.rsvp.add(id);
+        cf.rsvps++; bump(cf.rsvpMonthly, mk); bump(cf.kindsRsvp, kind);
+      } else {
+        if (seen.checkin.has(id)) continue; seen.checkin.add(id);
+        cf.checkins++; bump(cf.checkinMonthly, mk); bump(cf.kinds, kind); cf.checkinDays.add(ts.toISOString().slice(0, 10));
+      }
+    }
+    else if (section.includes("comments")) { if (parseTS(cfTime(row["Created At"] || r[3]))) cf.comments++; }
+    else if (section.includes("posts")) { if ((row["Post Id"] || r[0] || "").trim()) cf.posts++; }
+    // "user last recorded ip address" — deliberately never read
+  }
+  cf.checkinDays = cf.checkinDays.size;
+  if (cf.messages || cf.rsvps || cf.checkins || cf.hosted || cf.friends || cf.clubs) {
+    STATE.campfire = cf;
+    markLoaded("Campfire export");
+  }
+}
+
 /* ───────────────────────────── DOM helpers ───────────────────────────── */
 /* `anchor` pins the chapter's #id when the heading can't be trusted to stay
    the same — the trainer card's title contains the player's name, so its slug
    would otherwise differ for every reader and no link to it could be shared. */
 /* Each chapter keeps the emoji it was written with as its KEY, and that key
  * resolves to a line icon from nav.js's set plus a hue. The hue is the one
- * thing that tells sixteen otherwise identically-built panels apart at a
+ * thing that tells seventeen otherwise identically-built panels apart at a
  * glance: it colours the eyebrow, the icon chip, the rail entry and a top
  * rule, and nothing else — charts keep the shared palette. */
 const CHAPTER_META = {
@@ -1219,7 +1477,7 @@ const CHAPTER_META = {
   "🔍": ["search", "pink"],    "📸": ["camera", "purple"],  "📅": ["calendar", "magenta"],
   "🌍": ["globe", "blue"],     "📍": ["pin", "blue"],       "💳": ["card", "green"],
   "🏃": ["activity", "orange"], "🎟️": ["ticket", "magenta"], "📱": ["phone", "blue"],
-  "🧭": ["compass", "teal"],
+  "🧭": ["compass", "teal"],   "🔥": ["flame", "orange"],
 };
 function chapterMeta(icon, anchor) {
   if (anchor === "versus-friend") return ["zap", "green"];
@@ -1541,12 +1799,14 @@ async function build() {
     // (see eachRow), which is what stops one 8.9MB CSV freezing the page.
     const prog = $("build-progress");
     const bar = $("build-bar-fill");
-    const readable = RAW.filter((r) => !r.oversize).length;
+    const readable = RAW.filter((r) => !r.oversize && !r.container).length;
     const srcWord = SAMPLE_DATA || window.DEMO_PAGE ? "the sample export" : "your files";
     let readN = 0;
     const unreadable = [];
-    for (const r of RAW) {
+    // "1" journey files before their "2" twins — the window to skip has to be known first
+    for (const r of [...RAW].sort((a, b) => pjOrder(a.name) - pjOrder(b.name))) {
       if (r.oversize) continue; // too large to read at all — already flagged in the list
+      if (r.container) continue; // an archive already opened — its files are in RAW on their own
       readN++;
       // determinate, not a bare spinner: "2 in or 12?" is the whole question
       if (prog) prog.textContent = `Reading ${r.name} (${readN} of ${readable}, ${srcWord})…`;
@@ -1616,6 +1876,7 @@ async function build() {
     safe(renderYearOverYear);
     safe(renderCompare);
     safe(renderSocial);
+    safe(renderCampfire);
     safe(renderSpending);
     safe(renderFitness);
     safe(renderPhotos);
@@ -1625,7 +1886,7 @@ async function build() {
 
     // chapter navigation — a rail beside the report on wide screens, a sticky
     // strip under the nav on narrow ones. Either way it tracks the chapter in
-    // view, so the reader always knows where they are in a sixteen-panel report.
+    // view, so the reader always knows where they are in a seventeen-panel report.
     const mods = [...res.querySelectorAll(".module")];
     if (mods.length >= 3) {
       const chips = mods.map((m, i) => {
@@ -2074,7 +2335,7 @@ function outro() {
     return `<div class="notice" style="margin-top:30px">
       <b>Like what you see?</b> This whole page was built from a sample export — yours would be built
       from your real journey. <a href="metrics.html">Build yours →</a> or
-      <a href="index.html#request">request your data from Niantic first</a>.</div>` + modelHandoff();
+      <a href="index.html#request">request your data in-game first</a>.</div>` + modelHandoff();
   }
   // tell the player exactly which chapters their remaining files would unlock
   const locked = (window.CATALOG || []).filter((c) =>
@@ -2175,7 +2436,7 @@ function storySlides(year) {
       s.push({ kicker: "DAY ONE", big: fmtDate(parseTS(dayKeys[0])), label: `${fmt(daysSince)} days ago, your log begins`, grad: 1 });
     }
   }
-  if (total) s.push({ kicker: yr ? `YOUR ${yr}` : "SINCE THEN", num: total, label: yr ? `actions logged in ${yr}` : "actions in the game's log — every spin, catch, raid and battle Niantic wrote down", grad: 2 });
+  if (total) s.push({ kicker: yr ? `YOUR ${yr}` : "SINCE THEN", num: total, label: yr ? `actions logged in ${yr}` : "actions in the game's log — every spin, catch, raid and battle the game wrote down", grad: 2 });
   const catches = catchesOf(kinds);
   if (catches) s.push({ kicker: "GOTTA CATCH 'EM ALL", num: catches, label: `Pokémon caught${yr ? ` in ${yr}` : " in the logs — map, incense, lure and GO Plus catches combined"}`, grad: 3 });
   let bigDay = null, bigN = 0;
@@ -2199,6 +2460,9 @@ function storySlides(year) {
   if (km > 1) s.push({ kicker: "ON FOOT", num: Math.round(km), label: `kilometres walked with the game open${yr ? ` in ${yr}` : ""}`, grad: 10 });
   const photosN = yr ? sumMonthly(STATE.photos.monthly) : STATE.photos.total;
   if (photosN) s.push({ kicker: "THROUGH THE LENS", num: photosN, label: `GO Snapshots you stopped to take${yr ? ` in ${yr}` : ""}`, grad: 3 });
+  const cf = STATE.campfire;
+  const meetN = cf ? (yr ? sumMonthly(cf.checkinMonthly) : cf.checkins) : 0;
+  if (meetN) s.push({ kicker: "AROUND THE CAMPFIRE", num: meetN, label: `meetups you showed up for${yr ? ` in ${yr}` : ""}${!yr && cf.messages ? ` — and ${fmt(cf.messages)} messages to your clubs` : ""}`, grad: 6 });
   if (!yr) {
     const arch = trainerArchetype();
     if (arch) s.push({ kicker: "YOUR TRAINER TYPE", big: `${arch.emoji} ${esc(arch.name)}`, label: `${arch.line} — computed from your whole journey`, grad: 5, gradPair: arch.grads });
@@ -2229,6 +2493,7 @@ function storyIcon(k) {
   if (/NOT ALONE/.test(k)) return "users";
   if (/WAR CHEST/.test(k)) return "card";
   if (/LENS/.test(k)) return "camera";
+  if (/CAMPFIRE/.test(k)) return "flame";
   if (/TRAINER TYPE/.test(k)) return "user";
   if (/AMONG/.test(k)) return "trending";
   if (/SINCE THEN|^YOUR \d{4}/.test(k)) return "list";
@@ -2449,7 +2714,7 @@ function downloadICS(summary, date, filename) {
     "BEGIN:VEVENT", "UID:" + stamp + "@pogo-metrics",
     "DTSTAMP:" + stamp, "DTSTART;VALUE=DATE:" + ymd,
     "SUMMARY:" + summary,
-    "DESCRIPTION:Projected from your recent pace by POGO Metrics. Re-export from Niantic and rebuild to see how close you are: https://pogo-metrics.netlify.app/",
+    "DESCRIPTION:Projected from your recent pace by POGO Metrics. Request a fresh export and rebuild to see how close you are: https://pogo-metrics.netlify.app/",
     "URL:https://pogo-metrics.netlify.app/", "END:VEVENT", "END:VCALENDAR",
   ].join("\r\n");
   const url = URL.createObjectURL(new Blob([ics], { type: "text/calendar" }));
@@ -2733,7 +2998,7 @@ function downloadStatsJSON() {
   const e = STATE.ev;
   const out = {
     generated: new Date().toISOString(),
-    source: "POGO Metrics — parsed locally in your browser from your official Niantic export",
+    source: "POGO Metrics — parsed locally in your browser from your official Pokémon GO export",
     note: "Location data is deliberately NOT included in this export: no GPS trail, no activity or stop coordinates, and no city or travel history. Those stay in the browser.",
     profile: STATE.profile,
     totalsByAction: e.totals,
@@ -2751,6 +3016,8 @@ function downloadStatsJSON() {
     supportTickets: STATE.support.tickets,
     liveEvents: STATE.liveEvents.length,
     wayfarer: STATE.wayfarer,
+    // counts and months only — the Campfire parser keeps no text, names or coordinates
+    campfire: STATE.campfire,
   };
   const url = URL.createObjectURL(new Blob([JSON.stringify(out, null, 2)], { type: "application/json" }));
   const a = document.createElement("a");
@@ -2784,7 +3051,7 @@ function renderTrainer() {
      * profiles, so STATE.bag genuinely can be absent). */
     STATE.bag
       ? [fmt(STATE.bag.bagTotal), "Items in bag", fmt(STATE.bag.distinct) + " different kinds"]
-      : [fmt(p.totalItems || 0), "Items in bag", "as counted by Niantic"],
+      : [fmt(p.totalItems || 0), "Items in bag", "as counted by the game"],
     [fmt(p.medalCount || STATE.medals.length || 0), "Medals earned"],
   ];
   let inner = statGrid(stats);
@@ -2826,7 +3093,7 @@ function renderTrainer() {
 
   /* This card mixes two clocks. Level, XP, distance, stardust, eggs and medals
    * are lifetime figures straight from Gameplay.txt; catches and spins are
-   * counted from Player_Journey, which Niantic only keeps about three years of.
+   * counted from Player_Journey, which the export only keeps about three years of.
    * Both are right for their source, and calling the whole card "lifetime" made
    * the second pair look wrong. Name the split instead of hiding it. */
   const windowed = (caught ? 1 : 0) + (evT["Spins"] ? 1 : 0);
@@ -2987,7 +3254,7 @@ function renderActivity() {
     renderCalendar($("cal-" + cMonthly), calYears[0], e.dayCounts);
   });
 
-  return moduleHTML("🗺️", "Your adventure log", `Every spin, catch, raid and battle Niantic logged — ${fmt(total)} actions across ${fmt(e.days.size)} days.`, inner);
+  return moduleHTML("🗺️", "Your adventure log", `Every spin, catch, raid and battle the game logged — ${fmt(total)} actions across ${fmt(e.days.size)} days.`, inner);
 }
 
 /* ── friend comparison: parse the app's OWN stats export (downloadStatsJSON)
@@ -3183,7 +3450,7 @@ function renderRecords() {
   });
 
   return moduleHTML("🏅", "Your record book",
-    `Your personal bests. An <b>action</b> is any single thing Niantic logged — a spin, a catch, a raid, a berry, a gym battle — so ${fmt(total)} actions is the sum of everything you did.`,
+    `Your personal bests. An <b>action</b> is any single thing the game logged — a spin, a catch, a raid, a berry, a gym battle — so ${fmt(total)} actions is the sum of everything you did.`,
     inner, "record-book");
 }
 
@@ -3273,7 +3540,7 @@ function renderBag() {
   if (b.points) asides.push(`<b>${fmt(b.points)}</b> event pass points`);
   if (b.resources) asides.push(`<b>${fmt(b.resources)}</b> fusion and crafting resources`);
   if (asides.length) {
-    inner += `<div class="hw-caption">Niantic counts ${fmt(b.declared)} “items” for you, but that total includes
+    inner += `<div class="hw-caption">The game counts ${fmt(b.declared)} “items” for you, but that total includes
       ${asides.join(" and ")} — progress currencies rather than things in your bag. The ${fmt(b.bagTotal)} above is
       what you are actually carrying.</div>`;
   }
@@ -3343,7 +3610,8 @@ function renderRhythm() {
       "Stop #" + (i + 1) + (i === 0 ? " — your local" : ""),
       f.n,
     ]), (v) => fmt(v) + " visits");
-    inner += `<div class="hw-caption">Niantic's export gives coordinates but no stop names, so your stops are ranked rather than named.
+    inner += `<div class="hw-caption">The export gives coordinates but no stop names, so your stops are ranked rather than named.${e.blurredRows
+      ? " Only the precise 15-month “1” files rank here — the 3-year “2” files blur every position to a few kilometres in the export itself, so their older events feed the timeline, not this list." : ""}
       Coordinates are deliberately not printed here — this chapter is safe to screenshot.</div>`;
   }
 
@@ -3414,7 +3682,7 @@ function renderRecentLog() {
     </div>`;
   }
 
-  inner += `<div class="hw-caption">This log is the short rolling window Niantic attaches to <code>Gameplay.txt</code> — usually the
+  inner += `<div class="hw-caption">This log is the short rolling window the export attaches to <code>Gameplay.txt</code> — usually the
     last few hours you played, not your whole history. It is also the only place in the entire export where individual
     Pokémon are named and their CP recorded${best ? `, which is how we know ${esc(best.name)} at CP ${fmt(best.cp)} was the best thing you caught that day` : ""}.</div>`;
 
@@ -3439,7 +3707,7 @@ function renderPhotos() {
     [best ? fmt(best[1]) : "—", "Busiest month", best ? fmtMonth(best[0]) : ""],
     [bestDay ? fmt(bestDay[1]) : "—", "Most in one day",
       bestDay ? fmtDate(parseTS(bestDay[0])) + (bestDayEvent ? " · " + bestDayEvent : "") : ""],
-    [P.first ? fmtDate(P.first) : "—", "Oldest photo kept", "the start of Niantic's window"],
+    [P.first ? fmtDate(P.first) : "—", "Oldest photo kept", "the start of the export's window"],
   ];
   let inner = statGrid(stats);
 
@@ -3465,6 +3733,84 @@ function renderPhotos() {
   return moduleHTML("📸", "Your photo album",
     `${fmt(P.total)} GO Snapshots${P.first && P.last ? `, between ${esc(fmtDate(P.first))} and ${esc(fmtDate(P.last))}` : ""}.`,
     inner);
+}
+
+/* ── Campfire: meetups, club chat, your Campfire circle ── */
+function renderCampfire() {
+  const cf = STATE.campfire;
+  if (!cf) return;
+  const pct = (a, b) => (b ? Math.round((a / b) * 100) : 0);
+  const stats = [];
+  if (cf.checkins || cf.rsvps) stats.push([fmt(cf.checkins), "Meetups you showed up for", cf.rsvps ? `of ${fmt(cf.rsvps)} you RSVP'd to — a ${pct(cf.checkins, cf.rsvps)}% show-up rate` : ""]);
+  if (cf.hosted) stats.push([fmt(cf.hosted), "Meetups you hosted", `drawing ${fmt(cf.hostedRsvps)} RSVPs and ${fmt(cf.hostedCheckins)} check-ins`]);
+  if (cf.messages) stats.push([fmt(cf.messages), "Messages to your clubs", cf.msgFirst ? `since ${fmtDate(cf.msgFirst)}` : ""]);
+  if (cf.friends) {
+    const top = Object.entries(cf.friendSources).sort((a, b) => b[1] - a[1])[0];
+    stats.push([fmt(cf.friends), "Campfire friends", top ? `${pct(top[1], cf.friends)}% via ${prettySource(top[0])}` : ""]);
+  }
+  let inner = statGrid(stats);
+
+  const months = monthSpan([...Object.keys(cf.rsvpMonthly), ...Object.keys(cf.checkinMonthly), ...Object.keys(cf.hostedMonthly)]);
+  const mMonths = monthSpan(Object.keys(cf.msgMonthly));
+  if (months.length || mMonths.length) {
+    const c1 = uid(), c2 = uid();
+    inner += `<div class="split" style="margin-top:18px">${months.length ? chartWrap(c1) : ""}${mMonths.length ? chartWrap(c2) : ""}</div>`;
+    if (months.length) later(() => newChart(c1, {
+      type: "bar",
+      data: {
+        labels: months.map(fmtMonth),
+        datasets: [
+          { label: "Checked in", backgroundColor: C.orange, stack: "m", data: months.map((m) => cf.checkinMonthly[m] || 0) },
+          { label: "RSVP'd, no check-in", backgroundColor: alpha(C.orange, 0.35), stack: "m", data: months.map((m) => Math.max(0, (cf.rsvpMonthly[m] || 0) - (cf.checkinMonthly[m] || 0))) },
+          { label: "Hosted", backgroundColor: C.yellow, stack: "h", data: months.map((m) => cf.hostedMonthly[m] || 0) },
+        ],
+      },
+      options: {
+        interaction: { mode: "index", intersect: false },
+        plugins: { title: { display: true, text: "Meetups, month by month" } },
+        scales: { x: { stacked: true, grid: { display: false }, ticks: { maxTicksLimit: 12 } }, y: { stacked: true, beginAtZero: true, title: { display: true, text: "meetups" } } },
+      },
+    }));
+    if (mMonths.length) later(() => newChart(c2, {
+      type: "bar",
+      data: { labels: mMonths.map(fmtMonth), datasets: [{ label: "Messages", backgroundColor: C.teal, data: mMonths.map((m) => cf.msgMonthly[m] || 0) }] },
+      options: {
+        plugins: { legend: { display: false }, title: { display: true, text: "Club chat, month by month" } },
+        scales: { x: { grid: { display: false }, ticks: { maxTicksLimit: 12 } }, y: { beginAtZero: true, title: { display: true, text: "messages" } } },
+      },
+    }));
+  }
+
+  const kinds = Object.entries(cf.checkins ? cf.kinds : cf.kindsRsvp).sort((a, b) => b[1] - a[1]).slice(0, 8);
+  const bits = [];
+  if (cf.clubs) bits.push([fmt(cf.clubs), cf.clubs === 1 ? "club" : "clubs"]);
+  if (cf.channels) bits.push([fmt(cf.channels), cf.channels === 1 ? "channel you created" : "channels you created"]);
+  if (cf.posts) bits.push([fmt(cf.posts), "map posts"]);
+  if (cf.comments) bits.push([fmt(cf.comments), "comments"]);
+  if (cf.checkinDays) bits.push([fmt(cf.checkinDays), "different days out at a meetup"]);
+  // chattiest hour, in the viewer's clock — "your hour" should feel like their life, not UTC
+  let hourLine = "";
+  if (cf.messages) {
+    const off = Math.round(-new Date().getTimezoneOffset() / 60);
+    let bh = 0, bn = -1;
+    for (let h = 0; h < 24; h++) if (cf.msgHours[h] > bn) { bn = cf.msgHours[h]; bh = h; }
+    hourLine = `Your chattiest hour is <b>${hourLabel((((bh + off) % 24) + 24) % 24)}</b>, in your local time.`;
+  }
+  const asked = cf.friendsYouAsked + cf.friendsTheyAsked;
+  const askLine = asked ? `On Campfire you sent the friend request <b>${pct(cf.friendsYouAsked, asked)}%</b> of the time. ` : "";
+  inner += `<div class="split" style="margin-top:16px">
+    <div>${kinds.length ? `<h4 class="mod-h4">What gets you out the door</h4>${rankList(kinds, (v) => fmt(v) + (cf.checkins ? " check-ins" : " RSVPs"))}` : ""}</div>
+    <div>${bits.length ? `<h4 class="mod-h4">Around the fire</h4>${calloutRow(bits)}` : ""}
+      ${askLine || hourLine ? `<div class="mod-sub" style="margin-top:12px">${askLine}${hourLine}</div>` : ""}
+    </div>
+  </div>`;
+  inner += `<div class="hw-caption">Campfire's export is mostly words — every message, comment and post you wrote — plus the coordinates of every meetup you joined.
+    This chapter keeps only counts and dates: message text, club and event names, meetup locations and the IP address in that file are dropped as it is read, and never shown.</div>`;
+  const sub = cf.checkins
+    ? `${fmt(cf.checkins)} meetups attended${cf.hosted ? `, ${fmt(cf.hosted)} hosted` : ""}${cf.messages ? `, ${fmt(cf.messages)} messages to your clubs` : ""}.`
+    : cf.messages ? `${fmt(cf.messages)} messages to your clubs${cf.friends ? ` and ${fmt(cf.friends)} Campfire friends` : ""}.`
+    : "Your Campfire circle.";
+  return moduleHTML("🔥", "Around the Campfire", sub, inner, "campfire");
 }
 
 function isoShift(iso, delta) {
@@ -3983,7 +4329,7 @@ function renderThenVsNow(years, data) {
     <div class="tvn-head"><span class="tvn-l"></span><span class="tvn-a">${first}</span><span class="tvn-arrow"></span><span class="tvn-b">${last}</span><span class="tvn-d">change</span></div>
     ${rows}
     <div style="margin-top:16px">${chartWrap(cId, "short")}</div>
-    <div class="hw-caption"><b>Read the percentages with care.</b> Niantic's export only reaches back a few years, so
+    <div class="hw-caption"><b>Read the percentages with care.</b> The export only reaches back a few years, so
       ${first} starts wherever your logs begin — if that is mid-year, it is a partial year and every "change" against it is
       inflated.${last === String(new Date().getUTCFullYear()) ? ` ${last} is still in progress, so it is partial too.` : ""}
       The mix chart below compares shares of each year's own total, so it stays fair either way.</div>`;
@@ -4298,7 +4644,8 @@ function renderFlatMap() {
   const bits = [];
   if (hasGeo) bits.push(`${fmt(e.geo.size)} activity hotspots`);
   if (hasTrail) bits.push(`a ${fmt(STATE.trailCount)}-point GPS trail${STATE.trailStride > 1 ? " (drawn from an even sample)" : ""}`);
-  return moduleHTML("📍", "Where you played", `Your world map, built from ${bits.join(" and ")}. Drawn entirely on your device — no map tiles are fetched from anyone else.`, inner);
+  return moduleHTML("📍", "Where you played", `Your world map, built from ${bits.join(" and ")}. Drawn entirely on your device — no map tiles are fetched from anyone else.${e.blurredRows
+    ? " The 3-year journey files blur every position to a few kilometres in the export itself, so the map is drawn from the precise 15-month files." : ""}`, inner);
 }
 
 /* ── 3D globe: activity columns + remote-raid arcs + GPS trail ── */
@@ -4337,7 +4684,7 @@ function renderGlobe() {
     const [lat, lng] = key.split(",").map(Number);
     const kc = e.geoKind.get(key) || {};
     const kind = (Object.entries(kc).sort((a, b) => b[1] - a[1])[0] || ["Encounters"])[0];
-    return { lat, lng, count, kind, m: e.geoFirst.get(key) };
+    return { lat, lng, count, kind, m: e.geoFirst.get(key), months: e.geoMonths.get(key) || null };
   });
   if (!points.length && !STATE.trail.length) return renderFlatMap();
   const maxCount = Math.max(1, ...points.map((p) => p.count));
@@ -4348,7 +4695,7 @@ function renderGlobe() {
     // PAST the real farthest raid — which the same panel prints a few hundred
     // pixels away, from the unrounded figure. One distance, one number.
     const km = haversine(slat, slng, elat, elng);
-    return { slat, slng, elat, elng, count, km: e.raidMaxKm ? Math.min(km, e.raidMaxKm) : km, m: e.arcFirst.get(key) };
+    return { slat, slng, elat, elng, count, km: e.raidMaxKm ? Math.min(km, e.raidMaxKm) : km, m: e.arcFirst.get(key), months: e.arcMonths.get(key) || null };
   });
   let home = null, hc = -1;
   for (const [key, c] of e.geo) { if (c > hc) { hc = c; const [la, lo] = key.split(",").map(Number); home = { lat: la, lng: lo }; } }
@@ -4382,12 +4729,27 @@ function renderGlobe() {
         ${gToggle(P + "ly-labels", "#dfe6ff", "Country names", true)}
         ${gToggle(P + "ly-rotate", C.blue, "Auto-rotate", !REDUCED_MOTION)}
         <button id="${P}shot" class="gh-btn" type="button"><span aria-hidden="true">📷</span> Save image</button>
-        ${REDUCED_MOTION ? "" : `<button id="${P}replay" class="gh-btn" type="button"><span aria-hidden="true">▶</span> Replay my journey</button>`}
       </details>
       <div id="${P}legend" class="globe-hud globe-legend"></div>
       <div id="${P}country" class="globe-hud globe-country" hidden></div>
       <button id="${P}fs" class="gh-btn globe-fs" type="button" aria-label="View the globe full screen">⛶ Full screen</button>
     </div>
+    <!-- the timeline: play the journey month by month, pause on any month, scrub back and forth.
+         Inside the wrap so full-screen keeps it with the stage. -->
+    <div class="globe-timeline" id="${P}tl" hidden>
+      <button id="${P}tl-play" class="tl-btn tl-play" type="button" aria-label="Play the timeline"><span aria-hidden="true">▶</span></button>
+      <button id="${P}tl-prev" class="tl-btn tl-step" type="button" aria-label="Previous month">‹</button>
+      <input type="range" id="${P}tl-range" class="tl-range" min="0" max="0" value="0" aria-label="Month on the timeline">
+      <button id="${P}tl-next" class="tl-btn tl-step" type="button" aria-label="Next month">›</button>
+      <div class="tl-label"><b id="${P}tl-month">All time</b><span id="${P}tl-span" class="mono"></span></div>
+      <div class="tl-mode" role="group" aria-label="What the globe shows">
+        <button type="button" data-mode="cum" aria-pressed="true">Up to this month</button>
+        <button type="button" data-mode="month" aria-pressed="false">This month only</button>
+      </div>
+      <label class="tl-follow"><input type="checkbox" id="${P}tl-follow"${REDUCED_MOTION ? "" : " checked"}> Follow the action</label>
+      <button id="${P}tl-all" class="tl-btn tl-step" type="button" title="Show the whole journey again">All time</button>
+    </div>
+    <div class="tl-stats" id="${P}tl-stats" hidden></div>
     </div>
     <div id="${P}below" class="globe-below"></div>
   </div>`;
@@ -4652,11 +5014,42 @@ function initGlobe({ P, points, maxCount, arcs, home, paths }) {
     el2.querySelector(".gc-x").onclick = () => { el2.hidden = true; };
   }
 
-  // toggles + arc slider
-  $$("ly-points").onchange = (ev) => world.pointsData(ev.target.checked ? points : []);
-  const updateArcs = () => world.arcsData($$("ly-arcs").checked ? arcs.filter((a) => a.km <= arcMax + 0.5) : []);
-  $$("ly-arcs").onchange = (ev) => { updateArcs(); $$("arc-ctl").classList.toggle("disabled", !ev.target.checked); };
-  $$("ly-trail").onchange = (ev) => world.pathsData(ev.target.checked ? paths : []);
+  /* ── one view function ──
+     Everything that decides what the globe shows — the layer toggles, the arc
+     distance slider and the timeline — funnels through refresh(), so a month
+     picked on the slider and a layer switched off never fight over the data. */
+  const tl = $$("tl");
+  const months = monthSpan([...new Set([
+    ...Object.keys(e.byMonth),
+    ...points.flatMap((pt) => Object.keys(pt.months || {})),
+    ...arcs.flatMap((ar) => Object.keys(ar.months || {})),
+    ...paths.map((pa) => pa.date.slice(0, 7)),
+  ])]);
+  let cur = null;          // month key on the timeline; null = the whole journey
+  let mode = "cum";        // "cum": everything up to the month · "month": that month alone
+  const inMonth = (o, m) => !!(o.months && o.months[m]);
+  const upTo = (o, m) => { if (!o.months) return o.count; let n = 0; for (const k in o.months) if (k <= m) n += o.months[k]; return n; };
+  const refresh = () => {
+    if (GLOBE !== world || !el.isConnected) return;
+    let pts, arcsNow, pathsNow;
+    if (cur === null) { pts = points; arcsNow = arcs; pathsNow = paths; }
+    else if (mode === "month") {
+      pts = points.filter((pt) => inMonth(pt, cur)).map((pt) => ({ ...pt, count: pt.months[cur] }));
+      arcsNow = arcs.filter((ar) => inMonth(ar, cur)).map((ar) => ({ ...ar, count: ar.months[cur] }));
+      pathsNow = paths.filter((pa) => pa.date.slice(0, 7) === cur);
+    } else {
+      pts = points.filter((pt) => !pt.m || pt.m <= cur).map((pt) => ({ ...pt, count: upTo(pt, cur) }));
+      arcsNow = arcs.filter((ar) => !ar.m || ar.m <= cur).map((ar) => ({ ...ar, count: upTo(ar, cur) }));
+      pathsNow = paths.filter((pa) => pa.date.slice(0, 7) <= cur);
+    }
+    world.pointsData($$("ly-points").checked ? pts : []);
+    world.arcsData($$("ly-arcs").checked ? arcsNow.filter((ar) => ar.km <= arcMax + 0.5) : []);
+    world.pathsData($$("ly-trail").checked ? pathsNow : []);
+    return pts;
+  };
+  $$("ly-points").onchange = refresh;
+  $$("ly-arcs").onchange = (ev) => { refresh(); $$("arc-ctl").classList.toggle("disabled", !ev.target.checked); };
+  $$("ly-trail").onchange = refresh;
   $$("ly-borders").onchange = (ev) => world.polygonsData(ev.target.checked ? borderFeatures : []);
   $$("ly-labels").onchange = (ev) => world.labelsData(ev.target.checked ? countryLabels : []);
   $$("ly-rotate").onchange = (ev) => { controls.autoRotate = ev.target.checked; };
@@ -4666,48 +5059,105 @@ function initGlobe({ P, points, maxCount, arcs, home, paths }) {
   arcDist.oninput = () => {
     arcMax = +arcDist.value / 100 * maxArcKm;
     $$("arc-lbl").textContent = +arcDist.value >= 100 ? "all distances" : "≤ " + fmt(Math.round(arcMax)) + " km";
-    updateArcs();
+    refresh();
   };
 
-  /* ── chronological replay: months accumulate onto the globe under a date
-     ticker — the "six years in thirty seconds" moment. Data was tagged with
-     first-seen months at parse; the trail is already day-keyed. Restores the
-     layer toggles' truth when done. Not offered under reduced motion. ── */
-  const rp = $$("replay");
-  if (rp) {
-    const months = [...new Set([
-      ...points.map((pt) => pt.m), ...arcs.map((a) => a.m),
-      ...paths.map((pa) => pa.date.slice(0, 7)),
-    ].filter(Boolean))].sort();
-    if (months.length < 2) rp.style.display = "none";
-    else rp.onclick = () => {
-      if (rp.disabled) return;
-      rp.disabled = true;
-      const stage = el.closest(".globe-stage");
-      const tick = document.createElement("div");
-      tick.className = "globe-ticker";
-      stage.appendChild(tick);
-      const dwell = Math.max(220, Math.min(650, 26000 / months.length));
-      let i = 0;
+  /* ── the timeline ──
+     Play the journey month by month, pause on any month, step, or scrub back
+     and forth. "Up to this month" shows the journey the way it accumulated —
+     columns grow as months pass; "This month only" shows just what happened
+     then. Per-month tallies were kept at parse (geoMonths / arcMonths); the
+     trail is day-keyed already. With "Follow the action" on, the camera
+     flies to that month's centre of gravity when it moves a long way. */
+  if (tl && months.length >= 2) {
+    tl.hidden = false;
+    const range = $$("tl-range"), playBtn = $$("tl-play"), monthEl = $$("tl-month"), spanEl = $$("tl-span"), statsEl = $$("tl-stats"), follow = $$("tl-follow");
+    range.max = months.length - 1;
+    range.value = months.length - 1;
+    spanEl.textContent = `${fmtMonth(months[0])} → ${fmtMonth(months[months.length - 1])}`;
+    let timer = null, ticker = null, playing = false, rotateWas = null;
+    const dwell = Math.max(260, Math.min(700, 26000 / months.length));
+    const monthEvent = (m) => { const d = Object.keys(GO_EVENTS).find((k) => k.startsWith(m)); return d ? GO_EVENTS[d] : null; };
+    const setTicker = () => {
+      if (cur === null) { if (ticker) { ticker.remove(); ticker = null; } return; }
+      if (!ticker) { ticker = document.createElement("div"); ticker.className = "globe-ticker"; stage.appendChild(ticker); }
+      ticker.textContent = fmtMonth(cur);
+    };
+    const renderStats = (pts) => {
+      if (cur === null) { statsEl.hidden = true; statsEl.innerHTML = ""; return; }
+      const chips = [];
+      const bm = e.byMonth[cur] || {};
+      const actions = Object.values(bm).reduce((x, y) => x + y, 0);
+      const top = Object.entries(bm).sort((x, y) => y[1] - x[1])[0];
+      chips.push([fmt(actions), "actions that month"]);
+      if (top) chips.push([esc(top[0]), "busiest activity"]);
+      const fresh = points.filter((pt) => pt.m === cur).length;
+      const pl = (n, w) => (n === 1 ? w : w + "s");
+      chips.push([fmt(pts.length), mode === "month" ? pl(pts.length, "spot") + " played that month" : pl(pts.length, "spot") + " so far"]);
+      if (fresh) chips.push([fmt(fresh), "new " + pl(fresh, "spot")]);
+      const remote = arcs.reduce((x, ar) => x + (mode === "month" ? (ar.months && ar.months[cur]) || 0 : upTo(ar, cur)), 0);
+      if (remote) chips.push([fmt(remote), pl(remote, "remote raid") + (mode === "month" ? " that month" : " so far")]);
+      const days = paths.filter((pa) => pa.date.slice(0, 7) === cur).length;
+      if (days) chips.push([fmt(days), pl(days, "day") + " of GPS trail"]);
+      const ev = monthEvent(cur);
+      statsEl.hidden = false;
+      statsEl.innerHTML = chips.map(([v, l]) => `<div class="gh-stat"><div class="v">${v}</div><div class="l">${esc(l)}</div></div>`).join("")
+        + (ev ? `<div class="gh-stat ev"><div class="v">${esc(ev)}</div><div class="l">event that month</div></div>` : "");
+    };
+    const flyTo = (pts) => {
+      if (cur === null || !follow.checked || REDUCED_MOTION || !pts.length) return;
+      const focus = mode === "month" ? pts : pts.filter((pt) => inMonth(pt, cur));
+      if (!focus.length) return;
+      let la = 0, lo = 0, w = 0;
+      for (const pt of focus) { const c = Math.log10(pt.count + 1) + 0.1; la += pt.lat * c; lo += pt.lng * c; w += c; }
+      const target = { lat: la / w, lng: lo / w };
+      const pov = world.pointOfView();
+      if (haversine(pov.lat, pov.lng, target.lat, target.lng) > 600) world.pointOfView({ lat: target.lat, lng: target.lng, altitude: pov.altitude }, 700);
+    };
+    const show = (fly) => {
+      const pts = refresh() || [];
+      monthEl.textContent = cur === null ? "All time" : fmtMonth(cur);
+      spanEl.textContent = cur === null
+        ? `${fmtMonth(months[0])} → ${fmtMonth(months[months.length - 1])}`
+        : `${months.indexOf(cur) + 1} of ${months.length}`;
+      setTicker();
+      renderStats(pts);
+      if (fly) flyTo(pts);
+    };
+    const goTo = (i, fly = true) => { cur = months[Math.max(0, Math.min(months.length - 1, i))]; range.value = months.indexOf(cur); show(fly); };
+    const stop = () => {
+      if (!playing) return;
+      playing = false; clearTimeout(timer); timer = null;
+      playBtn.innerHTML = '<span aria-hidden="true">▶</span>'; playBtn.setAttribute("aria-label", "Play the timeline");
+      if (rotateWas !== null) { controls.autoRotate = rotateWas && $$("ly-rotate").checked; rotateWas = null; }
+    };
+    const play = () => {
+      if (playing) return stop();
+      let i = cur === null ? -1 : months.indexOf(cur);
+      if (i >= months.length - 1) i = -1;       // at the end: play again from the start
+      playing = true; rotateWas = controls.autoRotate; controls.autoRotate = false;
+      playBtn.innerHTML = '<span aria-hidden="true">❚❚</span>'; playBtn.setAttribute("aria-label", "Pause the timeline");
       const step = () => {
-        if (GLOBE !== world || !el.isConnected) { tick.remove(); return; }   // torn down mid-replay
-        const cur = months[i];
-        tick.textContent = fmtMonth(cur);
-        world.pointsData($$("ly-points").checked ? points.filter((pt) => !pt.m || pt.m <= cur) : []);
-        world.arcsData($$("ly-arcs").checked ? arcs.filter((a) => (!a.m || a.m <= cur) && a.km <= arcMax + 0.5) : []);
-        world.pathsData($$("ly-trail").checked ? paths.filter((pa) => pa.date.slice(0, 7) <= cur) : []);
-        i++;
-        if (i < months.length) setTimeout(step, dwell);
-        else setTimeout(() => {
-          tick.remove();
-          world.pointsData($$("ly-points").checked ? points : []);
-          updateArcs();
-          world.pathsData($$("ly-trail").checked ? paths : []);
-          rp.disabled = false;
-        }, 1100);
+        if (GLOBE !== world || !el.isConnected) return stop();
+        goTo(i + 1); i = months.indexOf(cur);
+        if (i < months.length - 1) timer = setTimeout(step, dwell);
+        else stop();
       };
       step();
     };
+    playBtn.onclick = play;
+    $$("tl-prev").onclick = () => { stop(); goTo((cur === null ? months.length : months.indexOf(cur)) - 1); };
+    $$("tl-next").onclick = () => { stop(); goTo(cur === null ? 0 : months.indexOf(cur) + 1); };
+    $$("tl-all").onclick = () => { stop(); cur = null; range.value = months.length - 1; show(false); };
+    range.oninput = () => { goTo(+range.value); };   // scrubbing while playing keeps playing from there
+    tl.querySelectorAll(".tl-mode button").forEach((b) => {
+      b.onclick = () => {
+        mode = b.dataset.mode;
+        tl.querySelectorAll(".tl-mode button").forEach((x) => x.setAttribute("aria-pressed", String(x === b)));
+        if (cur === null) goTo(months.length - 1, false); else show(true);
+      };
+    });
+    GLOBE_CLEANUP.push(() => { clearTimeout(timer); if (ticker) ticker.remove(); });
   }
 
   const onResize = () => { if (GLOBE === world && el.isConnected) world.width(el.clientWidth).height(el.clientHeight || 560); };
@@ -4862,7 +5312,7 @@ function renderSocial() {
       [longest + " yr", "Longest friendship", dated[0] ? esc(dated[0].name) : ""],
       [topSrc ? prettySource(topSrc[0]) : "—", "Top way you connect"],
     ];
-    if (removed) stats.push([fmt(removed), "Friendships ended", "in Niantic's recent window — already excluded above"]);
+    if (removed) stats.push([fmt(removed), "Friendships ended", "in the export's recent window — already excluded above"]);
     inner += statGrid(stats);
 
     // growth chart
@@ -4952,7 +5402,7 @@ function renderSocial() {
   if (STATE.invites.accepted) funnel.push([fmt(STATE.invites.accepted), "accepted"]);
   if (STATE.invites.declined) funnel.push([fmt(STATE.invites.declined), "declined"]);
   if (STATE.party.sent + STATE.party.received) funnel.push([fmt(STATE.party.sent + STATE.party.received), "Party Play invites"]);
-  if (funnel.length) inner += `<h4 class="mod-h4">Recent invite activity <span class="muted" style="font-weight:400">(Niantic keeps ~4 months)</span></h4>${calloutRow(funnel)}`;
+  if (funnel.length) inner += `<h4 class="mod-h4">Recent invite activity <span class="muted" style="font-weight:400">(the export keeps ~4 months)</span></h4>${calloutRow(funnel)}`;
 
   if (!sub) sub = "Your recent friend-request and Party Play activity.";
   return moduleHTML("🤝", "Your social world", sub, inner);
@@ -5027,7 +5477,7 @@ function renderSpending() {
     inner += rankList(vendors.map(([v, d]) => [prettyVendor(v), d.coins]),
       (v, name) => fmt(v) + " coins · " + fmt(buys[name]) + "×");
     if (S.vendor.XSOLLA && S.coinsBought > 0) {
-      inner += `<div class="hw-caption">Xsolla is Niantic's own web store, which sells coins at a bonus the App Store and Google Play don't match —
+      inner += `<div class="hw-caption">Xsolla runs the official Pokémon GO web store, which sells coins at a bonus the App Store and Google Play don't match —
         ${Math.round(S.vendor.XSOLLA.coins / S.coinsBought * 100)}% of your coins came through it.</div>`;
     }
   }
@@ -5038,15 +5488,15 @@ function renderSpending() {
   const extras = [];
   if (S.freeBundles) extras.push([fmt(S.freeBundles), "free daily boxes claimed"]);
   if (S.paidBundles) extras.push([fmt(S.paidBundles), "paid shop bundles"]);
-  if (S.granted) extras.push([fmt(S.granted), "gifts from Niantic support"]);
+  if (S.granted) extras.push([fmt(S.granted), "gifts from support"]);
   if (extras.length) {
     inner += `<h4 class="mod-h4">Also in the ledger</h4>${calloutRow(extras)}`;
     const gifts = Object.entries(S.grantedItems).sort((a, b) => b[1] - a[1]).slice(0, 4);
     if (gifts.length) {
-      inner += `<div class="hw-caption">"Granted by admin" is Niantic making something right after an outage or a broken raid.
+      inner += `<div class="hw-caption">"Granted by admin" is support making something right after an outage or a broken raid.
         Yours came to ${gifts.map(([n, q]) => `<b>${fmt(q)}×</b> ${esc(prettyItem(n))}`).join(", ")}.</div>`;
     } else if (S.freeBundles) {
-      inner += `<div class="hw-caption">The free daily box counts as a purchase in Niantic's ledger, which is why it shows up here at all.</div>`;
+      inner += `<div class="hw-caption">The free daily box counts as a purchase in the game's ledger, which is why it shows up here at all.</div>`;
     }
   }
 
@@ -5242,7 +5692,7 @@ function renderSessions() {
    * this survives even when someone uploads nothing but their session log. */
   if (countries.length > 1) {
     inner += `<hr class="mod-divider"><h4 class="mod-h4">Countries you've played in</h4>
-      <div class="mod-sub" style="margin-bottom:10px">Niantic stamps each session with a country. No coordinates involved —
+      <div class="mod-sub" style="margin-bottom:10px">The game stamps each session with a country. No coordinates involved —
       this is the only map in the app that works without a single GPS file.</div>`;
     inner += rankList(countries.map(([cc, n]) => [countryName(cc), n]), (v) => fmt(v) + " sessions");
   }
@@ -5250,7 +5700,7 @@ function renderSessions() {
   inner += renderSupport();
   const sub = S.total
     ? `${fmt(S.total)} app sessions across your devices and cities. (We never read the IPs or ad-IDs in these files.)`
-    : `What Niantic's technical records say about you. (We never read the IPs or ad-IDs in these files.)`;
+    : `What the game's technical records say about you. (We never read the IPs or ad-IDs in these files.)`;
   return moduleHTML("📱", "Behind the screen", sub, inner);
 }
 
@@ -5270,7 +5720,7 @@ function renderSupport() {
     ? ` across <b>${fmt(T.messages)}</b> message${T.messages === 1 ? "" : "s"}` : "";
   let out = `<hr class="mod-divider"><h4 class="mod-h4">Your support history</h4>
     <div class="mod-sub" style="margin-bottom:10px">
-      <b>${fmt(T.tickets)}</b> ticket${T.tickets === 1 ? "" : "s"}${convo} with Niantic${span}.
+      <b>${fmt(T.tickets)}</b> ticket${T.tickets === 1 ? "" : "s"}${convo} with Pokémon GO support${span}.
       ${meta ? `${meta[1] === T.tickets ? "Every one of them was" : `<b>${fmt(meta[1])}</b> of them were`} a request for your data —
         including, somewhere in here, the one that produced the file you are reading this from.` : ""}
     </div>`;
@@ -5317,7 +5767,7 @@ function renderTravelLog() {
         span ? ` The one you've played in most besides home is <b>${esc(span[0].split(",")[0])}</b>, on ${fmt(span[1].days.size)} separate day${span[1].days.size === 1 ? "" : "s"}.` : ""}
     </div>
     ${rankList(rows, (v) => fmt(v) + " sessions")}
-    <div class="hw-caption">Places come from the login city Niantic records with each session — no coordinates are involved.
+    <div class="hw-caption">Places come from the login city the game records with each session — no coordinates are involved.
       Neighbouring towns in one metro area appear as separate places, so this is "where you opened the game", not a travel diary.</div>`;
 }
 
@@ -5331,7 +5781,7 @@ function renderWayfarer() {
   if (W.rejected != null) stats.push([fmt(W.rejected), "Candidates you rejected"]);
   // Deliberately last and named for what it is: a rolling log Niantic still
   // holds, not a lifetime nomination count.
-  if (W.logged) stats.push([fmt(W.logged), "Submissions on record", "in Niantic's current window"]);
+  if (W.logged) stats.push([fmt(W.logged), "Submissions on record", "in the export's current window"]);
   if (!stats.length) return;
   const hit = W.analyzed && W.created ? Math.round((W.created / W.analyzed) * 100) : null;
   return moduleHTML("🧭", "Your map-making",
@@ -5433,12 +5883,12 @@ document.addEventListener("DOMContentLoaded", () => {
       const p = dz.querySelector("p");
       if (p) p.innerHTML = "Pick files from the unzipped export — one like <code>FriendList.tsv</code>, or all of them";
     }
-    // iPhones can't unzip Niantic's password-protected ZIP at all — say so up
+    // iPhones can't unzip the password-protected ZIP support sends at all — say so up
     // front, in the dropzone, not only after a failed attempt.
     if (isIOS) {
       const hint = dz.querySelector(".dz-hint");
       if (hint) hint.innerHTML = '.tsv · .csv · .txt · .json — read locally, never uploaded<br>'
-        + 'Heads up: the iPhone Files app can\'t open Niantic\'s password-protected ZIP — '
+        + 'Heads up: the iPhone Files app can\'t open the password-protected ZIP support sends — '
         + '<a href="index.html#request">unzip it on a computer first →</a>';
     }
   }

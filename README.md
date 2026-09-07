@@ -2,7 +2,7 @@
 
 **Your Pokémon GO journey, visualized.**
 
-Niantic keeps years of your trainer life — every catch, raid, friendship, step and purchase.
+Pokémon GO keeps years of your trainer life — every catch, raid, friendship, step and purchase.
 You have the right to a free copy of all of it. POGO Metrics turns that raw export into a
 digestible summary & dashboard of your whole adventure.
 
@@ -17,19 +17,19 @@ Your data never leaves your device.
 
 Getting your Pokémon GO data is easy. Understanding it is not.
 
-What Niantic sends back is a zip of `.tsv`, `.csv`, `.txt` and `.json` files with names like
+What comes back is a zip of `.tsv`, `.csv`, `.txt` and `.json` files with names like
 `Sfida_capture1.csv` and column headers like `Fort_Latitude`. Somewhere in there is the story
 of every place you've played, every friend you've made, and every year you've put into the game
 — but you'd need a spreadsheet and a free afternoon to see any of it.
 
 POGO Metrics reads those files the way they actually are and gives you the story instead.
 
-It also solves a smaller problem: **requesting your export takes 3–5 days.** Rather than leaving
+It also solves a smaller problem: **requesting your export takes anywhere from a day to a few weeks.** Rather than leaving
 you staring at a "come back later" page, the site spends that gap teaching you exactly what
-Niantic holds on you, file by file, and how revealing each one is — so when the zip arrives you
+the game holds on you, file by file, and how revealing each one is — so when the zip arrives you
 already know what you're looking at and can upload only what you're comfortable with.
 
-That catalog is searchable down to Niantic's own column names: type `latitude` and it shows you
+That catalog is searchable down to the export's own column names: type `latitude` and it shows you
 the two files that carry your coordinates, quoting the real `Player_Latitude` header back at you.
 Filter by sensitivity, or by the files this site deliberately never reads.
 
@@ -54,6 +54,7 @@ Each file you drop in lights up its own chapter. Upload one file or the whole ex
 | **You vs. a friend** — swap "My numbers" JSON files with a friend over chat and each of you gets a side-by-side chapter: action by action, and who peaked when | a `pogo-metrics-stats*.json` exported by this site |
 | **Behind the screen** — sessions, devices, cities, countries, support tickets | app sessions, installs, support |
 | **Live events and Wayfarer contributions** | tickets, `wayfarer_player_data.json` |
+| **Around the Campfire** — meetups hosted, RSVP'd and actually attended, what gets you out the door, club chat by month, your Campfire circle (counts and dates only) | the Campfire app's own export CSV |
 
 Nothing is required. Upload only `FriendList.tsv` and you'll get exactly the social chapter and
 nothing else.
@@ -88,7 +89,7 @@ remote-raid arcs and the GPS trail accumulate month by month under a date ticker
 ### Finding your way around
 
 A chapter rail sits beside the report (a strip under the nav on phones) and follows the scroll,
-so you always know where you are in sixteen chapters. **One at a time** at the top of the rail
+so you always know where you are in seventeen chapters. **One at a time** at the top of the rail
 switches to reader mode: a single chapter with previous and next at its foot. On the upload page,
 a **build console** lists every chapter and the file that unlocks it before you add a thing, and
 lights them up as files land; once a report exists the picker folds into one strip.
@@ -121,11 +122,19 @@ This is the whole point, so it should be checkable rather than promised:
   build before it too works offline.
 - **You can audit all of it** — it's ~8,400 lines of vanilla JavaScript in this repo, no build step.
 
-## Getting your data from Niantic
+## Getting your data
 
 In Pokémon GO: **Poké Ball → Settings → Help → Chat with us → New Conversation → My account →
-Request my data → Continue.** You'll get a download link and a password by email, usually within
-3–5 days (Niantic allows up to 7). Unzip it, then drop the files in.
+Request my data → Continue.** You'll get a download link and a password by email — within a day
+under Niantic, about four weeks for our first request since Scopely took over the game. Unzip it,
+then drop the whole folder in; the `Player_Journey.zip` inside it is opened in the browser.
+
+**Niantic → Scopely.** Scopely acquired Niantic's games business in 2025. We diffed a June 2026
+export against an August 2026 one: the same 22 files and the same 21-file journey archive, identical
+column headers (some still say "Niantic"), the same timestamp formats and the same retention windows.
+Only the folder name changed (a random ID instead of `Pokemon GO Data`) and the wait got longer. The
+landing page carries the full before/after table. Campfire, meanwhile, has an export of its own — a
+single CSV you can request from the Campfire app — and this site reads it as one more chapter.
 
 This is a free right under privacy laws like GDPR and CCPA — not a hack or a third-party service.
 
@@ -150,7 +159,7 @@ pogo-metrics/          the deployed site (netlify.toml publishes this folder as-
 ├── trainer-model.html the Trainer Model: a friends-list cohort vs. the level cap
 ├── js/
 │   ├── app.js         the engine — parsers + every chapter
-│   ├── catalog.js     knowledge base: one entry per file in a Niantic export
+│   ├── catalog.js     knowledge base: one entry per file in an export
 │   ├── catalog-ui.js  the filterable catalog on the landing page
 │   ├── landing.js     landing page: live preview, section sub-nav, level-50 histogram
 │   ├── nav.js         shared top navigation, icon set and chapter-rail builder
@@ -162,6 +171,7 @@ pogo-metrics/          the deployed site (netlify.toml publishes this folder as-
 │                      page that loads it — see netlify.toml on the name collision)
 ├── data/trainer-model/    the anonymized cohort JSONs behind the Trainer Model page
 ├── tools/scrub-demo.mjs   regenerates sample-export/ from a real export
+├── tools/campfire-sample.mjs  invents the sample's synthetic Campfire CSV (nothing derived)
 ├── tools/test-parsers.mjs runs every parser against sample-export/ as a regression check
 ├── og-card.html       source for the share image; render it to regenerate og-image.png
 │                      (og-card-demo.html / og-card-model.html do the same for their pages)
@@ -195,7 +205,9 @@ The scrubber will not let you ship a half-anonymized demo: it records every iden
 replaces, then re-reads everything it wrote and fails — deleting the output rather than
 publishing it — if any of them survived, or if any email address, IP address, or real coordinate
 value appears anywhere. **No real personal data is present**, and that is checked rather than
-asserted.
+asserted. The one file not derived from a real export at all is the Campfire CSV, which
+`tools/campfire-sample.mjs` invents from a seeded generator — a Campfire export is mostly other
+people's words plus meetup coordinates, and no scrubber should be trusted with that.
 
 ```sh
 node pogo-metrics/tools/scrub-demo.mjs "<path to an unzipped export>"
