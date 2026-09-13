@@ -1760,3 +1760,78 @@ body.has-report #upload-section { padding-top: calc(var(--nav-h, 80px) + 24px); 
 .globe-wrap:fullscreen .globe-timeline, .globe-wrap:fullscreen .tl-stats { margin: 8px 12px 0; }
 .globe-wrap:fullscreen .tl-stats { margin-bottom: 8px; }
 @media (max-width: 560px) { .tl-label { min-width: 72px; } .tl-follow { display: none; } .tl-mode button { padding: 7px 8px; } }
+
+/* ─── security & privacy pass (2026-09-11) ─── */
+/* The toolbar's "My numbers" opens this: the compare file meant for a friend,
+   and the full stats file that is only for the player — each saying what's in it. */
+.numbers-panel { flex: 1 1 100%; display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 12px; }
+.numbers-panel[hidden] { display: none; }
+.np-card { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius-card); padding: 16px 18px; display: flex; flex-direction: column; gap: 8px; }
+.np-card.personal { border-style: dashed; }
+.np-card h4 { margin: 0; display: flex; align-items: center; gap: 8px; font-size: .9375rem; color: var(--ink); }
+.np-card h4 .ico { color: var(--accent); }
+#results .numbers-panel p { margin: 0; max-width: none; color: var(--ink-dim); font-size: .84375rem; line-height: 1.5; }
+.np-card .btn { align-self: flex-start; margin-top: 4px; padding: 9px 16px; font-size: .875rem; }
+/* one line under "Save image": the picture is centred on where you play */
+.gh-note { margin: 6px 0 0; max-width: 190px; font-size: .6875rem; line-height: 1.35; color: var(--ink-dim); }
+
+/* ─── year card · the "I was there" GO Fest badge, in the accent the PNG draws it in (2026-09-11) ─── */
+.wrap-card .wc-badge.wc-there { border-color: rgba(255, 203, 5, .55); background: rgba(255, 203, 5, .1); }
+
+/* ─── password-protected ZIP · the unlock panel under the dropzone (2026-09-11) ─── */
+.zip-unlock { margin-top: 18px; padding: 20px 22px 16px; border-radius: var(--radius-card); background: var(--panel); border: 1px solid rgba(255, 203, 5, .35); box-shadow: var(--shadow); text-align: left; }
+.zip-unlock[hidden] { display: none; }
+/* once a report exists the upload section folds to its strip — a locked drop still needs its prompt */
+body.has-report #upload-section > #zip-unlock:not([hidden]) { display: block; }
+.zu-head { display: flex; gap: 14px; align-items: flex-start; }
+.zu-ic { flex: none; width: 40px; height: 40px; border-radius: 12px; display: grid; place-items: center; background: rgba(255, 203, 5, .12); border: 1px solid rgba(255, 203, 5, .35); color: var(--accent2); }
+.zu-ic .ico { width: 20px; height: 20px; }
+.zu-head h3 { margin: 2px 0 4px; font-size: 1.1875rem; }
+.zu-head p { margin: 0; color: var(--ink-dim); font-size: .9375rem; overflow-wrap: anywhere; }
+.zu-head p b { color: var(--ink); }
+.zu-field { margin-top: 16px; }
+.zu-field label { display: block; margin-bottom: 6px; font-family: var(--mono); font-size: .6875rem; letter-spacing: .1em; text-transform: uppercase; color: var(--ink-faint); }
+.zu-row { display: flex; gap: 10px; flex-wrap: wrap; align-items: stretch; }
+.zu-row input { flex: 1 1 220px; min-width: 0; padding: 12px 14px; border-radius: 12px; border: 1px solid var(--line); background: rgba(255, 255, 255, .04); color: var(--ink); font: 500 1rem var(--mono); letter-spacing: .02em; }
+.zu-row input:focus { border-color: var(--accent); }
+.zu-row input[readonly] { opacity: .7; }
+.zu-row .btn { padding: 11px 20px; }
+.zu-row .btn:disabled { opacity: .6; cursor: progress; }
+.zu-status { min-height: 1.4em; margin: 10px 0 0; font-size: .875rem; color: var(--ink-dim); }
+.zu-status.bad { color: #ff9d9d; }
+.zu-promise { display: flex; gap: 8px; align-items: flex-start; margin: 6px 0 0; color: var(--green); font-size: .84375rem; font-weight: 600; }
+.zu-promise .ico { flex: none; width: 14px; height: 14px; margin-top: 2px; }
+.zu-cancel { margin-top: 10px; padding: 0; font-size: .84375rem; color: var(--ink-dim); }
+@media (max-width: 560px) { .zip-unlock { padding: 16px; } .zu-head { gap: 10px; } .zu-row .btn { flex: 1 1 auto; justify-content: center; } }
+
+/* ─── behind the screen · device eras, one row per stretch of months (2026-09-11) ─── */
+.era-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.era-list[hidden] { display: none; }
+.era-list li { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; align-items: baseline; column-gap: 14px; padding: 8px 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--panel); font-size: .90625rem; }
+.era-list .era-dev { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--ink); }
+.era-list .era-dev small { margin-left: 8px; font-family: var(--mono); font-size: .6875rem; letter-spacing: .04em; color: var(--ink-faint); }
+.era-list .era-when { font-family: var(--mono); font-size: .75rem; color: var(--ink-dim); white-space: nowrap; }
+.era-list .era-n { font-family: var(--mono); font-size: .8125rem; color: var(--accent); white-space: nowrap; text-align: right; }
+@media (max-width: 560px) {
+  .era-list li { grid-template-columns: minmax(0, 1fr) auto; row-gap: 2px; }
+  .era-list .era-dev { white-space: normal; }
+  .era-list .era-dev small { display: inline-block; margin-left: 6px; }
+  .era-list .era-when { grid-column: 1; }
+  .era-list .era-n { grid-column: 2; grid-row: 1 / 3; align-self: center; }
+}
+
+/* ─── export correctness · the build row folds with the upload section, and the 60-day export-again reminder (2026-09-11) ─── */
+/* #build-row is shown and hidden with the hidden attribute, never an inline display, so the fold's rule can reach it */
+#build-row[hidden] { display: none; }
+.notice.again { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 18px; }
+.notice.again[hidden] { display: none; }
+.notice.again .again-copy { flex: 1 1 320px; margin: 0; }
+.notice.again .btn { flex: none; padding: 10px 18px; font-size: .9375rem; }
+@media (max-width: 560px) { .notice.again .btn { flex: 1 1 auto; justify-content: center; } }
+
+/* ─── globe on touch screens · the way back out of exploring (2026-09-11) ─── */
+/* Bottom-left, clear of the full-screen pill: on phones the colour key sits
+   under the stage, so that corner is free. Wider touch screens keep the key
+   inside the stage, so there it is centred where the tap-to-explore pill was. */
+.globe-scrim.globe-done { left: 12px; bottom: 12px; transform: none; padding: 0.4375rem 0.75rem; font-size: 0.78125rem; }
+@media (min-width: 861px) { .globe-scrim.globe-done { left: 50%; bottom: 18px; transform: translateX(-50%); } }

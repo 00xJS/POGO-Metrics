@@ -1,7 +1,7 @@
 {
   "name": "POGO Metrics",
   "short_name": "POGO Metrics",
-  "description": "Turn your official Niantic Pokémon GO data export into a private, visual story — entirely in your browser.",
+  "description": "Turn your official Pokémon GO data export into a private, visual story — entirely in your browser.",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#0a0d1c",

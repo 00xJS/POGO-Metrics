@@ -1586,7 +1586,37 @@ function segment(id, key, store, onChange) {
   });
 }
 
+/* Chart.js arrives on a static tag carrying its integrity hash, so bytes that
+   fail the check are refused and `Chart` never exists. The way that happens is
+   a bad copy in the service worker's cache, which sw.js serves /vendor/ from
+   without asking the network, so every later visit would be refused as well.
+   Drop that copy and load the file once more at a fresh address (the renderer
+   can reuse refused bytes for the same URL), against the same hash. app.js's
+   loadVendor does the same for the libraries it loads on demand. */
+async function ensureChart() {
+  if (window.Chart) return true;
+  const tag = document.querySelector('script[src*="vendor/chart-"][integrity]');
+  if (!tag) return false;
+  const src = tag.getAttribute("src");
+  try {
+    for (const k of await caches.keys()) await (await caches.open(k)).delete(src, { ignoreSearch: true });
+  } catch (e) { /* no service worker cache on this origin */ }
+  await new Promise((done) => {
+    const s = document.createElement("script");
+    s.integrity = tag.integrity;
+    s.src = `${src}?retry=${Date.now()}`;
+    s.onload = s.onerror = done;
+    document.head.appendChild(s);
+  });
+  return !!window.Chart;
+}
+
 async function init() {
+  if (!(await ensureChart())) {
+    document.querySelector("main").insertAdjacentHTML("afterbegin",
+      `<div class="callout red" style="margin-top:100px">The chart library didn't load, so this page can't draw its charts. Reload the page to try again.</div>`);
+    return;
+  }
   chartDefaults();
   try {
     const res = await fetch("data/trainer-model/trainers.json");

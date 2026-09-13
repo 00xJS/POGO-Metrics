@@ -10,6 +10,12 @@ THEME-HANDOFF.md
 # Hand-off notes destined for the observation-deck repo, not this one.
 OBSERVATION-DECK-UPDATE.md
 
+# tools/scrub-demo.mjs builds the sample beside itself and renames it into
+# place only after its leak check passes. A run killed outright (SIGKILL) can
+# strand the unchecked build or the replaced sample here — never commit either.
+pogo-metrics/sample-export.tmp-*/
+pogo-metrics/sample-export.old-*/
+
 # ── OS / editor cruft ─────────────────────────────────────────────────
 .DS_Store
 **/.DS_Store

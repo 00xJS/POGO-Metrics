@@ -1,0 +1,12 @@
+Event_time,Device_model,Platform,City,State,Country_code,Install_time,App_version,OS_version,Device_category
+2022-02-27 06:08:31 UTC,SM-G986U,android,Pallet Town,Kanto,US,2022-02-27 06:08:31 UTC,0.229.2,12,phone
+2024-08-05 08:19:06 UTC,iPhone15ProMax,ios,Olivine City,Johto,US,2024-08-05 08:19:06 UTC,0.323.1,17.5.1,mobile_phone
+2022-04-04 04:55:46 UTC,SM-G986U,android,Pallet Town,Kanto,US,2022-04-04 04:55:46 UTC,0.233.0,12,phone
+2023-02-23 19:14:35 UTC,Pixel 4a,android,Olivine City,Johto,US,2023-02-23 19:14:35 UTC,0.261.3,13,phone
+2023-09-27 23:00:24 UTC,iPhone15ProMax,ios,Olivine City,Johto,US,2023-09-27 23:00:24 UTC,0.283.1,17.0.2,phone
+2022-07-02 19:43:06 UTC,SM-G986U,android,Cerulean City,Kanto,US,2022-07-02 19:43:06 UTC,0.241.1,12,phone
+2025-10-08 02:02:25 UTC,iPhone12,ios,Olivine City,Johto,US,2025-10-08 02:02:25 UTC,0.381.3,26.0.1,mobile_phone
+2023-08-14 22:43:02 UTC,SM-G986U,android,Olivine City,Johto,US,2023-08-14 22:43:02 UTC,0.279.2,13,phone
+2023-01-04 22:12:18 UTC,SM-G986U,android,Olivine City,Johto,US,2023-01-04 22:12:18 UTC,0.257.1,13,phone
+2023-01-04 22:42:41 UTC,Pixel 4a,android,Olivine City,Johto,US,2023-01-04 22:42:41 UTC,0.257.0,12,phone
+2023-12-26 17:08:09 UTC,iPhone15ProMax,ios,Olivine City,Johto,US,2023-12-26 17:08:09 UTC,0.293.1,17.1.2,phone

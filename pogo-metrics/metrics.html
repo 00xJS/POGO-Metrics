@@ -3,6 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self'; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'" />
   <title>Visualize my journey — POGO Metrics</title>
   <meta name="description" content="Drop your Pokémon GO data export and watch it become a private, visual story — all in your browser." />
   <meta name="theme-color" content="#0a0d1c">
@@ -27,8 +28,8 @@
   <link rel="manifest" href="site.webmanifest">
   <link rel="preload" href="vendor/fonts/c8e7a734b1.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="preload" href="vendor/fonts/1cd702cd25.woff2" as="font" type="font/woff2" crossorigin>
-  <link rel="stylesheet" href="vendor/fonts/fonts.css" />
-  <link rel="stylesheet" href="css/style.css?v=20260905a" />
+  <link rel="stylesheet" href="vendor/fonts/fonts.css" integrity="sha384-XsThnuujXnxIcolWKS1fn5wPHxJxxNWorJO2kELS0VcCWTP9sQwdWCyyWYuKw+Xw" />
+  <link rel="stylesheet" href="css/style.css?v=20260912a" />
 </head>
 <body>
   <nav id="topnav" data-active="app"></nav>
@@ -41,8 +42,9 @@
         <div class="eyebrow">Build your story</div>
         <h1 style="margin-top:8px">Drop in your export</h1>
         <p class="section-desc" style="margin:10px auto 28px">
-          Add the unzipped export folder — the <code>Player_Journey.zip</code> inside it is opened for you —
-          or just the individual files you care about. Each one you add unlocks another chapter below.
+          Drop in the ZIP support sent you and type its password — it's opened right here, the
+          <code>Player_Journey.zip</code> inside it too. Or add the unzipped folder, or just the files you care about.
+          Each one you add unlocks another chapter below.
           Don't have your data yet? <a href="index.html#request">Request it in-game →</a>
         </p>
       </div>
@@ -51,23 +53,26 @@
         parsing happens entirely in your browser, which is also why nothing is ever uploaded.
         Enable JavaScript to build your story.</div></noscript>
       <div id="dropzone">
-        <!-- .zip is deliberately selectable: Player_Journey.zip is opened in the browser, and picking the un-unzipped download ZIP is
-         the most common first attempt, and accepting it routes the user into
-         ingest()'s "that's the ZIP, unzip it first" explainer instead of the
-         iOS Files picker silently greying their export out. -->
+        <!-- .zip is deliberately selectable: the password-protected download and
+         the Player_Journey.zip inside it are both opened in the browser (a locked
+         one asks for its password in #zip-unlock below). Accepting it also stops
+         the iOS Files picker silently greying the export out. -->
         <input id="file-input" type="file" multiple
                accept=".tsv,.csv,.txt,.json,.zip,text/plain,text/csv,text/tab-separated-values,application/json,application/zip,application/octet-stream" />
         <input id="folder-input" type="file" webkitdirectory directory multiple hidden />
         <div class="dz-icon" data-icon="upload"></div>
         <h2>Drop your files or folder here</h2>
-        <p>Drag the whole unzipped export, or pick out one file like <code>FriendList.tsv</code></p>
+        <p>Drag in the ZIP from support, the unzipped folder, or one file like <code>FriendList.tsv</code></p>
         <div class="dz-or">— or —</div>
         <div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap">
           <button class="btn btn-teal" id="browse-btn" type="button">Choose files</button>
           <button class="btn btn-ghost" id="folder-btn" type="button">Choose a folder</button>
         </div>
-        <div class="dz-hint">.tsv · .csv · .txt · .json · Player_Journey.zip — read locally, never uploaded</div>
+        <div class="dz-hint">.zip · .tsv · .csv · .txt · .json — read locally, never uploaded</div>
       </div>
+
+      <!-- The password prompt for a locked download — filled by showUnlock() in app.js. -->
+      <div id="zip-unlock" class="zip-unlock" role="group" aria-labelledby="zu-title" hidden></div>
 
       <div class="upload-privacy">🔒 Everything is processed in your browser. No file ever leaves this device.</div>
 
@@ -75,7 +80,7 @@
       <div id="detected"></div>
       <div id="unlocks" class="unlocks" hidden></div>
 
-      <div id="build-row" style="display:none;text-align:center;margin-top:26px">
+      <div id="build-row" hidden style="text-align:center;margin-top:26px">
         <button class="btn btn-primary" id="build-btn" type="button">Build my story</button>
         <button class="btn btn-ghost" id="clear-btn" type="button">Clear</button>
       </div>
@@ -90,7 +95,7 @@
   <footer>
     <p>
       <b>POGO Metrics</b> is an independent fan project, not affiliated with, endorsed by, or
-      sponsored by Niantic, Scopely, or The Pokémon Company. Pokémon and Pokémon GO are trademarks
+      sponsored by Scopely Explore, Inc. (formerly Niantic, Inc.), Scopely, or The Pokémon Company. Pokémon and Pokémon GO are trademarks
       of their respective owners.
     </p>
     <p>Your export is read and charted entirely on your device, and never leaves it.</p>
@@ -106,9 +111,9 @@
 
   <!-- Chart.js / Leaflet / globe.gl are loaded on demand by app.js when a build
        actually needs them — the upload UI must be interactive immediately. -->
-  <script defer src="js/nav.js?v=20260905a"></script>
-  <script defer src="js/catalog.js?v=20260905a"></script>
-  <script defer src="js/pokedex.js?v=20260905a"></script>
-  <script defer src="js/app.js?v=20260905a"></script>
+  <script defer src="js/nav.js?v=20260912a"></script>
+  <script defer src="js/catalog.js?v=20260912a"></script>
+  <script defer src="js/pokedex.js?v=20260912a"></script>
+  <script defer src="js/app.js?v=20260912a"></script>
 </body>
 </html>

@@ -61,24 +61,97 @@ const PJ_EVENTS = [
 ];
 const CUR_SYM = { USD: "$", EUR: "€", GBP: "£", INR: "₹", IDR: "Rp ", JPY: "¥", AUD: "A$", CAD: "C$", BRL: "R$" };
 
-/* Marquee event dates (UTC), used to turn anonymous activity spikes into
- * memories ("your #1 day was GO Fest 2024"). Starter set: global GO Fests.
- * Extend freely — one line per date. */
-const GO_EVENTS = {
-  "2017-07-22": "GO Fest 2017 (Chicago)",
-  "2018-07-14": "GO Fest 2018 (Chicago)", "2018-07-15": "GO Fest 2018 (Chicago)",
-  "2019-06-13": "GO Fest 2019 (Chicago)", "2019-06-14": "GO Fest 2019 (Chicago)",
-  "2019-06-15": "GO Fest 2019 (Chicago)", "2019-06-16": "GO Fest 2019 (Chicago)",
-  "2020-07-25": "GO Fest 2020 (Global)", "2020-07-26": "GO Fest 2020 (Global)",
-  "2021-07-17": "GO Fest 2021 (Global)", "2021-07-18": "GO Fest 2021 (Global)",
-  "2022-06-04": "GO Fest 2022 (Global)", "2022-06-05": "GO Fest 2022 (Global)",
-  "2022-08-27": "GO Fest 2022 Finale", "2022-08-28": "GO Fest 2022 Finale",
-  "2023-08-26": "GO Fest 2023 (Global)", "2023-08-27": "GO Fest 2023 (Global)",
-  "2024-07-13": "GO Fest 2024 (Global)", "2024-07-14": "GO Fest 2024 (Global)",
-  "2025-06-28": "GO Fest 2025 (Global)", "2025-06-29": "GO Fest 2025 (Global)",
-  "2026-07-11": "GO Fest 2026 (Global)", "2026-07-12": "GO Fest 2026 (Global)",
+/* GO Fest dates, used to turn anonymous activity spikes into memories ("your
+ * #1 day was GO Fest 2024") and to award the "I was there" badge. One entry per
+ * event, first to last day inclusive, in the event's own local dates.
+ *
+ * An entry with a `box` is an IN-PERSON festival. It counts only for a trainer
+ * whose own precise positions put them inside that city box during those dates
+ * (see FEST_VENUES and parsePlayerJourney) — a spin at home on Chicago's
+ * Saturday is not a GO Fest day. Entries without a box are global and count for
+ * anyone who played. Boxes are city-sized on purpose, [south, west, north, east]
+ * in degrees: the badge claims a city and a year, never a park or a day. `tz` is
+ * the venue's UTC offset during the event; `venue` is the park itself, kept only
+ * so the test suite can check that every box contains its festival.
+ *
+ * Sources, checked 2026-09-11:
+ *   pokemongo.com/post/gofest2022-finale-event — the 2022 Finale was one day,
+ *     Saturday Aug 27, 10:00–18:00 local time.
+ *   pokemongo.com/post/go-fest-2025-events-announcement — Osaka May 29–Jun 1
+ *     (Expo '70 Commemorative Park, in Suita), Jersey City Jun 6–8 (Liberty
+ *     State Park), Paris Jun 13–15 (Parc de Sceaux, just outside Paris),
+ *     Global Jun 28–29.
+ *   pokemongo.com/en/news/save-the-date-go-fest-2026 and
+ *   pokemongohub.net/post/news/all-pokemon-go-fest-2026-locations-and-dates-revealed/
+ *     — Tokyo May 29–Jun 1 (the Bay Area; the main park is in Odaiba), Chicago
+ *     Jun 5–7 (Grant Park), Copenhagen Jun 12–14 (Fælledparken).
+ *   pokemongo.com/news/gofest2026-finale-save-the-date — Mega Finale Sep 5–6, global.
+ * The 2022–2024 in-person festivals are not listed yet: add them the same way,
+ * one line each, once their dates are checked. */
+const CITY_BOX = {
+  chicago: [41.64, -87.94, 42.03, -87.52],     // city limits
+  tokyo: [35.52, 139.56, 35.82, 139.92],       // the 23 wards, Odaiba included
+  copenhagen: [55.61, 12.45, 55.73, 12.65],    // with Frederiksberg
+  osaka: [34.58, 135.38, 34.85, 135.62],       // Osaka and Suita, where the Expo '70 park is
+  jerseyCity: [40.66, -74.12, 40.77, -74.02],  // stops at the Hudson — Manhattan is not Jersey City
+  paris: [48.70, 2.15, 48.95, 2.55],           // Paris and the inner suburbs, Sceaux included
 };
-const eventFor = (iso) => GO_EVENTS[iso] || null;
+const GO_FESTS = [
+  { name: "GO Fest 2017 (Chicago)", from: "2017-07-22", to: "2017-07-22", city: "Chicago", tz: -5, box: CITY_BOX.chicago, venue: [41.8757, -87.6189] },
+  { name: "GO Fest 2018 (Chicago)", from: "2018-07-14", to: "2018-07-15", city: "Chicago", tz: -5, box: CITY_BOX.chicago, venue: [41.9214, -87.6337] },
+  { name: "GO Fest 2019 (Chicago)", from: "2019-06-13", to: "2019-06-16", city: "Chicago", tz: -5, box: CITY_BOX.chicago, venue: [41.9214, -87.6337] },
+  { name: "GO Fest 2020 (Global)", from: "2020-07-25", to: "2020-07-26" },
+  { name: "GO Fest 2021 (Global)", from: "2021-07-17", to: "2021-07-18" },
+  { name: "GO Fest 2022 (Global)", from: "2022-06-04", to: "2022-06-05" },
+  { name: "GO Fest 2022 Finale", from: "2022-08-27", to: "2022-08-27" },
+  { name: "GO Fest 2023 (Global)", from: "2023-08-26", to: "2023-08-27" },
+  { name: "GO Fest 2024 (Global)", from: "2024-07-13", to: "2024-07-14" },
+  { name: "GO Fest 2025 (Osaka)", from: "2025-05-29", to: "2025-06-01", city: "Osaka", tz: 9, box: CITY_BOX.osaka, venue: [34.8095, 135.5323] },
+  { name: "GO Fest 2025 (Jersey City)", from: "2025-06-06", to: "2025-06-08", city: "Jersey City", tz: -4, box: CITY_BOX.jerseyCity, venue: [40.7033, -74.0535] },
+  { name: "GO Fest 2025 (Paris)", from: "2025-06-13", to: "2025-06-15", city: "Paris", tz: 2, box: CITY_BOX.paris, venue: [48.7716, 2.2990] },
+  { name: "GO Fest 2025 (Global)", from: "2025-06-28", to: "2025-06-29" },
+  { name: "GO Fest 2026 (Tokyo)", from: "2026-05-29", to: "2026-06-01", city: "Tokyo", tz: 9, box: CITY_BOX.tokyo, venue: [35.6298, 139.7745] },
+  { name: "GO Fest 2026 (Chicago)", from: "2026-06-05", to: "2026-06-07", city: "Chicago", tz: -5, box: CITY_BOX.chicago, venue: [41.8757, -87.6189] },
+  { name: "GO Fest 2026 (Copenhagen)", from: "2026-06-12", to: "2026-06-14", city: "Copenhagen", tz: 2, box: CITY_BOX.copenhagen, venue: [55.7006, 12.5717] },
+  { name: "GO Fest 2026 (Global)", from: "2026-07-11", to: "2026-07-12" },
+  { name: "GO Fest 2026 Mega Finale", from: "2026-09-05", to: "2026-09-06" },
+];
+const festDayMs = (iso) => Date.parse(iso + "T00:00:00Z");
+function festDays(f) {
+  const out = [];
+  for (let t = festDayMs(f.from); t <= festDayMs(f.to); t += 86400000) out.push(new Date(t).toISOString().slice(0, 10));
+  return out;
+}
+/* date → label for the GLOBAL festivals. Built from the list rather than written
+ * as an object literal: two events on one day were two identical keys there, and
+ * the later one silently won. Here they share the day. */
+const GO_EVENTS = {};
+for (const f of GO_FESTS) if (!f.box) for (const d of festDays(f)) GO_EVENTS[d] = GO_EVENTS[d] ? GO_EVENTS[d] + " · " + f.name : f.name;
+/* The in-person festivals, each as a UTC window from the venue's first local
+ * midnight to the one after its last day, so a journey row costs a few compares. */
+const FEST_VENUES = GO_FESTS.filter((f) => f.box).map((f) => ({
+  ...f, id: f.name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, ""), year: f.from.slice(0, 4),
+  t0: festDayMs(f.from) - f.tz * 3600000, t1: festDayMs(f.to) + 86400000 - f.tz * 3600000,
+}));
+const FEST_T0 = Math.min(...FEST_VENUES.map((v) => v.t0));
+const FEST_T1 = Math.max(...FEST_VENUES.map((v) => v.t1));
+/* One UTC day's label: every global festival on it, plus any in-person one the
+ * export places this trainer at that day. An in-person date nobody here
+ * attended stays unlabelled, so "GO Fest days attended" means what it says. */
+function eventFor(iso) {
+  const there = STATE.ev.there;
+  const names = FEST_VENUES.filter((v) => there[v.id] && there[v.id].days[iso]).map((v) => v.name);
+  if (GO_EVENTS[iso]) names.unshift(GO_EVENTS[iso]);
+  return names.length ? names.join(" · ") : null;
+}
+/* "I was there": one badge per in-person festival the export places this
+ * trainer at, for one year or for all of them. City and year only — never a
+ * date, a venue or a coordinate — because it is drawn onto a PNG made to be shared. */
+function festBadges(year) {
+  const there = STATE.ev.there;
+  return FEST_VENUES.filter((v) => there[v.id] && (!year || v.year === String(year)))
+    .map((v) => `🎪 I was there · GO Fest ${v.city} ${v.year}`);
+}
 
 /* Gameplay.txt mixes real tiered medals with event/collection badges under the
  * same "BADGE_NAME: n" syntax. These families are participation badges whose
@@ -90,10 +163,32 @@ const EVENT_BADGE = /^BADGE_(EVENT|GOFEST|GOTOUR|GO_TOUR|GOWA|SMORES|MINI_COLLEC
  * report was hard-locked to en-US, so the two pages disagreed on 1,234 vs 1.234 */
 const fmt = (n) => Number(n).toLocaleString();
 const round = (n) => Math.round(n);
-const esc = (s) => String(s == null ? "" : s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+/* Quotes too, not just < > &: an escaped value that lands inside an attribute
+ * (data-info="…", aria-label="…") must not be able to close it. */
+const esc = (s) => String(s == null ? "" : s).replace(/[&<>"']/g, (c) =>
+  ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 const cap = (s) => s.charAt(0).toUpperCase() + s.slice(1).toLowerCase();
 const titleCase = (s) => s.replace(/_/g, " ").toLowerCase().replace(/\b\w/g, (c) => c.toUpperCase());
 const base = (p) => (p || "").split("/").pop();
+/* A second copy of an export file arrives under another name: Finder's "Keep
+ * Both" calls it "Pokestop_spin1 2.csv", its Duplicate command "Gameplay
+ * copy.txt", a browser download "FriendList (1).tsv", Windows "FriendList -
+ * Copy.tsv". Routed under those names they read as files of their own — a
+ * "Pokestop_spin1 2.csv" passed the loose event matcher as a third, precise
+ * spin log and nearly doubled every journey total. The marker comes off before
+ * anything is matched, and the file joins the others as another copy. */
+const COPY_MARK = /(?:\s+-\s+copy(?:\s*\(\d+\))?|\s+copy(?:\s+\d+)?|\s*\(\d+\)|\s+\d+)$/i;
+// a name with its copy markers taken off — a folder's too: "Player_Journey 2"
+function stripCopyMark(stem) {
+  let s = stem;
+  for (let i = 0; i < 3 && COPY_MARK.test(s); i++) s = s.replace(COPY_MARK, "");
+  return s || stem;
+}
+function canonicalName(name) {
+  const b = base(name), dot = b.lastIndexOf(".");
+  if (dot <= 0) return b;
+  return stripCopyMark(b.slice(0, dot)) + b.slice(dot);
+}
 /* ISO-3166 code → country name, straight from the browser's own locale data:
  * a bundled 250-entry lookup table would be pure weight, and fetching one would
  * break the "no external requests at all" promise. Falls back to the raw code
@@ -115,6 +210,22 @@ function monthKey(d) { return d.getUTCFullYear() + "-" + String(d.getUTCMonth() 
 function fmtMonth(k) { const [y, m] = k.split("-"); return MONTHS[+m - 1] + " ’" + y.slice(2); }
 function fmtDate(d) { return MONTHS[d.getUTCMonth()] + " " + d.getUTCDate() + ", " + d.getUTCFullYear(); }
 function weekdayMon(d) { return (d.getUTCDay() + 6) % 7; } // 0 = Monday
+/* The quarter hour a moment falls in, counted from the epoch. A tally keyed by
+ * it stays UTC like every other bucket, yet still lets a card place each entry
+ * in the viewer's own hour or weekday — with the offset in force at THAT moment,
+ * daylight saving included, which one "current offset" for the lot cannot do.
+ * Quarter hours, not hours: every offset in use is a whole number of them
+ * (India +5:30, Nepal +5:45, Newfoundland −3:30), so the start of a slot sits in
+ * the same local hour as everything inside it. A whole-hour key put anything
+ * from the second half of a UTC hour an hour early in those places. */
+const SLOT_MS = 15 * 60e3;
+function slotKey(d) { return Math.floor(d.getTime() / SLOT_MS); }
+function slotDate(k) { return new Date(k * SLOT_MS); }
+function medianOf(a) {
+  if (!a.length) return null;
+  const s = a.slice().sort((x, y) => x - y), m = s.length >> 1;
+  return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2;
+}
 
 /* full inclusive list of month keys from first→last (fills gaps with zeros) */
 function monthSpan(keys) {
@@ -274,19 +385,23 @@ function freshState() {
     profile: null, collection: null, medals: [], recent: null, eggs: null,
     ev: {
       totals: {}, byMonth: {}, hourweek: Array.from({ length: 7 }, () => Array(24).fill(0)),
+      hourweekLocal: Array.from({ length: 7 }, () => Array(24).fill(0)),   // the same moments on the viewer's clock, each on its own local hour
       days: new Set(), dayCounts: {}, geo: new Map(), geoKind: new Map(), first: null, last: null,
       stamps: [], forts: new Map(), gyms: new Map(),
       raidTotal: 0, raidRemote: 0, raidMaxKm: 0, raidKmSum: 0, raidWithDist: 0,
       raidArcs: new Map(), raidGymBins: new Map(), remoteRaidsByYear: {},
       geoFirst: new Map(), arcFirst: new Map(),   // first-seen month per spot/arc — feeds the globe timeline
       geoMonths: new Map(), arcMonths: new Map(), // per-spot / per-arc tallies by month — the timeline's "this month only" view
-      win: {}, blurredRows: 0,   // span of each event's precise "1" file; rows whose blurred positions were kept off the map
+      win: {}, blurredRows: 0,   // each event's precise "1" file: its span, and its instants until the "2" twin has matched them; rows whose blurred positions were kept off the map
+      there: {},                 // in-person GO Fests a precise position places you at: { id: { n, days: { UTC day on the festival's own dates: n } } } — never a coordinate
     },
     trail: [], trailCount: 0, trailStride: 1,
     bag: null,
     friends: { rows: [], monthly: {}, sources: {}, initiated: {}, games: {}, unfriendedMonthly: {}, unfriended: 0 },
-    invites: { sent: 0, accepted: 0, declined: 0 },
-    party: { received: 0, sent: 0 },
+    // slots: invites per quarter hour of the epoch, placed on your local weekday at
+    // render (see slotKey and inviteTiming). Never the other trainer — see parseInvites.
+    invites: { sent: 0, accepted: 0, declined: 0, failed: 0, monthly: {}, slots: {} },
+    party: { received: 0, sent: 0, monthly: {}, slots: {} },
     spend: {
       coinsBought: 0, coinsSpent: 0, purchases: 0, spendEvents: 0, items: {}, cur: {}, vendor: {},
       boughtMonthly: {}, spentMonthly: {}, freeBundles: 0, paidBundles: 0, granted: 0, grantedItems: {},
@@ -294,15 +409,27 @@ function freshState() {
     fitness: { daily: {} },
     photos: { monthly: {}, days: {}, total: 0, first: null, last: null },
     support: { tickets: 0, messages: 0, topics: {}, first: null, last: null },
-    sessions: { monthly: {}, devices: {}, cities: {}, countries: {}, places: {}, total: 0 },
-    installs: { count: 0, first: null, devices: {} },
+    sessions: {
+      monthly: {}, devices: {}, cities: {}, countries: {}, places: {}, total: 0,
+      apps: {}, oses: {},      // sessions per app / OS version — public release numbers
+      eraMonths: {},           // "YYYY-MM" → { device: sessions } — see deviceEras
+      deviceKind: {},          // device → { platform, kind }, from the files' enumerations only
+    },
+    // times: every install either file names, keyed by its instant (ms) → the
+    // device it was made on — see installHistory
+    installs: { count: 0, first: null, last: null, devices: {}, times: {} },
+    referrals: null,         // { total, friends } — how many, never who
     liveEvents: [],
     wayfarer: null,
     campfire: null,          // counts and months only — see parseCampfire
   };
 }
 let STATE = freshState();
-let RAW = [];               // [{ name, text, entry, oversize, file }]
+let RAW = [];               // one entry per copy of a file: [{ name, key, path, group, text, file, entry, oversize, … }] — see putCopy
+let DROP_N = 0;             // numbers each ingest(), so files dropped together can be told from files dropped apart
+const FILE_PATH = new WeakMap();   // File → its path inside a dropped folder (a drag and drop leaves webkitRelativePath empty)
+const pathOf = (f) => ((f && FILE_PATH.get(f)) || (f && f.webkitRelativePath) || "").replace(/^\/+/, "");
+const EMPTY_FILE = /^\s*No data found\.?\s*$/i;
 /* Bumped whenever the user wipes their data (Clear / Start over / demo reload).
  * build() awaits file reads and library loads, so a Clear part-way through must
  * be able to abandon the in-flight build — otherwise it finishes and re-renders
@@ -313,29 +440,70 @@ let MAP = null;
 let GLOBE = null;
 let GLOBE_CLEANUP = [];     // window listeners / observers tied to the current globe
 let BUILDING = false;
+let BUILD_AGAIN = false;    // files arrived while a build ran: build once more when it ends
 
 /* Heavy vendor libraries load on demand, not at page open — the upload UI
  * must be interactive the moment the page paints, and most visits never need
- * the 1.4MB globe bundle at all. */
+ * the 1.9MB globe bundle at all.
+ *
+ * Each one carries a subresource-integrity hash from this one map. sw.js
+ * serves /vendor/ cache-first and Netlify marks it immutable for a year, so a
+ * copy that went bad in either cache would otherwise keep running; with the
+ * hash on the tag the browser refuses any bytes but these. Same-origin, so no
+ * crossorigin attribute is needed. `node tools/sri.mjs --write` rebuilds the
+ * map from the vendor paths ensureScript/ensureCSS are called with, and
+ * tools/test-parsers.mjs fails when a value drifts from its file. */
+const VENDOR_SRI = {
+  "vendor/chart-4.5.1.umd.min.js": "sha384-jb8JQMbMoBUzgWatfe6COACi2ljcDdZQ2OxczGA3bGNeWe+6DChMTBJemed7ZnvJ",
+  "vendor/globe.gl-2.46.2.min.js": "sha384-1uolMBZ25k3zJcNwCLEv49+L+m2dZudqAzsoSAJfQTzDCSBxJzrMuZ2dkp/5JKiT",
+  "vendor/leaflet.css": "sha384-sHL9NAb7lN7rfvG5lfHpm643Xkcjzp4jFvuavGOndn6pjVqS6ny56CAt3nsEVT4H",
+  "vendor/leaflet.js": "sha384-cxOPjt7s7Iz04uaHJceBmS+qpjv2JkIHNVcuOrM+YHwZOmJGBXI00mdUXEq65HTH",
+  "vendor/leaflet-heat.js": "sha384-mFKkGiGvT5vo1fEyGCD3hshDdKmW3wzXW/x+fWriYJArD0R3gawT6lMvLboM22c0",
+};
 const _libLoads = {};
 function ensureScript(src) {
   if (_libLoads[src]) return _libLoads[src];
-  return (_libLoads[src] = new Promise((res, rej) => {
+  const tag = (url) => new Promise((res, rej) => {
     const s = document.createElement("script");
-    s.src = src;
+    if (VENDOR_SRI[src]) s.integrity = VENDOR_SRI[src];
+    s.src = url;
     s.onload = res;
-    s.onerror = () => { delete _libLoads[src]; rej(new Error("failed to load " + src)); };
+    s.onerror = () => rej(new Error("failed to load " + src));
     document.head.appendChild(s);
-  }));
+  });
+  return (_libLoads[src] = loadVendor(src, tag).catch((err) => { delete _libLoads[src]; throw err; }));
 }
 function ensureCSS(href) {
   if (_libLoads[href]) return _libLoads[href];
-  return (_libLoads[href] = new Promise((res) => {
+  const tag = (url) => new Promise((res, rej) => {
     const l = document.createElement("link");
-    l.rel = "stylesheet"; l.href = href;
-    l.onload = res; l.onerror = res;
+    if (VENDOR_SRI[href]) l.integrity = VENDOR_SRI[href];
+    l.rel = "stylesheet"; l.href = url;
+    l.onload = res;
+    l.onerror = () => rej(new Error("failed to load " + href));
     document.head.appendChild(l);
-  }));
+  });
+  // an unstyled map still works, so a stylesheet that won't load never fails a build
+  return (_libLoads[href] = loadVendor(href, tag).catch(() => { delete _libLoads[href]; }));
+}
+/* sw.js answers /vendor/ from its cache without looking at the network again,
+ * so a cached copy that fails its integrity check would be handed straight
+ * back every time. A failed load therefore drops that copy and goes once more,
+ * at a fresh address. The same address won't do: the renderer's memory cache
+ * keeps the bytes it just refused, and under the year-long immutable headers
+ * stored beside them it reuses them for that URL — on "Try again", even after
+ * a reload — without asking the service worker. The query string only changes
+ * that key; sw.js matches /vendor/ with ignoreSearch and Netlify ignores it, so
+ * it is the same pinned file checked against the same hash. A plain network
+ * failure leaves nothing cached, and costs one more failed request. */
+function loadVendor(path, tag) {
+  return tag(path).catch(() => dropCachedVendor(path).then(() => tag(`${path}?retry=${Date.now()}`)));
+}
+function dropCachedVendor(src) {
+  if (!VENDOR_SRI[src] || !window.caches) return Promise.resolve();
+  return caches.keys()
+    .then((keys) => Promise.all(keys.map((k) => caches.open(k).then((c) => c.delete(src, { ignoreSearch: true })))))
+    .catch(() => {});
 }
 
 /* ───────────────────────────── ingest ───────────────────────────── */
@@ -350,24 +518,60 @@ function showError(msg, trustedHTML) {
    * common first-run failure — dropping the ZIP unopened — looked like the page
    * simply ignoring you. Bring it into view and let assistive tech announce it.
    * role=alert lives on the element (see metrics.html) so it is announced on
-   * every message, not just the first. */
-  el.scrollIntoView({ behavior: scrollBehavior(), block: "center" });
+   * every message, not just the first. While a password panel is up, though,
+   * the panel is what the reader needs: it goes to the top of the view instead,
+   * with this note below it, rather than being scrolled away mid-password. */
+  const panel = PENDING_ZIP && $("zip-unlock");
+  (panel || el).scrollIntoView({ behavior: scrollBehavior(), block: panel ? "start" : "center" });
 }
 function clearError() { const el = $("upload-error"); if (el) el.style.display = "none"; }
 
 /* ── ZIP support ──
- * The export carries a second archive inside it: Player_Journey.zip, the nine
- * activity logs that make the biggest chapters. Only the OUTER download is
- * password-protected — the inner one is plain deflate — yet every visitor was
- * told to unzip it by hand before those files would register, the step the
- * guide never quite got people through. Browsers can inflate deflate streams
- * natively now, so a small central-directory reader is all it takes to open
- * it here: no library, nothing fetched, nothing leaves the tab. The outer
- * download is recognised by its encryption flag and still gets the
- * "unzip it on a computer" explainer. Measured on a real export: 21 entries,
- * all method 8, no encryption, no ZIP64. */
+ * The download support sends is a password-protected ZIP, and inside it sits a
+ * second archive, Player_Journey.zip — the activity logs behind the biggest
+ * chapters. Unzipping it by hand was the step the guide never quite got people
+ * through, and the tools that ship with the OS don't help: macOS's `unzip`
+ * skips every entry ("unsupported compression method 99") and `ditto` gives
+ * up ("Unknown compression type"), and Windows' built-in extractor has
+ * historically lacked this kind of password too. So both archives open here.
+ * A small central-directory reader walks the entries; the browser's native
+ * DecompressionStream inflates them; the password lock (WinZip AES) is checked
+ * and undone with WebCrypto plus the few dozen lines of AES below. No library,
+ * nothing fetched, nothing leaves the tab.
+ *
+ * Measured on two real downloads: 21 and 22 entries, every data file AES-256
+ * in the AE-2 flavour over deflate (one carries a single unencrypted entry
+ * beside them), no ZIP64; Player_Journey.zip inside is 21 plain deflate
+ * entries. Unzipped, one whole export comes to about 40 MB. */
 const ZIP_OK = typeof DecompressionStream === "function";
-async function unzipFile(file) {
+/* PBKDF2 and HMAC come from WebCrypto, which only exists in a secure context
+ * (https, or localhost while developing). A page opened some other way keeps
+ * the "unzip it with a tool first" explainer. */
+const ZIP_AES_OK = ZIP_OK && typeof crypto === "object" && !!crypto && !!crypto.subtle;
+const ZIP_TOOLS = "Keka or The Unarchiver on a Mac, or 7-Zip on Windows";
+
+/* An archive is a list of claims about sizes and offsets, and a hostile one
+ * lies: a 66 KB file whose entries all pointed at one deflate stream expanded
+ * to a gigabyte here in about a second. Nothing is inflated past these. The
+ * real export has 22 entries and about 40 MB unzipped, so they leave room for
+ * a far heavier player. A mutable object only so the tests can shrink it. */
+const ZIP_LIMITS = {
+  entries: 200,                    // listed by one archive — a journey archive inside it included; the export lists 22, its journey archive 21
+  file: 80 * 1024 * 1024,          // the same ceiling ingest() puts on a loose file
+  total: 256 * 1024 * 1024,        // inflated from one archive — a journey archive inside it included
+};
+class ZipError extends Error {
+  // kind: "limit" | "password" | "damaged" | "unsupported"
+  constructor(message, kind) { super(message); this.kind = kind; }
+}
+/* What one dropped archive may still do: bytes to inflate and entries to list.
+ * Every archive opened from inside it draws on the same allowance. With a fresh
+ * 200 entries for each archive, one plain ZIP of 200 ZIPs of 200 files each put
+ * 40,000 rows in the list. */
+const zipBudget = () => ({ left: ZIP_LIMITS.total, entries: ZIP_LIMITS.entries });
+const zipMB = (n) => Math.round(n / 1024 / 1024);
+
+async function unzipFile(file, budget) {
   const buf = new Uint8Array(await file.arrayBuffer());
   const dv = new DataView(buf.buffer, buf.byteOffset, buf.byteLength);
   // The end-of-central-directory record sits in the last 64 KB + 22 bytes.
@@ -377,32 +581,396 @@ async function unzipFile(file) {
   }
   if (eocd < 0) throw new Error("not a zip");
   const count = dv.getUint16(eocd + 10, true);
+  budget = budget || zipBudget();
+  if (count > budget.entries) {
+    // An archive from inside another is refused as part of that one's allowance,
+    // and marked so ingest() can name all such refusals in a single note.
+    const inside = budget.entries < ZIP_LIMITS.entries;
+    throw Object.assign(new ZipError(inside
+      ? `with the archive it came in, it lists more than the ${ZIP_LIMITS.entries} entries this page will open from one archive`
+      : `it lists ${count.toLocaleString()} entries, more than the ${ZIP_LIMITS.entries} this page will open`, "limit"), { crowded: inside });
+  }
+  budget.entries -= count;
   let off = dv.getUint32(eocd + 16, true);
   const dec = new TextDecoder();
-  const entries = [];
+  const entries = [], offsets = new Set();
   for (let k = 0; k < count && off + 46 <= buf.length; k++) {
     if (dv.getUint32(off, true) !== 0x02014b50) break;
     const flags = dv.getUint16(off + 8, true), method = dv.getUint16(off + 10, true);
+    const crc = dv.getUint32(off + 16, true);
     const csize = dv.getUint32(off + 20, true), usize = dv.getUint32(off + 24, true);
     const nLen = dv.getUint16(off + 28, true), xLen = dv.getUint16(off + 30, true), cLen = dv.getUint16(off + 32, true);
     const lho = dv.getUint32(off + 42, true);
     if (csize === 0xffffffff || usize === 0xffffffff || lho === 0xffffffff) throw new Error("zip64 archives are not supported");
-    entries.push({ name: dec.decode(buf.subarray(off + 46, off + 46 + nLen)), method, csize, usize, lho, encrypted: !!(flags & 1) });
+    // Two entries reading one set of bytes is how a small archive fakes a huge one.
+    if (offsets.has(lho)) throw new ZipError("two of its entries point at the same data", "limit");
+    offsets.add(lho);
+    // WinZip AES stores method 99 in the header and the real method, key size
+    // and flavour in extra field 0x9901: version (1 = AE-1, 2 = AE-2), "AE",
+    // strength (1/2/3 = AES-128/192/256), then the actual compression method.
+    let aes = null;
+    for (let x = off + 46 + nLen, xEnd = Math.min(x + xLen, buf.length); x + 4 <= xEnd; ) {
+      const id = dv.getUint16(x, true), sz = dv.getUint16(x + 2, true);
+      if (id === 0x9901 && sz >= 7 && x + 11 <= xEnd)
+        aes = { version: dv.getUint16(x + 4, true), strength: buf[x + 8], method: dv.getUint16(x + 9, true) };
+      x += 4 + sz;
+    }
+    entries.push({ name: dec.decode(buf.subarray(off + 46, off + 46 + nLen)), method, crc, csize, usize, lho,
+      encrypted: !!(flags & 1), aes: method === 99 ? aes : null });
     off += 46 + nLen + xLen + cLen;
   }
-  return { entries, buf, dv };
+  // Each entry's bytes must lie inside the file and apart from every other's.
+  let end = 0;
+  for (const e of entries.slice().sort((a, b) => a.lho - b.lho)) {
+    if (e.lho < end) throw new ZipError("its entries overlap one another", "limit");
+    if (e.lho + 30 > buf.length || dv.getUint32(e.lho, true) !== 0x04034b50) throw new Error("bad local header for " + e.name);
+    e.start = e.lho + 30 + dv.getUint16(e.lho + 26, true) + dv.getUint16(e.lho + 28, true);
+    end = e.start + e.csize;
+    if (end > buf.length) throw new ZipError("it's cut short — part of it is missing", "damaged");
+  }
+  return { entries, buf, dv, budget };
 }
-async function zipEntryFile(z, e) {
-  const { buf, dv } = z;
-  if (dv.getUint32(e.lho, true) !== 0x04034b50) throw new Error("bad local header for " + e.name);
-  const nLen = dv.getUint16(e.lho + 26, true), xLen = dv.getUint16(e.lho + 28, true);
-  const start = e.lho + 30 + nLen + xLen;
-  const data = buf.subarray(start, start + e.csize);
+
+/* null, "aes" (openable here once the password is typed), or "unsupported" —
+ * ZipCrypto, the older scheme, or anything else this reader can't undo. */
+function zipLock(z) {
+  const locked = z.entries.filter((e) => e.encrypted);
+  if (!locked.length) return null;
+  return locked.every((e) => e.aes && (e.aes.version === 1 || e.aes.version === 2) && e.aes.strength >= 1 && e.aes.strength <= 3)
+    ? "aes" : "unsupported";
+}
+
+async function zipEntryFile(z, e, password) {
   const name = e.name.split("/").pop();
-  if (e.method === 0) return new File([data], name);
-  if (e.method !== 8) throw new Error("unsupported compression method " + e.method + " in " + e.name);
-  const inflated = await new Response(new Blob([data]).stream().pipeThrough(new DecompressionStream("deflate-raw"))).blob();
-  return new File([inflated], name);
+  if (e.usize > ZIP_LIMITS.file) throw new ZipError(`${name} says it unzips to ${zipMB(e.usize)} MB, over the ${zipMB(ZIP_LIMITS.file)} MB limit`, "limit");
+  let data = z.buf.subarray(e.start, e.start + e.csize), method = e.method, crc = null;
+  if (e.encrypted) {
+    if (!e.aes) throw new ZipError(`${name} uses ZipCrypto`, "unsupported");
+    data = await zipAesDecrypt(data, e.aes, password);
+    method = e.aes.method;
+    // AE-1 keeps the CRC as a second check; AE-2 zeroes it and leans on the HMAC.
+    if (e.aes.version === 1) crc = e.crc;
+  }
+  if (method !== 0 && method !== 8) throw new Error("unsupported compression method " + method + " in " + e.name);
+  return new File([await zipInflate(data, method, e.usize, z.budget, crc, name)], name);
+}
+
+/* Inflate one entry, counting every byte as it streams out. An entry may not
+ * produce more than its header declared (that is the lie a bomb tells), and
+ * the whole archive may not produce more than its budget; either one cancels
+ * the stream on the spot rather than after a gigabyte has landed. */
+async function zipInflate(data, method, declared, budget, crc, name) {
+  let n = 0, c = ~0;
+  const take = (chunk) => {
+    n += chunk.length;
+    if (n > declared) throw new ZipError(`${name} unzips to more than its header says`, "limit");
+    if ((budget.left -= chunk.length) < 0)
+      throw new ZipError(`it unzips to more than the ${zipMB(ZIP_LIMITS.total)} MB this page will open from one archive`, "limit");
+    if (crc !== null) c = crc32Update(c, chunk);
+  };
+  const parts = [];
+  if (method === 0) { take(data); parts.push(data); }
+  else {
+    const reader = new Blob([data]).stream().pipeThrough(new DecompressionStream("deflate-raw")).getReader();
+    try {
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        take(value);
+        parts.push(value);
+      }
+    } catch (err) { reader.cancel().catch(() => {}); throw err; }
+  }
+  if (crc !== null && (~c >>> 0) !== crc) throw new ZipError(`${name} failed its checksum`, "damaged");
+  return new Blob(parts);
+}
+
+let CRC_TABLE = null;
+function crc32Update(c, bytes) {
+  if (!CRC_TABLE) {
+    CRC_TABLE = new Int32Array(256);
+    for (let n = 0; n < 256; n++) { let k = n; for (let j = 0; j < 8; j++) k = k & 1 ? 0xedb88320 ^ (k >>> 1) : k >>> 1; CRC_TABLE[n] = k; }
+  }
+  for (let i = 0; i < bytes.length; i++) c = CRC_TABLE[(c ^ bytes[i]) & 255] ^ (c >>> 8);
+  return c;
+}
+
+/* WinZip AES (the "AE-x" spec). The stored bytes are salt (8/12/16 bytes for
+ * AES-128/192/256), a 2-byte password verifier, the ciphertext, and a 10-byte
+ * authentication code. PBKDF2-HMAC-SHA1 over the password and salt, 1,000
+ * rounds, gives the AES key, the HMAC key and the verifier, in that order.
+ * Order matters here: the verifier answers "right password?" without touching
+ * the data, the HMAC proves the ciphertext is intact, and only then is it
+ * decrypted. The password itself goes no further than this function. */
+async function zipAesKeys(data, aes, password) {
+  const keyLen = 8 * (aes.strength + 1), saltLen = keyLen / 2;
+  if (data.length < saltLen + 12) throw new ZipError("an entry is too short to be real", "damaged");
+  const pw = await crypto.subtle.importKey("raw", new TextEncoder().encode(password), "PBKDF2", false, ["deriveBits"]);
+  const bits = new Uint8Array(await crypto.subtle.deriveBits(
+    { name: "PBKDF2", hash: "SHA-1", salt: data.slice(0, saltLen), iterations: 1000 }, pw, (2 * keyLen + 2) * 8));
+  const ok = bits[2 * keyLen] === data[saltLen] && bits[2 * keyLen + 1] === data[saltLen + 1];
+  return { ok, keyLen, saltLen, bits };
+}
+async function zipAesDecrypt(data, aes, password) {
+  const { ok, keyLen, saltLen, bits } = await zipAesKeys(data, aes, password);
+  if (!ok) throw new ZipError("wrong password", "password");
+  const body = data.slice(saltLen + 2, data.length - 10), mac = data.subarray(data.length - 10);
+  const hk = await crypto.subtle.importKey("raw", bits.slice(keyLen, 2 * keyLen), { name: "HMAC", hash: "SHA-1" }, false, ["sign"]);
+  const sig = new Uint8Array(await crypto.subtle.sign("HMAC", hk, body));
+  for (let i = 0; i < 10; i++) if (sig[i] !== mac[i]) throw new ZipError("its contents don't match their authentication code", "damaged");
+  await aesCtrWinZip(bits.subarray(0, keyLen), body);
+  bits.fill(0);
+  return body;
+}
+
+/* AES, encryption direction only — counter mode never needs the inverse.
+ * WebCrypto has AES-CTR, but it counts big-endian in the block's last bytes;
+ * WinZip's counter is a little-endian integer in the FIRST eight, starting at
+ * 1, so the keystream has to be made here. Standard T-table AES (FIPS-197),
+ * tables built once from the field arithmetic rather than pasted in. */
+let AES_T = null;
+function aesTables() {
+  if (AES_T) return AES_T;
+  const S = new Uint8Array(256), T0 = new Uint32Array(256), T1 = new Uint32Array(256), T2 = new Uint32Array(256), T3 = new Uint32Array(256);
+  const exp = new Uint8Array(256), log = new Uint8Array(256);
+  const xt = (x) => ((x << 1) ^ (x & 0x80 ? 0x11b : 0)) & 255;
+  for (let i = 0, x = 1; i < 255; i++) { exp[i] = x; log[x] = i; x ^= xt(x); }   // powers of the generator 3
+  const rot = (x, k) => ((x << k) | (x >>> (8 - k))) & 255;
+  for (let i = 0; i < 256; i++) {
+    const inv = i ? exp[(255 - log[i]) % 255] : 0;
+    const s = inv ^ rot(inv, 1) ^ rot(inv, 2) ^ rot(inv, 3) ^ rot(inv, 4) ^ 0x63;
+    S[i] = s;
+    const t = ((xt(s) << 24) | (s << 16) | (s << 8) | (xt(s) ^ s)) >>> 0;   // MixColumns weights 2,1,1,3
+    T0[i] = t; T1[i] = (t >>> 8) | (t << 24); T2[i] = (t >>> 16) | (t << 16); T3[i] = (t >>> 24) | (t << 8);
+  }
+  return (AES_T = { S, T0, T1, T2, T3 });
+}
+function aesExpandKey(key) {
+  const { S } = aesTables();
+  const nk = key.length / 4, W = new Uint32Array(4 * (nk + 7));
+  for (let i = 0; i < nk; i++) W[i] = (key[4 * i] << 24) | (key[4 * i + 1] << 16) | (key[4 * i + 2] << 8) | key[4 * i + 3];
+  const sub = (t) => (S[t >>> 24] << 24) | (S[(t >>> 16) & 255] << 16) | (S[(t >>> 8) & 255] << 8) | S[t & 255];
+  for (let i = nk, rcon = 1; i < W.length; i++) {
+    let t = W[i - 1];
+    if (i % nk === 0) { t = sub((t << 8) | (t >>> 24)) ^ (rcon << 24); rcon = ((rcon << 1) ^ (rcon & 0x80 ? 0x11b : 0)) & 255; }
+    else if (nk > 6 && i % nk === 4) t = sub(t);
+    W[i] = W[i - nk] ^ t;
+  }
+  return W;
+}
+/* XOR the WinZip keystream into `data` in place (encrypting and decrypting are
+ * the same operation). Yields every megabyte so a big entry can't freeze the page. */
+async function aesCtrWinZip(key, data) {
+  const { S, T0, T1, T2, T3 } = aesTables();
+  const W = aesExpandKey(key), R = W.length / 4 - 1;
+  const bswap = (x) => ((x & 255) << 24) | ((x & 0xff00) << 8) | ((x >>> 8) & 0xff00) | (x >>> 24);
+  for (let pos = 0, ctr = 1; pos < data.length; ctr++, pos += 16) {
+    let s0 = bswap(ctr >>> 0) ^ W[0], s1 = bswap((ctr / 4294967296) >>> 0) ^ W[1], s2 = W[2], s3 = W[3];
+    for (let r = 1, k = 4; r < R; r++, k += 4) {
+      const t0 = T0[s0 >>> 24] ^ T1[(s1 >>> 16) & 255] ^ T2[(s2 >>> 8) & 255] ^ T3[s3 & 255] ^ W[k];
+      const t1 = T0[s1 >>> 24] ^ T1[(s2 >>> 16) & 255] ^ T2[(s3 >>> 8) & 255] ^ T3[s0 & 255] ^ W[k + 1];
+      const t2 = T0[s2 >>> 24] ^ T1[(s3 >>> 16) & 255] ^ T2[(s0 >>> 8) & 255] ^ T3[s1 & 255] ^ W[k + 2];
+      const t3 = T0[s3 >>> 24] ^ T1[(s0 >>> 16) & 255] ^ T2[(s1 >>> 8) & 255] ^ T3[s2 & 255] ^ W[k + 3];
+      s0 = t0; s1 = t1; s2 = t2; s3 = t3;
+    }
+    const k = 4 * R;
+    const o = [
+      ((S[s0 >>> 24] << 24) | (S[(s1 >>> 16) & 255] << 16) | (S[(s2 >>> 8) & 255] << 8) | S[s3 & 255]) ^ W[k],
+      ((S[s1 >>> 24] << 24) | (S[(s2 >>> 16) & 255] << 16) | (S[(s3 >>> 8) & 255] << 8) | S[s0 & 255]) ^ W[k + 1],
+      ((S[s2 >>> 24] << 24) | (S[(s3 >>> 16) & 255] << 16) | (S[(s0 >>> 8) & 255] << 8) | S[s1 & 255]) ^ W[k + 2],
+      ((S[s3 >>> 24] << 24) | (S[(s0 >>> 16) & 255] << 16) | (S[(s1 >>> 8) & 255] << 8) | S[s2 & 255]) ^ W[k + 3],
+    ];
+    for (let j = 0, n = Math.min(16, data.length - pos); j < n; j++) data[pos + j] ^= o[j >> 2] >>> (24 - 8 * (j & 3));
+    if ((ctr & 0xffff) === 0) await nextTick();
+  }
+}
+
+/* Files an operating system writes into a folder by itself: the Finder's
+ * .DS_Store, its AppleDouble "._" twins (on a non-Mac disk, or under __MACOSX/
+ * in a ZIP the Finder made), .localized and a folder's Icon file, and Windows'
+ * Thumbs.db and desktop.ini. Nobody put them in an export and nobody sees them
+ * in the folder, so a drop passes over them without a word. They get no row in
+ * the list and no "isn't a format this site reads" alert, which a plain Mac
+ * export folder used to get on every drop. */
+const OS_CLUTTER = /^(?:\.DS_Store|\._.*|\.localized|Icon\r|Thumbs\.db|ehthumbs\.db|desktop\.ini)$/i;
+const isOsClutter = (name) => OS_CLUTTER.test(String(name).split("/").pop());
+
+/* Pull the readable files out of an opened archive: the data files, plus —
+ * unless this archive is itself nested — any ZIP inside it, to be opened ONE
+ * level down and no further. An entry that declares more than the per-file
+ * ceiling is never inflated; a data file becomes a stand-in the file list
+ * reports as too large, the same as an oversized loose file. A ZIP inside a
+ * nested archive stays shut and is named in `deeper`, so the page can say why. */
+async function zipExtract(z, { nested = false, password = "", progress = null, stale = null } = {}) {
+  const leaf = z.entries.filter((e) => !e.name.endsWith("/") && !/(?:^|\/)__MACOSX\//.test(e.name) && !isOsClutter(e.name));
+  const want = leaf.filter((e) => /\.(tsv|csv|txt|json)$/i.test(e.name) || (!nested && /\.zip$/i.test(e.name)));
+  const deeper = nested ? leaf.filter((e) => /\.zip$/i.test(e.name)).map((e) => e.name.split("/").pop()) : [];
+  const files = [], tooBig = [];
+  for (let i = 0; i < want.length; i++) {
+    const e = want[i], name = e.name.split("/").pop();
+    if (progress) progress(i + 1, want.length);
+    if (e.usize > ZIP_LIMITS.file) {
+      if (/\.zip$/i.test(name)) tooBig.push(name);
+      else files.push({ name, size: e.usize, standIn: true });
+      continue;
+    }
+    files.push(await zipEntryFile(z, e, password));
+    if (stale && stale()) return null;
+  }
+  return { files, tooBig, deeper };
+}
+const zipTooBigNote = (inner, outer) =>
+  `<b>${esc(inner)}</b> inside <b>${esc(base(outer))}</b> is over ${zipMB(ZIP_LIMITS.file)} MB, so it wasn't opened.`;
+const zipDeeperNote = (inner, outer) => {
+  const one = inner.length === 1;
+  const names = inner.slice(0, 3).map((n) => `<b>${esc(n)}</b>`).join(", ") + (inner.length > 3 ? ` and ${inner.length - 3} more` : "");
+  return `${names} inside <b>${esc(base(outer))}</b> ${one ? "wasn't" : "weren't"} opened — this page only opens one level down. Unzip ${one ? "it" : "them"} with ${ZIP_TOOLS}, then add the files inside.`;
+};
+/* The archives inside another that its shared entry allowance left shut, named
+ * in one note rather than one note each. */
+const zipCrowdNote = (inner, outer) => {
+  const one = inner.length === 1;
+  const names = inner.slice(0, 3).map((n) => `<b>${esc(n)}</b>`).join(", ") + (inner.length > 3 ? ` and ${inner.length - 3} more` : "");
+  return `${names}${outer ? ` inside <b>${esc(base(outer))}</b>` : ""} ${one ? "wasn't" : "weren't"} opened — with the archive around ${one ? "it" : "them"}, that's more than the ${ZIP_LIMITS.entries} entries this page will open from one archive. Unzip ${one ? "it" : "them"} with ${ZIP_TOOLS}, then add the files inside.`;
+};
+/* The typed password, or — when that fails and trimming changes it — the
+ * trimmed one: pasting from an email can bring a trailing space along.
+ * A verifier is only two bytes, so about one wrong password in 65,536 gets
+ * past any one entry's. Every locked entry has its own salt and verifier, so a
+ * password is taken only once it passes all of them; then a wrong one almost
+ * never reaches the HMAC, which is left to catch real damage. */
+async function zipFindPassword(z, typed) {
+  const locked = z.entries.filter((x) => x.encrypted && x.aes);
+  for (const pw of typed.trim() && typed.trim() !== typed ? [typed, typed.trim()] : [typed]) {
+    let ok = true;
+    for (const e of locked) {
+      const k = await zipAesKeys(z.buf.subarray(e.start, e.start + e.csize), e.aes, pw);
+      k.bits.fill(0);
+      if (!(ok = k.ok)) break;
+    }
+    if (ok) return pw;
+  }
+  throw new ZipError("wrong password", "password");
+}
+/* What the panel says when an unlock fails. A "damaged" verdict can't vouch
+ * for the password: an archive with one locked entry has a single 2-byte
+ * check, so a wrong password can (rarely) get as far as the HMAC. The copy
+ * names both causes and puts the cheaper fix first. */
+function zipUnlockMessage(err) {
+  const kind = err && err.kind;
+  return kind === "password" ? "That password didn't work. Check the message from support and try again — pasting it in is the surest way."
+    : kind === "damaged" ? "This file looks damaged, or the password isn't quite right: its contents don't match their checksum. Check the password and try again. If it still won't open, download the file again from the link in the message and drop the new copy here."
+    : kind === "limit" ? `This ZIP wasn't opened: ${err.message}.`
+    : kind === "unsupported" ? `Part of this ZIP uses encryption this page can't open — unzip it with ${ZIP_TOOLS}.`
+    : `Something went wrong opening this ZIP. Try again, or unzip it with ${ZIP_TOOLS}.`;
+}
+
+/* ── the password prompt ──
+ * A locked download doesn't stop the drop: ingest() hands it here, the rest of
+ * the drop carries on, and this panel under the dropzone asks for the password.
+ * No <form>, on purpose — a form that failed to wire up could submit the
+ * password into a URL. The password lives in the field and in unlockZip() for
+ * as long as the unlock takes; the panel, field and all, is emptied the moment
+ * it succeeds, and nothing writes it anywhere.
+ * While the panel is up, the auto-build a drop would start waits (buildHeld):
+ * build() moves focus to the report and scrolls to it, which took the field
+ * away from someone mid-password. It runs once the panel is done with — after
+ * the unlock, or on "Not now". */
+let PENDING_ZIP = null;   // { file, z, busy, buildHeld, group, path } — a password-protected ZIP waiting on its password
+function showUnlock(file, z, from = {}) {
+  const el = $("zip-unlock");
+  if (!el) return false;
+  const I = (n) => (window.ICON ? window.ICON(n) : "");
+  // a build held for an earlier panel stays held when a new locked ZIP replaces it;
+  // group and path are where the download sat, for the files that come out of it
+  PENDING_ZIP = { file, z, busy: false, buildHeld: !!(PENDING_ZIP && PENDING_ZIP.buildHeld), group: from.group, path: from.path };
+  el.innerHTML = `<div class="zu-head">
+      <span class="zu-ic" aria-hidden="true">${I("lock")}</span>
+      <div>
+        <h3 id="zu-title">This ZIP is password-protected</h3>
+        <p><b>${esc(base(file.name))}</b> can be opened right here. Type the password from the message that came with your download link.</p>
+      </div>
+    </div>
+    <div class="zu-field">
+      <label for="zu-pass">Password</label>
+      <div class="zu-row">
+        <input id="zu-pass" type="password" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" enterkeyhint="go" aria-describedby="zu-status zu-promise">
+        <button class="btn btn-ghost zu-show" type="button" aria-pressed="false" aria-controls="zu-pass">Show</button>
+        <button class="btn btn-primary" id="zu-go" type="button">Open my ZIP</button>
+      </div>
+    </div>
+    <p class="zu-status" id="zu-status" role="status" aria-live="polite"></p>
+    <p class="zu-promise" id="zu-promise">${I("lock")}<span>The password never leaves this device and isn't stored — it's used once, in this tab, to open the file.</span></p>
+    <button class="linkish zu-cancel" type="button">Not now</button>`;
+  el.hidden = false;
+  const input = el.querySelector("#zu-pass");
+  input.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); unlockZip(); } });
+  el.querySelector("#zu-go").addEventListener("click", unlockZip);
+  el.querySelector(".zu-show").addEventListener("click", (e) => {
+    const show = input.type === "password";
+    input.type = show ? "text" : "password";
+    e.currentTarget.setAttribute("aria-pressed", String(show));
+    e.currentTarget.textContent = show ? "Hide" : "Show";
+  });
+  el.querySelector(".zu-cancel").addEventListener("click", cancelUnlock);
+  el.scrollIntoView({ behavior: scrollBehavior(), block: "center" });
+  try { input.focus({ preventScroll: true }); } catch (e) {}
+  announce("This ZIP is password-protected. Type its password to open it.");
+  return true;
+}
+function hideUnlock() {
+  PENDING_ZIP = null;
+  const el = $("zip-unlock");
+  if (el) { el.hidden = true; el.innerHTML = ""; }
+}
+async function unlockZip() {
+  const P = PENDING_ZIP, el = $("zip-unlock");
+  if (!P || !el || P.busy) return;
+  const input = el.querySelector("#zu-pass"), go = el.querySelector("#zu-go"), status = el.querySelector("#zu-status");
+  const say = (msg, bad) => { status.textContent = msg; status.classList.toggle("bad", !!bad); };
+  if (!input.value) { say("Type the password first — it's in the message with your download link.", true); input.focus(); return; }
+  // A Clear, a Start over or a fresh locked drop mid-unlock abandons this one.
+  const gen = DATA_GEN, stale = () => gen !== DATA_GEN || PENDING_ZIP !== P;
+  P.busy = true; go.disabled = true; input.readOnly = true; el.setAttribute("aria-busy", "true");
+  say("Checking the password…");
+  let got = null;
+  try {
+    // A retry gets the full byte allowance back. The entries this download
+    // listed stay counted; nothing inside it has been opened yet.
+    P.z.budget.left = ZIP_LIMITS.total;
+    const password = await zipFindPassword(P.z, input.value);
+    if (stale()) return;
+    got = await zipExtract(P.z, { password, stale, progress: (i, n) => say(`Password accepted — opening file ${i} of ${n}…`) });
+  } catch (err) {
+    if (stale()) return;
+    console.warn("Could not unlock the ZIP:", err && err.kind, err && err.message);
+    say(zipUnlockMessage(err), true);
+  } finally {
+    if (PENDING_ZIP === P && !got) {
+      P.busy = false; go.disabled = false; input.readOnly = false; el.removeAttribute("aria-busy");
+      try { input.focus({ preventScroll: true }); input.select(); } catch (e) {}
+    }
+  }
+  if (!got || stale()) return;
+  const name = base(P.file.name), budget = P.z.budget;
+  hideUnlock();   // the field, and the password in it, go with the panel
+  const hash = await contentHash(P.z.buf);   // the download's own bytes, to tell it from another picked at the same place
+  if (gen !== DATA_GEN) return;
+  await ingest(got.files, { nested: true, budget, group: P.group, path: P.path || name,
+    container: { name, n: got.files.length, unlocked: true, path: P.path || name, size: P.file.size, group: P.group, inside: false, hash },
+    notes: got.tooBig.map((n) => zipTooBigNote(n, name)) });
+  // ingest() starts its own build when there's something to build; when nothing
+  // inside was readable it returns early, and a build this panel held still runs
+  if (P.buildHeld && !AUTO_BUILD_T && gen === DATA_GEN) build();
+}
+/* "Not now": close the panel, and build what the drop brought if it was waiting on it. */
+function cancelUnlock() {
+  const held = PENDING_ZIP && PENDING_ZIP.buildHeld;
+  hideUnlock();
+  if (held) { build(); return; }
+  // the focused field went with the panel: hand focus to the file picker, not the page
+  const to = [$("browse-btn"), $("us-add")].find((b) => b && b.getClientRects().length);
+  if (to) try { to.focus({ preventScroll: true }); } catch (e) {}
 }
 
 async function collectFiles(items) {
@@ -411,7 +979,7 @@ async function collectFiles(items) {
   const walk = (entry) =>
     new Promise((res) => {
       if (!entry) return res();
-      if (entry.isFile) entry.file((f) => { out.push(f); res(); }, () => res());
+      if (entry.isFile) entry.file((f) => { FILE_PATH.set(f, entry.fullPath || ""); out.push(f); res(); }, () => res());
       else if (entry.isDirectory) {
         const reader = entry.createReader();
         const readBatch = () =>
@@ -433,7 +1001,16 @@ async function collectFiles(items) {
   return out;
 }
 
-async function ingest(files) {
+/* opts — set only by unlockZip(), which calls back in with a download's files:
+ *   nested    those files came out of an archive, so a ZIP among them is
+ *             opened one level down and never asks for a password
+ *   budget    the unlocked archive's byte allowance, shared with that level
+ *   container { name, n: files inside, unlocked: true, path, size, group } —
+ *             the download's own row in the list
+ *   group     the export those files belong to: the download's
+ *   path      where the download sat, so each file inside has a path too
+ *   notes     explanations already written for entries left unopened */
+async function ingest(files, opts = {}) {
   clearError();
   /* Reading files is a long await chain — one disk round-trip per file, and a
    * full export is 41 of them. build() has always been able to abandon a stale
@@ -443,47 +1020,107 @@ async function ingest(files) {
    * of surprise. */
   const gen = DATA_GEN;
   const stale = () => gen !== DATA_GEN;
-  const dropped = [...files].filter((f) => f && f.name);
-  /* Open any archive that can be opened here. Player_Journey.zip has no
-   * password, so it is inflated in the browser and its files join the drop.
-   * The outer download IS password-protected: it is recognised by its
-   * encryption flag and left in the list so the explainer below can say so. */
+  const dropped = [...files].filter((f) => f && f.name && !isOsClutter(f.name));   // see OS_CLUTTER
+  /* Open any archive that can be opened here. A plain one (Player_Journey.zip)
+   * is inflated on the spot and its files join the drop, along with any plain
+   * ZIP inside it — one level down, never deeper. A password-protected one
+   * (the download itself) waits in the panel under the dropzone; once its
+   * password is typed, unlockZip() calls back in here with its files and
+   * opts.nested, so nothing inside it can ask for a password again. Anything
+   * that can't be opened is explained, never silently dropped. */
   const all = [];
-  const opened = [];      // [archive name, files inside]
-  let lockedZip = false;
-  for (const f of dropped) {
-    if (!/\.zip$/i.test(f.name) || !ZIP_OK || f.size > 200 * 1024 * 1024) { all.push(f); continue; }
+  const opened = opts.container ? [opts.container] : [];   // { name, n: files inside, unlocked?, path, size, group, inside } per archive opened
+  const zipNotes = opts.notes ? opts.notes.slice() : [];    // why an archive wasn't opened (HTML, names escaped)
+  let waiting = false;     // the password panel is up
+  let cantHere = false;    // a locked ZIP this browser can't open — the iPhone tip applies
+  const crowded = new Map();   // outer archive's name → the archives inside it its entry allowance left shut
+  /* Which export each file belongs to — its `group` — comes from where it sat:
+   * the files of one folder are one export (a Player_Journey folder or ZIP
+   * inside it belongs to the folder), a download ZIP is one, and loose files
+   * dropped together are one. A group's latest moment is how new each of its
+   * copies is, unless a copy carries a later one itself (see rankCopies), and
+   * names the exports in the file list. `path` and the copy's SHA-256 (`hash`) tell a
+   * second copy from the same file picked again, and `inside` marks what came
+   * out of an archive. */
+  const drop = ++DROP_N;
+  const folderOf = (p) => {
+    const parts = p.split("/").filter(Boolean);
+    parts.pop();
+    // a Player_Journey folder belongs to the export around it, and so does a
+    // second unzip of it, which the Mac names "Player_Journey 2"
+    if (parts.length && /^player_journey$/i.test(stripCopyMark(parts[parts.length - 1]))) parts.pop();
+    return parts.join("/");
+  };
+  const zipGroup = (q) => (/^player_journey\.zip$/i.test(canonicalName(q.f.name)) ? q.group : q.group + ">" + base(q.f.name));
+  const queue = dropped.map((f) => {
+    const p = pathOf(f);
+    return { f, nested: !!opts.nested, budget: opts.budget, inside: !!opts.nested, outer: opts.container ? opts.container.name : "",
+      path: opts.path ? opts.path + "/" + base(f.name) : p || base(f.name),
+      group: opts.group || `${drop}:${folderOf(p)}` };
+  });
+  for (let qi = 0; qi < queue.length; qi++) {
+    const q = queue[qi], { f, nested, budget } = q;
+    if (!/\.zip$/i.test(f.name)) { all.push(q); continue; }
+    const zn = `<b>${esc(base(f.name))}</b>`;
+    if (!ZIP_OK) { cantHere = true; zipNotes.push(`This browser can't open ZIP files here — unzip ${zn} with ${ZIP_TOOLS}, then drop the folder here.`); continue; }
+    if (f.size > 200 * 1024 * 1024) { zipNotes.push(`${zn} is over 200 MB, too big to open in a browser tab — unzip it with ${ZIP_TOOLS} and add the files inside.`); continue; }
     try {
-      const z = await unzipFile(f);
+      const z = await unzipFile(f, budget);
       if (stale()) return;
-      if (z.entries.some((e) => e.encrypted)) { lockedZip = true; all.push(f); continue; }
-      const inner = z.entries.filter((e) => !e.name.endsWith("/") && /\.(tsv|csv|txt|json)$/i.test(e.name));
-      if (!inner.length) { all.push(f); continue; }
-      for (const e of inner) all.push(await zipEntryFile(z, e));
-      opened.push([base(f.name), inner.length]);
-    } catch (err) { console.warn("Could not open", f.name, err); all.push(f); }
+      const lock = zipLock(z);
+      if (lock === "aes" && !nested && !waiting && ZIP_AES_OK && showUnlock(f, z, { group: zipGroup(q), path: q.path })) { waiting = true; continue; }
+      if (lock) {
+        cantHere = true;
+        zipNotes.push(lock === "unsupported"
+          ? (z.entries.some((e) => e.encrypted && e.method !== 99)
+            ? `${zn} is locked with ZipCrypto, an older kind of ZIP password this page doesn't open — unzip it with ${ZIP_TOOLS}, then drop the folder here.`
+            : `${zn} uses a kind of ZIP encryption this page doesn't open — unzip it with ${ZIP_TOOLS}, then drop the folder here.`)
+          : nested ? `${zn} is locked inside another archive, and this page only opens one level down — unzip it with ${ZIP_TOOLS}.`
+          : waiting ? `${zn} is password-protected too — add it on its own once the first one is open.`
+          : `${zn} is password-protected, and this browser can't unlock it here — unzip it with ${ZIP_TOOLS} (the password is in the message support sent), then drop the folder here.`);
+        continue;
+      }
+      const got = await zipExtract(z, { nested, stale });
+      if (!got || stale()) return;
+      const zg = zipGroup(q);
+      for (const g of got.files) {
+        const item = { f: g, nested: true, budget: z.budget, inside: true, path: q.path + "/" + g.name, group: zg, outer: base(f.name) };
+        if (/\.zip$/i.test(g.name)) queue.push(item); else all.push(item);
+      }
+      zipNotes.push(...got.tooBig.map((n) => zipTooBigNote(n, f.name)));
+      if (got.deeper.length) zipNotes.push(zipDeeperNote(got.deeper, f.name));
+      if (got.files.length) opened.push({ name: base(f.name), n: got.files.length, path: q.path, size: f.size, group: zg, inside: q.inside,
+        hash: await contentHash(z.buf) });
+      else if (!got.tooBig.length && !got.deeper.length) zipNotes.push(`${zn} has no .tsv, .csv, .txt or .json files inside, so there's nothing in it for this site to read.`);
+    } catch (err) {
+      // left shut by the allowance it shares with its archive: named with the others, in one note
+      if (err && err.crowded) { crowded.set(q.outer, [...(crowded.get(q.outer) || []), base(f.name)]); continue; }
+      console.warn("Could not open", f.name, err);
+      const kind = err && err.kind;
+      zipNotes.push(kind === "limit" ? `${zn} wasn't opened: ${esc(err.message)}.`
+        : kind === "damaged" ? `${zn} looks damaged (${esc(err.message)}) — try downloading it again.`
+        : `${zn} couldn't be opened here — unzip it with ${ZIP_TOOLS} and add the files inside.`);
+    }
   }
+  for (const [outer, inner] of crowded) zipNotes.push(zipCrowdNote(inner, outer));
   if (stale()) return;
-  const list = all.filter((f) => /\.(tsv|csv|txt|json)$/i.test(f.name));
+  const list = all.filter((x) => /\.(tsv|csv|txt|json)$/i.test(x.f.name));
+  // The iPhone's Files app can't open a password-protected ZIP either, so when
+  // this browser can't, the way out is a computer.
+  const iosTip = cantHere && (/iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1))
+    ? " On an iPhone or iPad, AirDrop or email it to a computer first — the Files app can't open a password-protected ZIP." : "";
   if (!list.length) {
-    // The single most common first attempt: dropping the ZIP support sent, unopened.
-    if (all.some((f) => /\.zip$/i.test(f.name)))
-      showError((lockedZip || ZIP_OK
-        ? 'That looks like the password-protected ZIP support sent you — it needs unzipping first, with the password from their message. '
-        : 'That looks like the ZIP support sent you — this browser can\'t open archives here, so unzip it first. ')
-        + (/iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1)
-          ? 'Heads up: the iPhone Files app <b>cannot</b> open a password-protected ZIP — email or AirDrop it to a computer, unzip it there, then come back. '
-          : 'Double-click it, type the password, then drop the unzipped folder here. ')
-        + '<a href="index.html#request">Full instructions →</a>', true);
-    else showError("No .tsv / .csv / .txt / .json files found in what you dropped.");
+    // A drop that was only the locked download has its answer already: the panel.
+    if (zipNotes.length) showError(zipNotes.join(" ") + iosTip + ' <a href="index.html#request">Full instructions →</a>', true);
+    else if (!waiting) showError("No .tsv / .csv / .txt / .json files found in what you dropped.");
     return;
   }
   // The archive itself stays in the list, marked as opened, so the reader can
   // see where twenty-one extra files came from.
-  for (const [zn, n] of opened) {
-    const rec = { name: zn, text: null, entry: null, container: n };
-    const i = RAW.findIndex((r) => r.name.toLowerCase() === zn.toLowerCase());
-    if (i >= 0) RAW[i] = rec; else RAW.push(rec);
+  for (const o of opened) {
+    const name = canonicalName(o.name);
+    putCopy({ name, orig: o.name !== name ? o.name : undefined, key: "zip:" + name.toLowerCase(), path: o.path, size: o.size,
+      group: o.group, inside: !!o.inside, text: null, entry: null, container: o.n, unlocked: !!o.unlocked, hash: o.hash || null });
   }
   /* Reading a whole folder is seconds of silent awaits — put the dropzone into
    * a visible reading state so the drop never looks ignored. Restored in the
@@ -493,31 +1130,38 @@ async function ingest(files) {
   const dzHead0 = dzHead ? dzHead.textContent : "";
   let added = 0, readN = 0;
   try {
-    for (const f of list) {
-      const name = base(f.name);
+    for (const x of list) {
+      const f = x.f, orig = base(f.name), name = canonicalName(orig);
       let entry = window.catalogFor(name)
         // the app's own stats export is not an export file, but it has a chapter
         || (/^pogo-metrics-stats.*\.json$/i.test(name)
-          ? { name: "Friend's stats (from this site)", icon: "🤝", story: true, sensitivity: "low",
-              summary: "A stats JSON exported by POGO Metrics — unlocks the You vs. friend chapter." }
+          ? { name: "Friend's compare file (from this site)", icon: "🤝", story: true, sensitivity: "low",
+              summary: "A compare file made by POGO Metrics — a name, counts and dates. Unlocks the You vs. friend chapter." }
           : null);
-      const existing = RAW.findIndex((r) => r.name.toLowerCase() === name.toLowerCase());
+      // one entry per copy, saying where it came from — a second copy is kept beside the first, not over it
+      const copy = { name, orig: orig !== name ? orig : undefined, path: x.path, size: f.size, group: x.group, inside: x.inside };
       readN++;
       if (dzHead && list.length > 2) dzHead.textContent = `Reading your files… (${readN} of ${list.length})`;
       // Too large to read in a browser tab — keep it visible in the list instead
       // of silently vanishing, so the user knows why that chapter is missing.
-      if (f.size > 80 * 1024 * 1024) {
-        const rec = { name, text: null, entry, oversize: Math.round(f.size / 1024 / 1024) };
-        if (existing >= 0) RAW[existing] = rec; else RAW.push(rec);
+      // (A stand-in from zipExtract() is an archive entry that declared itself
+      // too big to inflate: it has a name and a size and nothing to read.)
+      if (f.standIn || f.size > 80 * 1024 * 1024) {
+        putCopy({ ...copy, key: fileKey(name), text: null, entry, oversize: Math.round(f.size / 1024 / 1024) });
         added++;
         continue;
       }
-      let text;
+      let text, hash;
       // A file whose read throws must not vanish without a trace — keep it in
-      // the list with its own honest status instead.
-      try { text = await f.text(); } catch (e) {
-        const rec = { name, text: null, entry, unreadable: true };
-        if (existing >= 0) RAW[existing] = rec; else RAW.push(rec);
+      // the list with its own honest status instead. Its bytes are read once:
+      // decoded for the parsers exactly as File.text() would, and hashed, so a
+      // copy can be told byte for byte from another at the same place.
+      try {
+        const bytes = await f.arrayBuffer();
+        text = new TextDecoder().decode(bytes);
+        hash = await contentHash(bytes);
+      } catch (e) {
+        putCopy({ ...copy, key: fileKey(name), text: null, entry, unreadable: true });
         continue;
       }
       if (stale()) return;   // cleared while this file was being read
@@ -530,8 +1174,8 @@ async function ingest(files) {
       // A Campfire export is named after the trainer, not the product — when the
       // name gave nothing away, its first line does.
       if (!entry && /^\uFEFF?User'?s Clubs/.test(text.slice(0, 40))) entry = window.catalogFor("campfire.csv");
-      const rec = { name, text, entry, file: f, empty: /^\s*No data found\.?\s*$/i.test(text) };
-      if (existing >= 0) RAW[existing] = rec; else RAW.push(rec);
+      const key = fileKey(name, text);
+      putCopy({ ...copy, key, text, entry, file: f, empty: EMPTY_FILE.test(text), latest: copyLatest(name, key, text), hash });
       added++;
     }
   } finally {
@@ -541,16 +1185,14 @@ async function ingest(files) {
   if (!added && !RAW.length) showError("Couldn't read those files. Try choosing them again, or pick the folder.");
   // A mixed drop keeps its valid files — but the ones filtered out by
   // extension used to vanish silently, hiding a mis-drop.
-  const skippedExt = all.filter((f) => !/\.(tsv|csv|txt|json)$/i.test(f.name));
-  if (list.length && skippedExt.length) {
+  const skippedExt = all.filter((x) => !/\.(tsv|csv|txt|json)$/i.test(x.f.name)).map((x) => x.f);
+  const notes = zipNotes.slice();
+  if (skippedExt.length) {
     const names = skippedExt.slice(0, 4).map((f) => esc(f.name)).join(", ");
-    showError(`${skippedExt.length} file${skippedExt.length > 1 ? "s" : ""} in that drop ${skippedExt.length > 1 ? "aren't formats" : "isn't a format"} this site reads (${names}${skippedExt.length > 4 ? ", …" : ""})`
-      + (skippedExt.some((f) => /\.zip$/i.test(f.name))
-        ? (lockedZip
-          ? " — that ZIP is password-protected, so it needs unzipping first; the files inside it are what you want to add."
-          : " — that ZIP couldn't be opened here; unzip it first, the files inside it are what you want to add.")
-        : " — only .tsv / .csv / .txt / .json carry chapters."), true);
+    notes.unshift(`${skippedExt.length} file${skippedExt.length > 1 ? "s" : ""} in that drop ${skippedExt.length > 1 ? "aren't formats" : "isn't a format"} this site reads (${names}${skippedExt.length > 4 ? ", …" : ""})`
+      + " — only .tsv / .csv / .txt / .json carry chapters.");
   }
+  if (notes.length) showError(notes.join(" ") + iosTip, true);
   renderDetected();
   const summaryEl = document.querySelector(".det-head h2");
   if (summaryEl) announce(summaryEl.textContent + ".");
@@ -561,13 +1203,25 @@ async function ingest(files) {
    * buildable yet, keep the old scroll-and-focus so the state is visible. */
   const buildable = RAW.some((r) => r.entry && r.entry.story && !r.empty && !r.oversize && !r.unreadable);
   if (buildable) {
-    if (AUTO_BUILD_T) clearTimeout(AUTO_BUILD_T);
-    const genAt = DATA_GEN;
-    AUTO_BUILD_T = setTimeout(() => { AUTO_BUILD_T = null; if (genAt === DATA_GEN) build(); }, 900);
+    if (AUTO_BUILD_T) { clearTimeout(AUTO_BUILD_T); AUTO_BUILD_T = null; }
     const bb = $("build-btn");
     if (bb) bb.innerHTML = 'Rebuild my story';
-    if ($("build-row")) $("build-row").scrollIntoView({ behavior: scrollBehavior(), block: "center" });
-  } else if (RAW.length && $("build-row")) {
+    /* …unless a password panel is up, from this drop or an earlier one. The
+     * build would move focus to the report and scroll to it, taking the field
+     * from under someone mid-password; it waits for the panel instead (see
+     * PENDING_ZIP), and the page stays where the panel is. */
+    if (PENDING_ZIP) PENDING_ZIP.buildHeld = true;
+    else {
+      const genAt = DATA_GEN;
+      AUTO_BUILD_T = setTimeout(() => {
+        AUTO_BUILD_T = null;
+        if (genAt !== DATA_GEN) return;
+        // a locked ZIP dropped during the wait brought a panel up: hold for it too
+        if (PENDING_ZIP) PENDING_ZIP.buildHeld = true; else build();
+      }, 900);
+      if ($("build-row")) $("build-row").scrollIntoView({ behavior: scrollBehavior(), block: "center" });
+    }
+  } else if (RAW.length && $("build-row") && !PENDING_ZIP) {
     $("build-row").scrollIntoView({ behavior: scrollBehavior(), block: "center" });
     try { $("build-btn").focus({ preventScroll: true }); } catch (e) {}
   }
@@ -663,10 +1317,19 @@ function renderDetected() {
   if (!el) return; // results-only pages (e.g. the live-example page) skip the picker
   renderUnlocks();
   const buildRow = $("build-row");
-  if (!RAW.length) { el.innerHTML = ""; if (buildRow) buildRow.style.display = "none"; return; }
+  // hidden, never an inline display: an inline display beat the rule that folds
+  // this section away once a report exists, and left Rebuild and Clear showing
+  if (buildRow) buildRow.hidden = !RAW.length;
+  if (!RAW.length) { el.innerHTML = ""; return; }
   const tally = { ready: 0, privacy: 0, noChapter: 0, empty: 0, oversize: 0, unknown: 0, container: 0 };
-  const rows = RAW.map((r) => {
-    let cls = "unknown", status = "Not recognized", name = r.name, icon = window.ICON ? window.ICON("search") : "❓", note = "We don't have a story for this file.", kind = "unknown";
+  // one row per file, however many copies of it arrived
+  const rows = logicalFiles().map((g) => {
+    const cs = g.copies, r = cs[0];
+    const live = cs.filter((c) => !c.oversize && !c.unreadable);
+    const empty = live.length > 0 && live.every((c) => c.empty);
+    const oversize = !live.length ? Math.max(0, ...cs.map((c) => c.oversize || 0)) : 0;
+    const unreadable = !live.length && !oversize;
+    let cls = "unknown", status = "Not recognized", name = g.name, icon = window.ICON ? window.ICON("search") : "❓", note = "We don't have a story for this file.", kind = "unknown";
     if (r.entry) {
       name = r.entry.name; icon = window.fileIcon ? window.fileIcon(r.entry.icon, r.entry.group) : r.entry.icon; note = r.entry.summary;
       if (r.entry.story) { cls = "ok"; status = "Ready"; kind = "ready"; }
@@ -675,19 +1338,41 @@ function renderDetected() {
       else if (r.entry.sensitivity === "high") { cls = "skip"; status = "Skipped (privacy)"; kind = "privacy"; }
       else { cls = "skip"; status = "No chapter yet"; kind = "noChapter"; }
     }
-    if (r.container) { cls = "ok"; status = `Opened — ${r.container} files inside added`; icon = window.ICON ? window.ICON("folder") : "🗂️"; note = "Not password-protected, so it was opened right here in your browser."; kind = "container"; }
-    else if (r.entry && PJ_PAIR.test(base(r.name)) && pjTwinPresent(r.name)) {
-      note = /2\.csv$/i.test(r.name)
-        ? "The 3-year timeline. Its positions are blurred to a few km in the export itself, so its “1” twin draws the map; the months they share are counted once."
+    if (r.container) {
+      const inside = cs.reduce((a, c) => a + (c.container || 0), 0), unlocked = cs.some((c) => c.unlocked);
+      cls = "ok"; kind = "container"; icon = window.ICON ? window.ICON(unlocked ? "lock" : "folder") : "🗂️";
+      status = `${unlocked ? "Unlocked" : "Opened"}${cs.length > 1 ? ` (${cs.length} copies)` : ""} — ${inside} file${inside === 1 ? "" : "s"} inside added`;
+      note = unlocked ? "Opened right here with the password you typed, which was used once and not kept."
+        : "Not password-protected, so it was opened right here in your browser.";
+    }
+    else if (r.entry && PJ_PAIR.test(g.name) && pjTwinPresent(g.name)) {
+      note = /2\.csv$/i.test(g.name)
+        ? "The 3-year timeline. Its positions are blurred to a few km in the export itself, so its “1” twin draws the map; the events they share are counted once."
         : "Precise positions for the last ~15 months — this file draws your map and ranks your stops; its “2” twin stretches the timeline to 3 years.";
     }
-    if (r.empty) { cls = "skip"; status = "Empty — nothing on record"; note = "The export shipped this file with no rows in it."; kind = "empty"; }
-    if (r.oversize) { cls = "skip"; status = `Too large (${r.oversize} MB) — skipped`; kind = "oversize"; }
-    if (r.unreadable) { cls = "unknown"; status = "Couldn't read — add it again"; note = "The browser couldn't open this file. Pick or drop it once more."; kind = "unknown"; }
+    // two or more copies with rows in them: say how they were combined (see
+    // mergeRule) — or that they were identical, byte for byte, and count once
+    const withRows = live.filter((c) => !c.empty), useful = withRows.length;
+    if (!r.container && useful > 1) {
+      const rule = mergeRule(g.name);
+      const identical = new Set(withRows.map((c, i) => c.hash || "#" + i)).size === 1;
+      note += identical ? ` ${useful} identical copies — counted once.`
+        : rule === "newest" ? ` ${useful} copies — the newest one is used.`
+        : rule === "gameplay" ? ` ${useful} copies — the newest one for your profile, the recent-activity log from all of them.`
+        : ` ${useful} copies merged — rows they share are counted once.`;
+      if (kind === "ready") status = identical ? `Ready — ${useful} identical copies`
+        : rule === "newest" ? `Ready — newest of ${useful} copies` : `Ready — ${useful} copies merged`;
+    }
+    if (empty) { cls = "skip"; status = "Empty — nothing on record"; note = "The export shipped this file with no rows in it."; kind = "empty"; }
+    if (oversize) { cls = "skip"; status = `Too large (${oversize} MB) — skipped`; kind = "oversize"; }
+    if (unreadable) { cls = "unknown"; status = "Couldn't read — add it again"; note = "The browser couldn't open this file. Pick or drop it once more."; kind = "unknown"; }
     tally[kind]++;
+    // every name a copy arrived under: "Pokestop_spin1.csv + Pokestop_spin1 2.csv"
+    const names = [...new Set(cs.map((c) => c.orig || c.name))];
+    const shown = names.join(" + ") + (cs.length > names.length ? ` (${cs.length} copies)` : "");
     return `<div class="file-chip ${cls}">
       <span class="fc-icon">${icon}</span>
-      <div class="fc-main"><div class="fc-name">${esc(name)}</div><div class="fc-file">${esc(r.name)} · ${esc(note)}</div></div>
+      <div class="fc-main"><div class="fc-name">${esc(name)}</div><div class="fc-file">${esc(shown)} · ${esc(note)}</div></div>
       <span class="fc-status">${esc(status)}</span>
     </div>`;
   }).join("");
@@ -705,15 +1390,17 @@ function renderDetected() {
   if (tally.unknown) bits.push(`${tally.unknown} not recognized`);
   // wrong or unreadable drops must be visible BEFORE the Build click
   const attention = tally.unknown + tally.oversize > 0;
+  // what a player can see in their own folder (an archive counts once, not once
+  // more for every file inside it), and what merging copies did
+  const visible = visibleFiles(), merged = mergeSummary();
   el.innerHTML = `
     <details class="det-files"${attention ? " open" : ""}>
       <summary class="det-head">
-        <h2>${RAW.length} file${RAW.length > 1 ? "s" : ""} added · ${bits.join(" · ")}</h2>
+        <h2>${visible} file${visible === 1 ? "" : "s"} added${merged ? ` · ${esc(merged)}` : ""} · ${bits.join(" · ")}</h2>
         <span class="det-toggle">Review files</span>
       </summary>
       <div class="det-list">${rows}</div>
     </details>`;
-  if (buildRow) buildRow.style.display = "block";
 }
 
 /* ───────────────────────────── routing ───────────────────────────── */
@@ -724,13 +1411,16 @@ async function routeFile(name, text) {
   const n = name.toLowerCase();
   try {
     if (/gameplay\.txt$/i.test(n)) return parseGameplay(text);
-    if (PJ_EVENTS.some(([re]) => re.test(n)) || /^(pokestop_spin|sfida_capture|map_pokemon_encounter|join_raid_lobby|gym_battle|feed_pokemon|deploy_pokemon|incense_encounter|lure_encounter)\d*\.csv$/i.test(n)) {
+    // Anchored, like the catalog. A loose match here once took "Pokestop_spin1
+    // 2.csv" — a Finder copy — for a precise log of its own; copy markers now
+    // come off in ingest(), and a name that isn't an event file isn't one here.
+    if (PJ_FILE.test(base(n))) {
       const hit = PJ_EVENTS.find(([re]) => re.test(n));
       if (hit) {
         const m = PJ_PAIR.exec(base(n));
         const two = !!(m && m[2] === "2"), twin = m ? pjTwinPresent(n) : false;
         // awaited, not just returned, so a rejection lands in the catch below
-        return await parsePlayerJourney(hit[1], text, { blurred: two, skipWindow: two && twin, mapOK: !(two && twin) });
+        return await parsePlayerJourney(hit[1], text, { blurred: two, precise: !!(m && m[2] === "1"), skipWindow: two && twin, mapOK: !(two && twin), twin });
       }
     }
     if (/gameplaylocationhistory\.tsv$/i.test(n)) return await parseLocation(text);
@@ -788,6 +1478,312 @@ function pjTwinPresent(name) {
 }
 /* Build order: "1" files before their "2" twins, so the window to skip is known. */
 function pjOrder(name) { const m = PJ_PAIR.exec(base(name)); return m && m[2] === "2" ? 1 : 0; }
+/* Any Player_Journey event file, by its exact name — the catalog's own test. */
+const PJ_FILE = /^(pokestop_spin|sfida_capture|map_pokemon_encounter|join_raid_lobby|gym_battle|feed_pokemon|deploy_pokemon|incense_encounter|lure_encounter)\d*\.csv$/i;
+
+/* ───────────────────────────── copies ─────────────────────────────
+ * The same export file can arrive more than once: two exports dropped
+ * together, a Player_Journey.zip beside its unzipped folder, a Finder "Keep
+ * Both" copy. RAW used to keep one file per name — whichever copy arrived last
+ * — so a June and an August export dropped together built a different report
+ * almost every time, and none matched either export. Now every copy is kept,
+ * copies of one file share a key, and parseRaw() merges them into one text
+ * before routing it, by what kind of file it is:
+ *   rows      Player_Journey event logs, "1" and "2" kept apart: rows keyed by
+ *             exact instant, each instant keeping as many rows as the copy
+ *             holding the most distinct rows there (journeyRows)
+ *   multiset  rolling logs (GPS trail, fitness, unfriends, friend invites,
+ *             party invites) and cumulative ledgers (purchases, photos,
+ *             support, sessions, installs, attribution, tickets): every row any
+ *             copy holds, a row repeated inside one copy kept as often as the
+ *             copy that repeats it most
+ *   gameplay  Gameplay.txt: the newest copy, its recent-activity log stacked
+ *             from every copy like the rolling logs
+ *   newest    snapshots (friends, account, profile, contacts, Wayfarer, and
+ *             anything not named above): the newest copy
+ * "Newest" comes from the data — the later of the latest moment the copy
+ * carries and the latest its export mentions (a Campfire export: the moment in
+ * its name; see rankCopies) — never from arrival order or the file system's
+ * dates, so the same files build the same report whatever order they came in. */
+const MERGE_MULTISET = /^(gameplaylocationhistory\.tsv|fitnessdata\.tsv|recentlyunfriended\.tsv|recentinviteactions\.tsv|activityinvites(received|sent)\.tsv|inapppurchases\.tsv|imagedata\.txt|supportinteractions\d*\.tsv|app_sessions\.csv|app_installs\.csv|user_attribution_sessions\.csv|liveeventregistrationhistory_\w+\.tsv)$/i;
+function mergeRule(name) {
+  const n = canonicalName(name);
+  return PJ_FILE.test(n) ? "rows" : MERGE_MULTISET.test(n) ? "multiset" : /^gameplay\.txt$/i.test(n) ? "gameplay" : "newest";
+}
+/* Copies of one file share this. A Campfire export is named after the trainer
+ * and the moment it was made, so two of them are two copies of one file. */
+function fileKey(name, text) {
+  const n = canonicalName(name).toLowerCase();
+  return /campfire|_\d{8}_\d{6}\.csv$/.test(n) || (text && /^\uFEFF?User'?s Clubs/.test(text.slice(0, 40))) ? "campfire" : n;
+}
+/* A copy's content, byte for byte: the SHA-256 of its bytes, in hex. Null
+ * where the browser offers no Web Crypto (a page served over plain http). */
+async function contentHash(bytes) {
+  try {
+    if (typeof crypto !== "object" || !crypto || !crypto.subtle) return null;
+    const d = new Uint8Array(await crypto.subtle.digest("SHA-256", bytes));
+    let h = "";
+    for (const b of d) h += (b < 16 ? "0" : "") + b.toString(16);
+    return h;
+  } catch (e) { return null; }
+}
+/* One entry per copy. The same file picked again — the same key and place and,
+ * byte for byte, the same content (its SHA-256) — takes its old entry's place,
+ * which is how "add it again" still refreshes a file handle that went stale.
+ * Anything else is another copy, however alike its path and size: two exports'
+ * Player_Journey.zip picked one at a time put their files at the same path, and
+ * a file's rows can change while its size stays put. A copy nothing was read
+ * from (too large, or unreadable) holds no rows, so whatever arrives in its
+ * place takes over from it. */
+function putCopy(rec) {
+  const i = RAW.findIndex((r) => r.key === rec.key && r.path === rec.path && !!r.container === !!rec.container
+    && (r.hash ? r.hash === rec.hash : !!(r.oversize || r.unreadable)));
+  if (i >= 0) RAW[i] = rec; else RAW.push(rec);
+}
+/* RAW's copies gathered by file, in arrival order: [{ key, name, copies }]. */
+function logicalFiles() {
+  const by = new Map();
+  for (const r of RAW) {
+    const k = r.key || (r.container ? "zip:" + r.name.toLowerCase() : fileKey(r.name));
+    let g = by.get(k);
+    if (!g) by.set(k, (g = { key: k, name: r.name, copies: [] }));
+    g.copies.push(r);
+  }
+  return [...by.values()];
+}
+/* What a player can see in their own folder: an archive counts once, and what
+ * came out of it is its contents, not more files added — a 22-file download
+ * was reported as 43 files added. */
+const visibleFiles = () => RAW.filter((r) => !r.inside).length;
+
+/* The latest moment a copy mentions, "YYYY-MM-DD HH:MM:SS" ("" for none). Only
+ * files up to 2 MB are read for it: scanning a whole 38 MB export takes about
+ * 270 ms, the big files are activity logs that merge row by row and never need
+ * a newest copy, and every snapshot is small. A Campfire export carries the
+ * moment it was made in its name. */
+const STAMP_SCAN_MAX = 2 * 1024 * 1024;
+const ISO_STAMP = /(\d{4}-\d\d-\d\d)[ T](\d\d:\d\d:\d\d)/g;
+const US_STAMP = /(^|[^\d/])(\d{1,2})\/(\d{1,2})\/(\d{4})(?:[ T](\d{1,2}):(\d\d):(\d\d))?/g;
+function copyLatest(name, key, text) {
+  const cf = key === "campfire" && /_(\d{4})(\d\d)(\d\d)_(\d\d)(\d\d)(\d\d)\.csv$/i.exec(canonicalName(name));
+  if (cf) return `${cf[1]}-${cf[2]}-${cf[3]} ${cf[4]}:${cf[5]}:${cf[6]}`;
+  if (!text || text.length > STAMP_SCAN_MAX) return "";
+  let d = "", t = "";
+  ISO_STAMP.lastIndex = 0;
+  for (let m; (m = ISO_STAMP.exec(text)); ) if (m[1] > d || (m[1] === d && m[2] > t)) { d = m[1]; t = m[2]; }
+  // month/day/year — InAppPurchases, and the log at the end of Gameplay.txt
+  US_STAMP.lastIndex = 0;
+  for (let m; (m = US_STAMP.exec(text)); ) {
+    if (+m[2] < 1 || +m[2] > 12 || +m[3] < 1 || +m[3] > 31) continue;
+    const dd = `${m[4]}-${m[2].padStart(2, "0")}-${m[3].padStart(2, "0")}`;
+    const tt = m[5] ? `${m[5].padStart(2, "0")}:${m[6]}:${m[7]}` : "00:00:00";
+    if (dd > d || (dd === d && tt > t)) { d = dd; t = tt; }
+  }
+  return d ? d + " " + t : "";
+}
+/* Each export's latest moment: group → the latest any of its files mentions.
+ * Ticket and invite files can name a day ahead of the export (an event, an
+ * expiry), a Campfire export is a request of its own, and a friend's compare
+ * file is no export at all — none of them set an export's clock. */
+const NO_CLOCK = /^(liveeventregistrationhistory_|activityinvites|pogo-metrics-stats)/i;
+function groupClocks() {
+  const at = new Map();
+  for (const r of RAW) {
+    if (r.container || !r.latest || !r.group || r.key === "campfire" || NO_CLOCK.test(r.name)) continue;
+    if (r.latest > (at.get(r.group) || "")) at.set(r.group, r.latest);
+  }
+  return at;
+}
+/* Newest first. A copy is as new as the later of the latest moment it carries
+ * and the latest moment of the export it sat in: every file of one export is
+ * written at once, so a friend list whose last friendship is months old is as
+ * new as its export. A Campfire export is a request of its own and sets no
+ * export's clock, so it is as new as the moment in its name, wherever it sat.
+ * Two copies from one export tie, and then the latest moment each carries
+ * decides, then its export's moment, length and content, so even copies that
+ * tie on everything come out in the same order every time.
+ * Both halves matter. Ranked by its export alone, an older Campfire export
+ * inside an export folder beat a newer one dropped beside it. Ranked by its
+ * own latest moment first, a later export's friend list lost to an earlier
+ * one whenever the friend added last had been removed since. The same rule
+ * serves every file that takes its newest copy. `list` is [{ r, text }]. */
+function rankCopies(list, clocks) {
+  const cmp = (a, b) => (a < b ? -1 : a > b ? 1 : 0);
+  const clockOf = (r) => (r.key === "campfire" ? "" : clocks.get(r.group) || "");
+  const asOf = new Map(list.map((c) => { const own = c.r.latest || "", t = clockOf(c.r); return [c, own > t ? own : t]; }));
+  return list.sort((a, b) => cmp(asOf.get(b), asOf.get(a)) || cmp(b.r.latest || "", a.r.latest || "")
+    || cmp(clockOf(b.r), clockOf(a.r)) || b.text.length - a.text.length || cmp(b.text, a.text));
+}
+/* Every row the copies hold, each as many times as the copy that holds it most
+ * often — an overlap counts once, and a row an export itself repeats (a line of
+ * a support thread) stays repeated. The newest copy's rows come first. */
+function multisetUnion(lists, key = (l) => l) {
+  const out = [], kept = new Map();
+  for (const ls of lists) {
+    const here = new Map();
+    for (const l of ls) {
+      const k = key(l), n = (here.get(k) || 0) + 1;
+      here.set(k, n);
+      if (n > (kept.get(k) || 0)) { kept.set(k, n); out.push(k); }
+    }
+  }
+  return out;
+}
+/* One copy's rows under the newest copy's header. Both exports measured ship
+ * identical columns, so this is nearly always the rows as they are; should a
+ * later export add or reorder a column, each row is rebuilt by column name
+ * rather than read under the wrong heading. */
+function alignRows(head, lines, csv) {
+  if (!lines.length) return [];
+  if (lines[0].trim() === head.trim()) return lines.slice(1);
+  const split = lineSplitter(csv ? "x.csv" : "x.tsv");
+  const have = split(lines[0]).map((h) => h.trim());
+  const at = split(head).map((h) => have.indexOf(h.trim()));
+  const cell = (v) => (csv && /[",]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v);
+  return lines.slice(1).map((l) => { const c = split(l); return at.map((j) => cell(j < 0 ? "" : c[j] || "")).join(csv ? "," : "\t"); });
+}
+/* Gameplay.txt's recent-activity log: the lines under its header, up to the
+ * blank line — the span parseRecentLog reads. */
+function recentLogSpan(lines) {
+  const h = lines.findIndex((l) => /^Date and time\tDescription/i.test(l));
+  if (h < 0) return null;
+  let e = h + 1;
+  while (e < lines.length && lines[e].trim() && lines[e].includes("\t")) e++;
+  return [h + 1, e];
+}
+/* A journey file's copies as one list of rows, keyed by exact instant. Within
+ * one copy a row repeated byte for byte counts once; across copies each instant
+ * keeps as many rows as the copy holding the most distinct rows there, the
+ * newest copy's own rows first. A union of distinct rows would count one event
+ * twice wherever two exports wrote the same instant in other bytes (a blur, a
+ * rounding). On the owner's June and August exports every shared instant holds
+ * the same rows in both, so their totals don't move. A row whose timestamp
+ * can't be read is kept by its bytes. `bodies` are rows under one header. */
+/* An instant as one canonical string, "YYYY-MM-DD HH:MM:SS.mmm UTC": nine
+ * journey rows in ten already carry exactly that and are used as they are;
+ * only the rest are parsed and written out the same way. Null for no time. */
+const TS_CANON = /^\d{4}-\d\d-\d\d \d\d:\d\d:\d\d\.\d{3} UTC$/;
+const TS_MS = /^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2}):(\d{2})(?:\.(\d{1,3})\d*)?(?:Z| UTC)?$/;
+function instantKey(cell) {
+  const s = (cell || "").trim();
+  if (TS_CANON.test(s)) return s;
+  const m = TS_MS.exec(s);
+  let t;
+  if (m) t = Date.UTC(+m[1], +m[2] - 1, +m[3], +m[4], +m[5], +m[6]) + (m[7] ? +(m[7] + "00").slice(0, 3) : 0);
+  else { const d = parseTS(s); if (!d) return null; t = d.getTime(); }
+  if (!isFinite(t)) return null;
+  const iso = new Date(t).toISOString();
+  return iso.slice(0, 10) + " " + iso.slice(11, 23) + " UTC";
+}
+// the at-th cell of a CSV line that holds no quotes, without splitting all of it
+function cellAt(l, at) {
+  let s = 0;
+  for (let i = 0; i < at; i++) { s = l.indexOf(",", s) + 1; if (!s) return ""; }
+  const e = l.indexOf(",", s);
+  return e < 0 ? l.slice(s) : l.slice(s, e);
+}
+/* Two whole exports are about 850,000 journey rows, so this yields like the
+ * parsers do, and stops early once the files are cleared. */
+async function journeyRows(head, bodies) {
+  const split = lineSplitter("x.csv");
+  const at = split(head).map((h) => h.trim()).indexOf("Timestamp");
+  if (at < 0) return bodies.flat();
+  // instant → the row kept there, or the rows when more than one (a copy's own map is shaped the same)
+  const out = [], gen = DATA_GEN;
+  let kept = null, n = 0;
+  for (const body of bodies) {
+    const mine = new Map();
+    for (const l of body) {
+      if (++n % PARSE_CHUNK === 0) {
+        await nextTick();
+        if (gen !== DATA_GEN) return out;
+      }
+      const t = instantKey(l.indexOf('"') < 0 ? cellAt(l, at) : split(l)[at]);
+      const k = t === null ? "row:" + l : t;
+      const m = mine.get(k);
+      // a row repeated byte for byte lands on its own instant, so it is found there and counted once
+      if (m === undefined) mine.set(k, l);
+      else if (typeof m === "string") { if (m !== l) mine.set(k, [m, l]); }
+      else if (!m.includes(l)) m.push(l);
+    }
+    if (!kept) {   // the newest copy: every one of its rows
+      kept = mine;
+      for (const v of mine.values()) if (typeof v === "string") out.push(v); else out.push(...v);
+      continue;
+    }
+    for (const [k, v] of mine) {
+      const have = kept.get(k);
+      if (have === undefined) { kept.set(k, v); if (typeof v === "string") out.push(v); else out.push(...v); continue; }
+      const rows = typeof v === "string" ? [v] : v, had = typeof have === "string" ? [have] : have;
+      let need = rows.length - had.length;
+      if (need <= 0) continue;
+      const add = [];
+      for (const l of rows) { if (!need) break; if (!had.includes(l)) { add.push(l); need--; } }
+      out.push(...add);
+      kept.set(k, had.concat(add));
+    }
+  }
+  return out;
+}
+/* The copies of one file as one text. `texts` is newest first, empty copies left out. */
+async function mergeCopies(name, texts) {
+  if (texts.length < 2) return texts[0] || "";
+  const rule = mergeRule(name);
+  if (rule === "newest") return texts[0];
+  if (rule === "gameplay") {
+    const L = texts.map((t) => t.replace(/^\uFEFF/, "").replace(/\r\n?/g, "\n").split("\n"));
+    const log = multisetUnion(L.map((ls) => { const s = recentLogSpan(ls); return s ? ls.slice(s[0], s[1]) : []; }));
+    const out = L[0].slice(), s = recentLogSpan(out);
+    if (s) out.splice(s[0], s[1] - s[0], ...log);
+    else if (log.length) out.push("", "Date and time\tDescription", ...log, "");
+    return out.join("\n");
+  }
+  const csv = /\.csv$/i.test(name);
+  const headed = !/^recentinviteactions\.tsv$/i.test(canonicalName(name));   // this one ships with no header row
+  const L = texts.map(splitLines);
+  const head = headed ? L[0][0] : null;
+  const bodies = L.map((ls) => (headed ? alignRows(head, ls, csv) : ls));
+  // its lines differ between exports only in leading whitespace, which tells no two rows apart
+  const rows = rule === "rows" ? await journeyRows(head, bodies) : multisetUnion(bodies, headed ? undefined : (l) => l.replace(/^\s+/, ""));
+  if (headed) rows.unshift(head);
+  return rows.join("\n") + "\n";
+}
+/* One plain line for the file list and the upload strip: what merging did. A
+ * copy byte for byte like another (the same SHA-256) is identical: it changes
+ * nothing and counts once. A copy whose rows differ was merged. "Duplicate"
+ * used to cover both, so a newer friend list copied in beside the old one read
+ * as a duplicate although its rows were stacked in.
+ * Another export is claimed only where the data differ: each distinct copy is
+ * dated by the latest export holding it, and exports are named when those
+ * dates differ. An identical copy is never another export. A second unzip of
+ * Player_Journey, or a file added again on its own, used to be dated by its
+ * own files and read as "2 exports merged" beside a single export. */
+function mergeSummary() {
+  const clocks = groupClocks(), when = new Set();
+  let same = 0, differ = 0;
+  for (const g of logicalFiles()) {
+    if (g.key.startsWith("zip:")) continue;
+    const cs = g.copies.filter((r) => !r.oversize && !r.unreadable);
+    if (cs.length < 2) continue;
+    // content → the latest export holding it (a copy with no hash can't be vouched for as identical)
+    const kinds = new Map();
+    cs.forEach((r, i) => {
+      const k = r.hash || "#" + i, t = clocks.get(r.group) || "";
+      if (!kinds.has(k) || t > kinds.get(k)) kinds.set(k, t);
+    });
+    same += cs.length - kinds.size;
+    if (kinds.size > 1) { differ += kinds.size - 1; for (const t of kinds.values()) if (t) when.add(t); }
+  }
+  const at = [...when].sort(), parts = [];
+  if (at.length > 1) {
+    const month = (t) => MONTHS[+t.slice(5, 7) - 1] + " " + t.slice(0, 4);
+    const day = (t) => MONTHS[+t.slice(5, 7) - 1] + " " + +t.slice(8, 10) + ", " + t.slice(0, 4);
+    const labels = at.map(new Set(at.map(month)).size === at.length ? month : day);
+    parts.push(`${at.length} exports merged: ${labels.slice(0, -1).join(", ")} and ${labels[labels.length - 1]}`);
+  } else if (differ) parts.push(`${differ} cop${differ === 1 ? "y" : "ies"} with different rows merged`);
+  if (same) parts.push(`${same} identical cop${same === 1 ? "y" : "ies"} counted once`);
+  return parts.join(" · ");
+}
 
 /* ───────────────────────────── parsers ───────────────────────────── */
 function parseGameplay(text) {
@@ -872,7 +1868,33 @@ function parseGameplay(text) {
   };
   parseEggs(text);
   parseRecentLog(text);
+  parseReferrals(text);
   markLoaded("Gameplay Summary");
+}
+
+/* ── Referral Connections (Gameplay.txt) ──
+ * Every trainer who joined with your referral code, one per line, then whether
+ * the two of you are friends:
+ *   Player\tAreFriends
+ *   <codename>\t\ttrue
+ * Those codenames are other people's, so only the count survives: how many you
+ * brought into the game, and how many of them are on your friend list. */
+function parseReferrals(text) {
+  const lines = text.replace(/\r/g, "").split("\n");
+  const start = lines.findIndex((l) => /^Referral Connections:/i.test(l));
+  if (start < 0) return;
+  let total = 0, friends = 0;
+  for (let i = start + 1; i < lines.length; i++) {
+    const line = lines[i];
+    if (!line.trim()) break;                                   // the list ends at the blank line
+    // its header — a codename can't hold a tab, and a real row ends in true/false
+    if (i === start + 1 && /^Player\t/i.test(line) && !/\t(true|false)\s*$/i.test(line)) continue;
+    const cells = line.split("\t");
+    if (!cells[0].trim()) continue;
+    total++;
+    if (/^true$/i.test((cells[cells.length - 1] || "").trim())) friends++;
+  }
+  if (total) STATE.referrals = { total, friends };
 }
 
 /* ── egg pool (Gameplay.txt) ──
@@ -912,6 +1934,11 @@ const RECENT_RE = {
   fled: /^(.+?) ran away! CP (\d+)$/,
   hatched: /^(.+?) was hatched! CP (\d+)$/,
   buddy: /^BUDDY_POKEMON .+ found a candy\.?$/i,
+  /* Since August 2026 the log also names the friend behind each gift you open:
+   * "Received 3 items from <codename>." Tried after `items`, so stops and gyms
+   * are already taken; what is left is a trainer. The gift and its items are
+   * counted, and the codename goes no further than this match. */
+  gift: /^Received (\d+) items? from (.+?)\.?$/i,
 };
 /* "V0661_POKEMON_FLETCHLING" and "Growlithe" both appear in this log, exactly
  * as they do in the collection list. Show players the name they know. */
@@ -926,6 +1953,7 @@ function parseRecentLog(text) {
   const R = {
     caught: [], fled: [], hatched: [], research: 0, buddyCandy: 0, other: 0,
     items: 0, spins: { PokeStop: 0, Gym: 0 }, first: null, last: null, rows: 0,
+    gifts: 0, giftItems: 0,
   };
   for (let i = head + 1; i < lines.length; i++) {
     const line = lines[i];
@@ -942,6 +1970,8 @@ function parseRecentLog(text) {
     if ((m = desc.match(RECENT_RE.items))) {
       R.items += +m[1];
       R.spins[/gym/i.test(m[2]) ? "Gym" : "PokeStop"]++;
+    } else if ((m = desc.match(RECENT_RE.gift))) {
+      R.gifts++; R.giftItems += +m[1];               // m[2] is a friend's codename — not kept
     } else if ((m = desc.match(RECENT_RE.caught))) R.caught.push({ name: prettySpecies(m[1]), cp: +m[2], ts });
     else if ((m = desc.match(RECENT_RE.fled))) R.fled.push({ name: prettySpecies(m[1]), cp: +m[2], ts });
     else if ((m = desc.match(RECENT_RE.hatched))) R.hatched.push({ name: prettySpecies(m[1]), cp: +m[2], ts });
@@ -953,17 +1983,50 @@ function parseRecentLog(text) {
 }
 
 /* The single biggest parse in the app — ~446k rows across the Player_Journey
- * files, and the reason a build used to lock the page. Streams and yields. */
+ * files, and the reason a build used to lock the page. Streams and yields.
+ * Two counting rules, measured on the June and August 2026 exports:
+ *   • a row that appears twice in one file byte for byte — same instant, same
+ *     cells — counts once (the old rule counted 15 such rows twice in the June
+ *     export and 19 in the August one)
+ *   • a "2" row inside its "1" twin's window is an event already counted only
+ *     when the "1" file has a row at that exact instant; each "1" row answers
+ *     for one "2" row, and a "2" row with no match counts (3 spins in each
+ *     export exist only in the "2" file, and skipping the whole window lost them)
+ * Both checks read the timestamp straight off the line, before any row object
+ * is built — skipping the shared window used to build 126,694 blurred rows on
+ * a real export only to throw them away. */
 async function parsePlayerJourney(label, text, opts = {}) {
   const e = STATE.ev;
-  const win = opts.skipWindow ? e.win[label] : null;   // the precise twin's span — those events are already counted
+  const win = opts.skipWindow ? e.win[label] : null;   // the precise twin: its span, and the instants it holds
   const places = !opts.blurred;                         // only precise positions may rank as stops and gyms
   const mapOK = opts.mapOK !== false;                   // blurred positions draw the map only when nothing better exists
+  const precise = !!opts.precise;                       // a "1" file: the only positions that can place you at a festival
+  const lines = splitLines(text);
+  if (lines.length < 2) return;
+  const splitLine = lineSplitter("x.csv");
+  const header = splitLine(lines[0]).map((h) => h.trim());
+  const tsAt = header.indexOf("Timestamp");
+  if (tsAt < 0) return;
+  const seen = new Set();                               // this file's rows so far, byte for byte
+  const own = precise && opts.twin ? [] : null;         // a "1" file's instants, for its "2" twin to match
+  const gen = DATA_GEN;
   let n = 0, first = null, last = null;
-  await eachRow(text, "x.csv", (row) => {
-    const ts = parseTS(row.Timestamp);
-    if (!ts) return;
-    if (win && ts >= win.first && ts <= win.last) return;
+  for (let i = 1; i < lines.length; i++) {
+    if (i % PARSE_CHUNK === 0) {
+      await nextTick();
+      if (gen !== DATA_GEN) return;   // cleared mid-file — stop working
+    }
+    const line = lines[i];
+    if (seen.has(line)) continue;
+    seen.add(line);
+    const cells = line.indexOf('"') < 0 ? line.split(",") : splitLine(line);
+    const ts = parseTS(cells[tsAt]);
+    if (!ts) continue;
+    const t = ts.getTime();
+    if (win && t >= win.first && t <= win.last && matchInstant(win, t)) continue;
+    const row = {};
+    header.forEach((h, j) => (row[h] = (cells[j] || "").trim()));
+    if (own) own.push(t);
     n++;
     if (!first || ts < first) first = ts;
     if (!last || ts > last) last = ts;
@@ -972,6 +2035,7 @@ async function parsePlayerJourney(label, text, opts = {}) {
     const mk = monthKey(ts);
     (e.byMonth[mk] = e.byMonth[mk] || {})[label] = (e.byMonth[mk][label] || 0) + 1;
     e.hourweek[weekdayMon(ts)][ts.getUTCHours()]++;
+    e.hourweekLocal[(ts.getDay() + 6) % 7][ts.getHours()]++;   // the viewer's clock at that moment, daylight saving and all
     const iso = ts.toISOString().slice(0, 10);
     e.days.add(iso);
     e.dayCounts[iso] = (e.dayCounts[iso] || 0) + 1;
@@ -980,6 +2044,22 @@ async function parsePlayerJourney(label, text, opts = {}) {
     let hasLoc = false;
     if (!isNaN(lat) && !isNaN(lon) && (lat || lon)) {
       hasLoc = true;
+      /* "I was there": a precise position inside an in-person festival's city
+       * box during its dates. Only "1" files qualify — a "2" position is blurred
+       * a few kilometres in the export itself, enough to carry a trainer across
+       * a city line. Venue ids, counts and UTC days are kept; the position isn't.
+       * The badge follows the venue's local dates. A day label goes on the row's
+       * UTC day, like every other day in the report, so it is kept only when that
+       * day is one of the festival's own dates: breakfast in Tokyo on the first
+       * morning is still May 28 in UTC, and May 28 was no GO Fest day. */
+      if (precise && t >= FEST_T0 && t < FEST_T1) {
+        for (const v of FEST_VENUES) {
+          if (t < v.t0 || t >= v.t1 || lat < v.box[0] || lat > v.box[2] || lon < v.box[1] || lon > v.box[3]) continue;
+          const s = e.there[v.id] || (e.there[v.id] = { n: 0, days: {} });
+          s.n++;
+          if (iso >= v.from && iso <= v.to) s.days[iso] = (s.days[iso] || 0) + 1;
+        }
+      }
       if (mapOK) {
         const key = lat.toFixed(3) + "," + lon.toFixed(3);
         e.geo.set(key, (e.geo.get(key) || 0) + 1);
@@ -1030,10 +2110,22 @@ async function parsePlayerJourney(label, text, opts = {}) {
         }
       }
     }
-  });
+  }
   e.totals[label] = (e.totals[label] || 0) + n;
-  if (n && !opts.blurred) e.win[label] = { first, last };
+  if (n && !opts.blurred) e.win[label] = { first: first.getTime(), last: last.getTime(),
+    at: own ? Float64Array.from(own).sort() : null, used: own ? new Uint8Array(own.length) : null };
+  if (win) win.at = win.used = null;   // matched — nothing else needs them
   if (n) markLoaded("Player Journey events");
+}
+/* Take one not-yet-matched "1" row at instant t. With no instants on record —
+ * a "1" file parsed before its twin was known — the whole window stands in. */
+function matchInstant(win, t) {
+  const a = win.at;
+  if (!a) return true;
+  let lo = 0, hi = a.length;
+  while (lo < hi) { const mid = (lo + hi) >> 1; if (a[mid] < t) lo = mid + 1; else hi = mid; }
+  for (let i = lo; i < a.length && a[i] === t; i++) if (!win.used[i]) { win.used[i] = 1; return true; }
+  return false;
 }
 
 /* GPS trail retention.
@@ -1102,22 +2194,56 @@ function parseUnfriended(text) {
   if (F.unfriended) markLoaded("Recently Unfriended");
 }
 
+/* RecentInviteActions.tsv ships without a header row. Every line is four
+ * fields — the action, its time, the OTHER trainer's codename, the result:
+ *   Sent friend invitation\t08/24/2026 05:39:49 UTC\t<codename>\tSUCCESS
+ * The action, the time and the result are read. The third field is someone
+ * else's codename and is never touched: not stored, not counted, not looked at. */
 function parseInvites(text) {
-  // This file ships without a header row, so parse lines directly.
   const I = STATE.invites;
   for (const line of text.replace(/\r/g, "").split("\n")) {
     if (!line.trim()) continue;
-    const action = (line.split("\t")[0] || "").toLowerCase();
-    if (action.includes("accept")) I.accepted++;
-    else if (action.includes("declin")) I.declined++;
-    else if (action.includes("sent") || action.includes("send")) I.sent++;
+    const cells = line.split("\t");
+    // the real file puts a space before most actions (" Accepted friend invitation")
+    const action = (cells[0] || "").trim().toLowerCase();
+    const kind = action.includes("accept") ? "accepted" : action.includes("declin") ? "declined"
+      : action.includes("sent") || action.includes("send") ? "sent" : null;
+    if (!kind) continue;
+    I[kind]++;
+    const ts = parseTS(cells[1]);
+    if (ts) {
+      I.monthly[monthKey(ts)] = (I.monthly[monthKey(ts)] || 0) + 1;
+      I.slots[slotKey(ts)] = (I.slots[slotKey(ts)] || 0) + 1;
+    }
+    const result = (cells[3] || "").trim();
+    if (result && !/^success$/i.test(result)) I.failed++;
   }
   if (I.sent + I.accepted + I.declined) markLoaded("Recent Invite Actions");
 }
 
+/* Party Play invitations: an activity type (WEEKLY_CHALLENGE_PARTY on every
+ * real row so far) and the moment the invite went out. Counted, and placed in
+ * time the same way as friend invites; the type itself isn't shown. */
 function parseParty(text, sent) {
-  const { rows } = parseRows(text, "x.tsv");
-  if (rows.length) { STATE.party[sent ? "sent" : "received"] += rows.length; markLoaded("Party Play Invites"); }
+  const { rows } = parseRows(text, "x.tsv", true);
+  if (!rows.length) return;
+  const P = STATE.party;
+  P[sent ? "sent" : "received"] += rows.length;
+  for (const row of rows) {
+    const ts = parseTS(row["Date and time of invite (UTC)"] || row.__cells[1]);
+    if (!ts) continue;
+    P.monthly[monthKey(ts)] = (P.monthly[monthKey(ts)] || 0) + 1;
+    P.slots[slotKey(ts)] = (P.slots[slotKey(ts)] || 0) + 1;
+  }
+  markLoaded("Party Play Invites");
+}
+
+/* A currency is an ISO 4217 code — three capital letters — and nothing else.
+ * The column is file text like any other, and it ends up in a headline tile and
+ * a chapter subtitle, so anything that isn't a plain code becomes "UNKNOWN". */
+function currencyCode(s) {
+  const c = String(s == null ? "" : s).trim().toUpperCase();
+  return /^[A-Z]{3}$/.test(c) ? c : "UNKNOWN";
 }
 
 function parsePurchases(text) {
@@ -1127,7 +2253,7 @@ function parsePurchases(text) {
     const ts = parseTS(row["Date and time"]);
     const typ = (row["Type of activity"] || "").trim();
     if (typ === "Pokecoin bought") {
-      const cur = (row.Currency || "UNKNOWN").trim() || "UNKNOWN";
+      const cur = currencyCode(row.Currency);
       const vendor = (row.Vendor || "OTHER").trim() || "OTHER";
       const amt = parseFloat(row["Money spent on purchase"]) || 0;
       const coins = parseInt(parseFloat(row["Change in pokecoins"]) || 0, 10);
@@ -1196,10 +2322,35 @@ function parseFitness(text) {
   if (any) markLoaded("Adventure Sync Fitness");
 }
 
+/* Platform and Device_category are small enumerations in the session files
+ * ("ios", "android"; "phone", "mobile_phone", "tablet", "unknown_device_category"),
+ * and App_version / OS_version are public release numbers. Only those shapes
+ * are kept — anything else in the columns is dropped or becomes "Other" — so no
+ * free text rides into STATE on the back of a device era. */
+const PLATFORMS = new Map([["ios", "iOS"], ["android", "Android"]]);
+const DEVICE_KINDS = new Map([["phone", "phone"], ["mobile_phone", "phone"], ["smartphone", "phone"], ["tablet", "tablet"]]);
+function platformOf(s) { const k = String(s == null ? "" : s).trim().toLowerCase(); return k ? PLATFORMS.get(k) || "Other" : ""; }
+function deviceKindOf(s) { return DEVICE_KINDS.get(String(s == null ? "" : s).trim().toLowerCase()) || ""; }
+function versionOf(s) { const v = String(s == null ? "" : s).trim(); return /^\d{1,4}(\.\d{1,5}){0,3}$/.test(v) ? v : ""; }
+function versionCmp(a, b) {
+  const x = a.split(".").map(Number), y = b.split(".").map(Number);
+  for (let i = 0; i < Math.max(x.length, y.length); i++) { const d = (x[i] || 0) - (y[i] || 0); if (d) return d; }
+  return 0;
+}
+/* One install history out of two files. Each install is keyed by its instant,
+ * so the same install named in both counts once, and it keeps the device it was
+ * made on — the difference between a new phone and a reinstall. */
+function addInstall(ts, dev) {
+  if (!ts) return;
+  const t = STATE.installs.times, k = ts.getTime();
+  if (!(k in t) || (!t[k] && dev)) t[k] = dev || "";
+}
+
 /* 20,771 rows and 32 columns on a real export — big enough to be worth
  * streaming alongside Player_Journey. */
 async function parseSessions(text) {
   const S = STATE.sessions;
+  const installs = new Set();   // Install_time values already handed to addInstall
   await eachRow(text, "x.csv", (row) => {
     const ts = parseTS(row.Event_time || row.__cells[0]);
     if (ts) S.monthly[monthKey(ts)] = (S.monthly[monthKey(ts)] || 0) + 1;
@@ -1225,6 +2376,21 @@ async function parseSessions(text) {
         rec.days.add(ts.toISOString().slice(0, 10));
       }
     }
+    /* Every session names the install it came from, which makes this file the
+     * fuller install history: on a real account it names 42 installs back to
+     * 2021, where App_Installs.csv lists 11 and stops in October 2025. */
+    const it = (row.Install_time || "").trim();
+    if (it && !installs.has(it)) { installs.add(it); addInstall(parseTS(it), dev); }
+    // device eras: what you played on, month by month, and on which release
+    const app = versionOf(row.App_version), os = versionOf(row.OS_version);
+    if (app) S.apps[app] = (S.apps[app] || 0) + 1;
+    if (os) S.oses[os] = (S.oses[os] || 0) + 1;
+    if (dev) {
+      const k = S.deviceKind[dev] || (S.deviceKind[dev] = { platform: "", kind: "" });
+      if (!k.platform) k.platform = platformOf(row.Platform);
+      if (!k.kind) k.kind = deviceKindOf(row.Device_category);
+      if (ts) { const mo = S.eraMonths[monthKey(ts)] || (S.eraMonths[monthKey(ts)] = {}); mo[dev] = (mo[dev] || 0) + 1; }
+    }
     S.total++;
   }, true);
   if (S.total) markLoaded("App Sessions");
@@ -1234,15 +2400,17 @@ function parseInstalls(text) {
   const { rows } = parseRows(text, "x.csv", true);
   const I = STATE.installs;
   for (const row of rows) {
-    /* Real exports carry Install_time; the scrubbed demo fixture is reshaped to
-     * Event_time,Device_model,Platform,City,State and has no Install_time at
-     * all, so read BOTH names before falling back to a position. Column 0
-     * differs between the two files (Attributed_touch_time vs Event_time), so
-     * the positional read is a genuine last resort, not the working path. */
+    /* Real exports carry Install_time. The demo sample was once reshaped to
+     * Event_time with no Install_time at all, so read BOTH names before falling
+     * back to a position. Column 0 differs between the two files
+     * (Attributed_touch_time vs Event_time), so the positional read is a
+     * genuine last resort, not the working path. */
     const ts = parseTS(row.Install_time || row.Event_time || row.__cells[0]);
     if (ts && (!I.first || ts < I.first)) I.first = ts;
+    if (ts && (!I.last || ts > I.last)) I.last = ts;
     const dev = ((row.Device_model || "") + "").split("::").pop().trim();
     if (dev) I.devices[dev] = (I.devices[dev] || 0) + 1;
+    addInstall(ts, dev);
     I.count++;
   }
   if (I.count) markLoaded("App Installs");
@@ -1253,11 +2421,19 @@ function parseLiveEvents(text) {
   for (const row of rows) {
     const detail = (row["Event Details"] || "").trim();
     if (!detail) continue;
+    /* An order can be add-ons alone. The export writes 0 tickets for it, and
+     * "parseInt(0) || 1" counted that as a ticket. Zero stays zero; a blank
+     * count still means one ticket, as it always has. Whether the order had an
+     * add-on is a yes or no — what the add-on was is never read. */
+    const n = parseInt(String(row["Number of Tickets on Order"] ?? "").trim(), 10);
     STATE.liveEvents.push({
       name: detail.split(",")[0].trim(),
-      tickets: parseInt(row["Number of Tickets on Order"] || 1, 10) || 1,
+      tickets: Number.isFinite(n) && n >= 0 ? n : 1,
+      addOn: !!(row["AddOn Info"] || "").trim(),
       paid: parseFloat(row["Total Paid"]) || 0,
-      currency: (row["Currency Paid"] || "").trim(),
+      // blank stays blank (the ticket isn't counted in a currency); anything
+      // else must be a plain three-letter code, or it becomes "UNKNOWN"
+      currency: (row["Currency Paid"] || "").trim() ? currencyCode(row["Currency Paid"]) : "",
       date: parseTS(row["Date of Order Placed"]),
     });
   }
@@ -1326,6 +2502,21 @@ function parseSupport(text) {
   if (S.tickets) markLoaded("Support Interactions");
 }
 
+/* ── Wayfarer (wayfarer_player_data.json) ──
+ * The profile's lifetime totals, and four logs Niantic still holds:
+ *   OprAssignmentLog  candidates put in front of you to review   { Candidate ID, Time }
+ *   OprSubmissionLog  the reviews you sent in, with your ratings  { Time, Rating for …, … }
+ *   OprSkippedLog     candidates you skipped
+ *   OprUpgradeLog     review upgrades you spent
+ * The submission log is REVIEWS, not nominations: its fields are the stars you
+ * gave someone else's candidate. COUNTS, MONTHS AND RATINGS ONLY — the profile's
+ * email, its home, bonus and last-activity locations, and every Candidate ID,
+ * comment, suggested location and duplicate link are never read. */
+const WF_RATINGS = [
+  ["Rating for Quality", "Overall quality"], ["Rating for Uniqueness", "Uniqueness"],
+  ["Rating for Cultural", "Cultural value"], ["Rating for Safety", "Safe access"],
+  ["Rating for Location", "Location accuracy"], ["Rating for Text", "Title & description"],
+];
 function parseWayfarer(text) {
   try {
     const j = JSON.parse(text);
@@ -1334,20 +2525,43 @@ function parseWayfarer(text) {
     const prof = Array.isArray(profRaw) ? (profRaw[0] || null) : profRaw;
     const subs = root.OprSubmissionLog || [];
     const grabNum = (obj, keys) => { for (const k in obj) { if (keys.some((kk) => k.toLowerCase().includes(kk))) { const v = +obj[k]; if (!isNaN(v)) return v; } } return null; };
-    /* OprSubmissionLog is a LOG — a rolling record of submissions Niantic still
-     * holds, not a lifetime nomination count. It was labelled "Nominations
-     * submitted", which on the reference profile claimed 4 against a lifetime
-     * "Total Analyzed" of 7: a smaller number than the thing it supposedly
-     * contains. Name it for what it is and let the profile totals carry the
-     * lifetime story. */
+    const log = (k) => (Array.isArray(root[k]) ? root[k].filter((e) => e && typeof e === "object") : []);
+    /* Wayfarer stamps its logs "2026-05-03 04:05:06 GMT". GMT is UTC, and
+     * saying so up front sends it down parseTS's strict path rather than
+     * leaving it to each browser's own idea of what Date() accepts. */
+    const when = (e) => parseTS(typeof e.Time === "string" ? e.Time.trim().replace(/ GMT$/, " UTC") : "");
+    const monthly = (list) => {
+      const o = {};
+      for (const e of list) { const ts = when(e); if (ts) o[monthKey(ts)] = (o[monthKey(ts)] || 0) + 1; }
+      return o;
+    };
+    const reviewed = log("OprSubmissionLog"), assigned = log("OprAssignmentLog");
+    const ratings = {};
+    let oneStar = 0, duplicates = 0;
+    for (const e of reviewed) {
+      for (const [key, label] of WF_RATINGS) {
+        const v = parseInt(e[key], 10);
+        if (v >= 1 && v <= 5) { const r = ratings[label] || (ratings[label] = { n: 0, sum: 0 }); r.n++; r.sum += v; }
+      }
+      if (/^true$/i.test(String(e["One Star Submission"] ?? "").trim())) oneStar++;
+      if (/^true$/i.test(String(e["Is Duplicate"] ?? "").trim())) duplicates++;
+    }
+    /* OprSubmissionLog is a LOG — a rolling record Niantic still holds, not a
+     * lifetime count. It was labelled "Nominations submitted", which on the
+     * reference profile claimed 4 against a lifetime "Total Analyzed" of 7: a
+     * smaller number than the thing it supposedly contains. Name it for what it
+     * is and let the profile totals carry the lifetime story. */
     STATE.wayfarer = {
       logged: Array.isArray(subs) ? subs.length : null,
       analyzed: prof ? grabNum(prof, ["analyzed"]) : null,
       created: prof ? grabNum(prof, ["created"]) : null,
       rejected: prof ? grabNum(prof, ["rejected"]) : null,
+      assigned: assigned.length, skipped: log("OprSkippedLog").length, upgrades: log("OprUpgradeLog").length,
+      assignedMonthly: monthly(assigned), reviewedMonthly: monthly(reviewed),
+      ratings, oneStar, duplicates,
     };
     const W = STATE.wayfarer;
-    if (W.logged || W.analyzed || W.created || W.rejected) markLoaded("Wayfarer Contributions");
+    if (W.logged || W.analyzed || W.created || W.rejected || W.assigned || W.skipped || W.upgrades) markLoaded("Wayfarer Contributions");
   } catch (e) { /* ignore malformed */ }
 }
 
@@ -1393,15 +2607,23 @@ const CF_KINDS = [
 ];
 /* "2024-07-04 00:51:20.541 +0000 UTC" → the shape parseTS already reads fast */
 function cfTime(s) { return String(s || "").replace(/\s\+0000\s+UTC$/, " UTC"); }
+/* A meetup counts for its listed length, up to this. The real export lists a
+ * few that run for days (a weekend event is one listing of 60 hours), and
+ * nobody stood at a meetup for 60 hours. */
+const CF_MAX_HOURS = 12;
 function parseCampfire(text) {
   const recs = csvRecords(text);
   const cf = {
     clubs: 0, channels: 0, posts: 0, comments: 0,
     messages: 0, msgMonthly: {}, msgHours: Array(24).fill(0), msgFirst: null, msgLast: null,
+    msgSlotUTC: {},          // messages per quarter hour of the epoch — see slotKey and renderCampfire
     friends: 0, friendSources: {}, friendsYouAsked: 0, friendsTheyAsked: 0,
-    hosted: 0, hostedRsvps: 0, hostedCheckins: 0, hostedMonthly: {},
+    hosted: 0, hostedRsvps: 0, hostedCheckins: 0, hostedMonthly: {}, hostedHours: 0,
     rsvps: 0, rsvpMonthly: {}, checkins: 0, checkinMonthly: {}, checkinDays: new Set(),
     kinds: {}, kindsRsvp: {}, first: null, last: null,
+    // the meetups you checked into: hours out (each capped at CF_MAX_HOURS), each
+    // one's listed length, and how many checked in / RSVP'd — numbers only
+    hoursOut: 0, meetupHours: [], crowd: [], crowdRsvp: [],
   };
   const seen = { hosted: new Set(), rsvp: new Set(), checkin: new Set() };
   let section = null, header = null;
@@ -1424,6 +2646,7 @@ function parseCampfire(text) {
       cf.messages++; touch(ts);
       bump(cf.msgMonthly, monthKey(ts));
       cf.msgHours[ts.getUTCHours()]++;
+      bump(cf.msgSlotUTC, slotKey(ts));
       if (!cf.msgFirst || ts < cf.msgFirst) cf.msgFirst = ts;
       if (!cf.msgLast || ts > cf.msgLast) cf.msgLast = ts;
     }
@@ -1439,16 +2662,23 @@ function parseCampfire(text) {
       const id = row["Event Id"] || r[0] || String(ts.getTime());
       const mk = monthKey(ts), kind = kindOf(row["Event Title"] || "");
       const rs = +(row["RSVP count"] || 0) || 0, ci = +(row["Check-in count"] || 0) || 0;
+      // the listed length, when the end is after the start — never negative, never guessed
+      const te = parseTS(cfTime(row["Event End Time"] || r[3]));
+      const hours = te && te > ts ? (te - ts) / 3600e3 : null;
       touch(ts);
       if (section.includes("meetups")) {
         if (seen.hosted.has(id)) continue; seen.hosted.add(id);
         cf.hosted++; cf.hostedRsvps += rs; cf.hostedCheckins += ci; bump(cf.hostedMonthly, mk);
+        if (hours != null) cf.hostedHours += Math.min(hours, CF_MAX_HOURS);
       } else if (section.includes("rsvps")) {
         if (seen.rsvp.has(id)) continue; seen.rsvp.add(id);
         cf.rsvps++; bump(cf.rsvpMonthly, mk); bump(cf.kindsRsvp, kind);
       } else {
         if (seen.checkin.has(id)) continue; seen.checkin.add(id);
         cf.checkins++; bump(cf.checkinMonthly, mk); bump(cf.kinds, kind); cf.checkinDays.add(ts.toISOString().slice(0, 10));
+        if (hours != null) { cf.hoursOut += Math.min(hours, CF_MAX_HOURS); cf.meetupHours.push(Math.round(hours * 100) / 100); }
+        if (ci > 0) cf.crowd.push(ci);
+        if (rs > 0) cf.crowdRsvp.push(rs);
       }
     }
     else if (section.includes("comments")) { if (parseTS(cfTime(row["Created At"] || r[3]))) cf.comments++; }
@@ -1520,9 +2750,10 @@ function calloutRow(items) {
 }
 function rankList(items, fmtVal = (v) => fmt(v)) {
   const max = items.reduce((m, [, v]) => Math.max(m, v), 0) || 1;
-  return `<div class="rank-list">${items.map(([name, v], i) => `
-    <div class="rank-row"><span class="rk">${i + 1}</span><span class="rn">${esc(name)}</span><span class="rv">${fmtVal(v, name)}</span></div>
-    <div class="rank-bar"><i style="width:${((v / max) * 100).toFixed(1)}%"></i></div>`).join("")}</div>`;
+  // fmtVal also gets the whole item, so a row can carry more than its name and number
+  return `<div class="rank-list">${items.map((item, i) => { const [name, v] = item; return `
+    <div class="rank-row"><span class="rk">${i + 1}</span><span class="rn">${esc(name)}</span><span class="rv">${fmtVal(v, name, item)}</span></div>
+    <div class="rank-bar"><i style="width:${((v / max) * 100).toFixed(1)}%"></i></div>`; }).join("")}</div>`;
 }
 function chartWrap(id, cls = "") { return `<div class="chart-wrap ${cls}"><canvas id="${id}"></canvas></div>`; }
 /* Chart.js is lazy-loaded, so its defaults can only be themed once the library
@@ -1771,15 +3002,58 @@ function teardown() {
   STATE = freshState();
 }
 
+/* Everything in RAW into STATE, one file at a time, its copies merged first
+ * (see mergeCopies). The order comes from the files themselves — "1" journey
+ * files before their "2" twins, since a twin's window has to be known first,
+ * then by name — so the same files build the same report whatever order they
+ * arrived in. Returns { unreadable: copies that could not be re-read }, or
+ * null once `stale` says the user cleared part-way. */
+async function parseRaw(onFile, stale = () => false) {
+  const files = logicalFiles().filter((g) => g.copies.some((r) => !r.oversize && !r.container));
+  files.sort((a, b) => pjOrder(a.name) - pjOrder(b.name) || (a.key < b.key ? -1 : a.key > b.key ? 1 : 0));
+  const clocks = groupClocks(), unreadable = [];
+  for (let i = 0; i < files.length; i++) {
+    const g = files[i];
+    if (onFile) await onFile(g, i, files.length);
+    if (stale()) return null;
+    const got = [];
+    for (const r of g.copies) {
+      if (r.oversize || r.container) continue;   // too large to read — already flagged in the list
+      // On a rebuild the text was released after the last build; read it again
+      // from the File handle the browser still holds.
+      let text = r.text;
+      if (text == null && r.file) { try { text = await r.file.text(); } catch (e) { unreadable.push(r.orig || r.name); continue; } }
+      if (text != null) got.push({ r, text });
+    }
+    if (stale()) return null;   // cleared during the read
+    if (!got.length) continue;
+    const full = got.filter((c) => !EMPTY_FILE.test(c.text));
+    const text = full.length > 1 ? await mergeCopies(g.name, rankCopies(full, clocks).map((c) => c.text)) : (full[0] || got[0]).text;
+    if (stale()) return null;   // cleared while the copies were being merged
+    await routeFile(g.name, text);
+    if (stale()) return null;   // cleared while this file was being parsed
+    // Release: the parsed aggregates in STATE are all we need, and holding
+    // every file's text is the single largest retention in the app.
+    for (const c of got) if (c.r.file) c.r.text = null;
+  }
+  return { unreadable };
+}
+
 async function build() {
-  if (!RAW.length || BUILDING) return;
+  if (!RAW.length) return;
+  // Files that arrive while a build runs wait for it and get one more build
+  // after it. They used to be skipped outright, under a heading that already
+  // counted them as added and their chapters as unlocked.
+  if (BUILDING) { BUILD_AGAIN = true; return; }
   BUILDING = true;
+  BUILD_AGAIN = false;
   const gen = DATA_GEN;
   const stale = () => gen !== DATA_GEN;
   // Abandoning a build must leave nothing behind: a file parsed in the moment
   // the user hit Clear would otherwise sit in the fresh STATE afterwards.
   const abort = () => { STATE = freshState(); };
   if (AUTO_BUILD_T) { clearTimeout(AUTO_BUILD_T); AUTO_BUILD_T = null; }
+  if (PENDING_ZIP) PENDING_ZIP.buildHeld = false;   // everything in RAW is being built now
   const btn = $("build-btn");
   const btnLabel = btn ? btn.textContent : "";
   if (btn) { btn.disabled = true; btn.textContent = "Building…"; }
@@ -1792,41 +3066,27 @@ async function build() {
   try {
     teardown(); // also resets STATE
 
-    // Kick off the libraries this build will need while we parse.
-    const libWaits = [ensureScript("vendor/chart.umd.min.js")];
+    // Kick off the libraries this build will need while we parse. Each gets its
+    // catch now: one that failed while the files were still parsing sat
+    // unhandled until the Promise.all below reached it — a brief "Uncaught (in
+    // promise)" in the console on every failed load.
+    const libFail = (err) => { console.warn(err); };
+    const libWaits = [ensureScript("vendor/chart-4.5.1.umd.min.js").catch(libFail)];
 
     // Yields between files; the big parsers additionally yield WITHIN a file
     // (see eachRow), which is what stops one 8.9MB CSV freezing the page.
     const prog = $("build-progress");
     const bar = $("build-bar-fill");
-    const readable = RAW.filter((r) => !r.oversize && !r.container).length;
     const srcWord = SAMPLE_DATA || window.DEMO_PAGE ? "the sample export" : "your files";
-    let readN = 0;
-    const unreadable = [];
-    // "1" journey files before their "2" twins — the window to skip has to be known first
-    for (const r of [...RAW].sort((a, b) => pjOrder(a.name) - pjOrder(b.name))) {
-      if (r.oversize) continue; // too large to read at all — already flagged in the list
-      if (r.container) continue; // an archive already opened — its files are in RAW on their own
-      readN++;
+    const parsed = await parseRaw(async (g, i, n) => {
       // determinate, not a bare spinner: "2 in or 12?" is the whole question
-      if (prog) prog.textContent = `Reading ${r.name} (${readN} of ${readable}, ${srcWord})…`;
-      if (bar) bar.style.width = Math.round((readN / Math.max(1, readable)) * 88) + "%";
+      const copies = g.copies.filter((r) => !r.oversize).length;
+      if (prog) prog.textContent = `Reading ${g.name}${copies > 1 ? ` (${copies} copies)` : ""} (${i + 1} of ${n}, ${srcWord})…`;
+      if (bar) bar.style.width = Math.round(((i + 1) / Math.max(1, n)) * 88) + "%";
       await nextTick(); // let the progress line paint without timer throttling
-      // On a rebuild the text was released after the last build; read it again
-      // from the File handle the browser still holds.
-      if (stale()) return abort(); // the user cleared while we were reading
-      let text = r.text;
-      if (text == null && r.file) {
-        try { text = await r.file.text(); } catch (e) { unreadable.push(r.name); continue; }
-      }
-      if (text == null) continue;
-      if (stale()) return abort(); // cleared during the read
-      await routeFile(r.name, text);
-      if (stale()) return abort(); // cleared while this file was being parsed
-      // Release immediately: the parsed aggregates in STATE are all we need,
-      // and holding every file's text is the single largest retention in the app.
-      if (r.file) r.text = null;
-    }
+    }, stale);
+    if (!parsed) return abort(); // the user cleared part-way through
+    const unreadable = parsed.unreadable;
     if (unreadable.length) {
       showError("Couldn't re-read " + unreadable.map(esc).join(", ")
         + " — if the file moved or was deleted since you picked it, add it again.", true);
@@ -1834,14 +3094,14 @@ async function build() {
 
     const needGeo = STATE.ev.geo.size > 0 || STATE.trail.length > 0;
     if (needGeo) {
-      if (_webglOK()) libWaits.push(ensureScript("vendor/globe.gl.min.js"));
+      if (_webglOK()) libWaits.push(ensureScript("vendor/globe.gl-2.46.2.min.js").catch(libFail));
       else libWaits.push(ensureCSS("vendor/leaflet.css")
         .then(() => ensureScript("vendor/leaflet.js"))
-        .then(() => ensureScript("vendor/leaflet-heat.js")));
+        .then(() => ensureScript("vendor/leaflet-heat.js")).catch(libFail));
     }
     if (prog) prog.textContent = "Drawing your story…";
     if (bar) bar.style.width = "96%";
-    await Promise.all(libWaits.map((p) => p.catch((e) => console.warn(e))));
+    await Promise.all(libWaits);
     if (stale()) return abort(); // cleared while libraries loaded — draw nothing
 
     res.innerHTML = "";
@@ -1955,7 +3215,8 @@ async function build() {
      * people to keep the tab open, since a report can't be deep-linked. */
     if (!window.DEMO_PAGE) {
       const who = STATE.profile && STATE.profile.username;
-      document.title = `${who ? esc(who) + "'s" : "Your"} journey — POGO Metrics`;
+      // a tab title is plain text, not HTML — escaping it would print "&amp;"
+      document.title = `${who ? who + "'s" : "Your"} journey — POGO Metrics`;
     }
     /* Move focus and scroll to the freshly built story — but ONLY when the user
      * asked for a build. On metrics.html they pressed a button and expect to be
@@ -1978,6 +3239,11 @@ async function build() {
     BUILDING = false;
     POST = [];
     if (btn) { btn.disabled = false; btn.textContent = btnLabel; }
+    if (BUILD_AGAIN) {
+      BUILD_AGAIN = false;
+      // a password panel that came up meanwhile holds it, like any auto-build
+      if (PENDING_ZIP) PENDING_ZIP.buildHeld = true; else build();
+    }
   }
 }
 /* Deep links into a chapter — e.g. /demo.html#ch-your-world-in-3d.
@@ -1992,7 +3258,10 @@ async function build() {
  * way and isn't scrolled twice. Focus moves with the scroll, or a keyboard user
  * lands at the chapter visually and at the top of the document in fact. */
 function gotoChapterFromHash() {
-  const id = decodeURIComponent(location.hash.slice(1));
+  // A hand-edited or truncated link can carry a broken %-escape, and
+  // decodeURIComponent throws on one — treat that as no chapter at all.
+  let id = "";
+  try { id = decodeURIComponent(location.hash.slice(1)); } catch (e) { return; }
   if (!/^ch-[a-z0-9-]+$/.test(id)) return;
   const el = document.getElementById(id);
   if (!el) return;
@@ -2106,11 +3375,13 @@ function shellReport(res, mods) {
     };
     const modeBtn = rail.querySelector(".rail-mode");
     if (modeBtn) modeBtn.addEventListener("click", () => setReader(!READER), sig);
+    // Not `sig`: that one is passive, for scroll and resize, and a passive
+    // listener can't preventDefault() — Chrome ignores the call and logs an error.
     links.forEach((a, i) => a && a.addEventListener("click", (e) => {
       if (!READER) return;
       e.preventDefault();
       setChapter(i, true);
-    }, sig));
+    }, { signal: SHELL_AC.signal }));
 
     const spy = () => {
       tick = false;
@@ -2196,7 +3467,8 @@ function mountUploadStrip() {
   const unlocked = chartable.filter((c) => RAW.some((r) => c.match.test(r.name) && !r.oversize && !r.empty && !r.unreadable)).length;
   const I = (n) => (window.ICON ? window.ICON(n) : "");
   const open = sec.classList.contains("up-open");
-  strip.innerHTML = `<div class="us-sum">${I("folder")}<span><b>${RAW.length}</b> file${RAW.length === 1 ? "" : "s"} added · <b>${unlocked} of ${chartable.length}</b> chapters unlocked</span></div>
+  const shown = visibleFiles(), merged = mergeSummary();
+  strip.innerHTML = `<div class="us-sum">${I("folder")}<span><b>${shown}</b> file${shown === 1 ? "" : "s"} added${merged ? ` · ${esc(merged)}` : ""} · <b>${unlocked} of ${chartable.length}</b> chapters unlocked</span></div>
     <div class="us-act">
       <button class="btn btn-teal" type="button" id="us-add">${I("plus")} Add more files</button>
       <button class="btn btn-ghost" type="button" id="us-more" aria-expanded="${open}">${I(open ? "rows" : "list")} ${open ? "Hide files & console" : "Files & console"}</button>
@@ -2233,7 +3505,7 @@ function resHero() {
     : `<div class="res-toolbar">
        <button class="btn btn-primary" id="story-btn" type="button">${I("play")} Play my story</button>
        <button class="btn btn-teal" id="journey-btn" type="button">${I("download")} Journey card</button>
-       <button class="btn btn-ghost" id="json-btn" type="button">${I("receipt")} My numbers</button>
+       <button class="btn btn-ghost" id="json-btn" type="button" aria-expanded="false" aria-controls="numbers-panel">${I("receipt")} My numbers</button>
        <button class="btn btn-ghost" id="poster-btn" type="button">${I("image")} Poster</button>
        <button class="btn btn-teal" id="addmore-btn" type="button">${I("plus")} Add more files</button>
        <button class="btn btn-ghost" id="restart-btn" type="button">${I("rotate")} Start over</button>
@@ -2263,7 +3535,28 @@ function resHero() {
       </div>
     </div>
     ${toolbar}
+    ${window.DEMO_PAGE ? "" : numbersPanel(I)}
   </div>`;
+}
+/* "My numbers" opens this instead of saving straight away: the file for a
+ * friend and the file for yourself carry very different things, and each
+ * says what it holds before anything is saved. */
+function numbersPanel(I) {
+  return `<div class="numbers-panel" id="numbers-panel" hidden>
+      <div class="np-card">
+        <h4>${I("share")} Compare file — for a friend</h4>
+        <p>Holds your trainer name, your action totals, your actions per month and per day, and your friend count.
+          Nothing else: no locations, no spending, no devices, no steps. Your friend adds it next to their own
+          export and gets a side-by-side chapter.</p>
+        <button class="btn btn-teal" id="compare-btn" type="button">${I("share")} Send my compare file</button>
+      </div>
+      <div class="np-card personal">
+        <h4>${I("lock")} Full stats — just for you</h4>
+        <p>Everything the report counted except locations: your profile, real-money spending, devices,
+          daily steps, your hour-by-hour play pattern and more. It's personal — keep it, don't share it.</p>
+        <button class="btn btn-ghost" id="stats-btn" type="button">${I("download")} Download my full stats</button>
+      </div>
+    </div>`;
 }
 function wireToolbar() {
   const a = $("addmore-btn"), r = $("restart-btn");
@@ -2273,7 +3566,16 @@ function wireToolbar() {
     if (Object.keys(STATE.ev.dayCounts).length) jc.onclick = () => downloadJourneyCard(jc);
     else jc.style.display = "none"; // needs Player_Journey data to mean anything
   }
-  if (js) js.onclick = () => downloadStatsJSON();
+  const panel = $("numbers-panel");
+  if (js && panel) {
+    js.onclick = () => {
+      panel.hidden = !panel.hidden;
+      js.setAttribute("aria-expanded", String(!panel.hidden));
+    };
+    const cb = $("compare-btn"), sb = $("stats-btn");
+    if (cb) cb.onclick = () => shareCompareFile();
+    if (sb) sb.onclick = () => downloadStatsJSON();
+  }
   const po = $("poster-btn");
   if (po) {
     if (Object.keys(STATE.ev.dayCounts).length) po.onclick = () => downloadPoster(po);
@@ -2290,6 +3592,7 @@ function wireToolbar() {
     }
     teardown();
     RAW = []; DATA_GEN++;
+    hideUnlock();
     renderDetected();
     clearError();
     $("results").classList.add("results-hidden");
@@ -2345,9 +3648,38 @@ function outro() {
         `<span class="locked-chip">${c.icon} <code>${esc(c.id)}</code> unlocks <b>${esc(c.name)}</b></span>`).join("")}
       <div style="margin-top:8px"><a href="/#datasets">See what's in your export →</a></div></div>`
     : "";
+  // The reminder is for a player's own export, never the invented sample trainer
+  // that metrics.html?demo=1 builds on the real page (demo.html returns above).
   return `<div class="notice" style="margin-top:30px">
     <b>That's your story — for now.</b> Add more files above to unlock new chapters of your journey.${more}</div>`
-    + modelHandoff();
+    + (SAMPLE_DATA ? "" : exportAgain()) + modelHandoff();
+}
+
+/* ── export again: a 60-day reminder ──
+ * The files that remember least roll off fastest — the GPS trail keeps about
+ * two months, fitness about three weeks — and the earlier exports keep what
+ * each newer one has since let go, so dropped in together they make the
+ * longest history. So the report ends by offering a reminder to request the
+ * next one: a plain .ics built on this device, exactly like the landing page's
+ * 7-day reminder. No calendar service, no request. */
+// the reminder's own words, as iCalendar text (its commas escaped)
+const AGAIN_ICS = "The GPS trail in an export keeps about two months and fitness about three weeks. Request a fresh export in the game"
+  + "\\, then drop it in with your earlier ones — they keep what each newer one has since let go\\, so together they make the longest history:"
+  + " https://pogo-metrics.netlify.app/metrics.html";
+function exportAgain() {
+  later(() => {
+    const b = $("again-ics");
+    if (b) b.addEventListener("click", () => downloadICS("Request a fresh Pokémon GO data export",
+      daysFromToday(60), "pogo-metrics-export-again.ics",
+      AGAIN_ICS));
+  });
+  const I = (n) => (window.ICON ? window.ICON(n) : "");
+  return `<div class="notice again" style="margin-top:12px">
+    <p class="again-copy"><b>Export again in 60 days.</b> An export only remembers so much: its GPS trail keeps about two months
+      and its fitness log about three weeks. Your earlier exports keep what each newer one has since let go, so drop them all
+      in together for the longest history.</p>
+    <button class="btn btn-ghost" id="again-ics" type="button">${I("calendar")} Get my 60-day reminder</button>
+  </div>`;
 }
 
 /* ── story mode: a Wrapped-style, full-screen tappable recap built from STATE ── */
@@ -2361,7 +3693,7 @@ function trainerArchetype() {
   const total = Object.values(e.totals).reduce((a, b) => a + b, 0);
   if (!total) return null;
   const share = (k) => (e.totals[k] || 0) / total;
-  const local = gridShift(e.hourweek, -new Date().getTimezoneOffset() / 60);
+  const local = e.hourweekLocal;   // each moment on the viewer's clock as it read then
   let night = 0, all = 0;
   for (let d = 0; d < 7; d++) for (let h = 0; h < 24; h++) { all += local[d][h]; if (h >= 22 || h < 4) night += local[d][h]; }
   const km = Object.values(STATE.fitness.daily).reduce((a, d) => a + (d.meters || 0), 0) / 1000;
@@ -2375,7 +3707,7 @@ function trainerArchetype() {
     ["The Photographer", "📸", (STATE.photos.total || 0) / 450, "you stop to shoot what others run past", [C.yellow, C.pink]],
     ["The Ever-Present", "🔥", streak / 130, "day after day, without missing one", [C.orange, C.yellow]],
     ["The Patron", "💎", (STATE.spend.coinsBought || 0) / 350000, "you back the habit properly", [C.yellow, C.orange]],
-    ["The Collector", "🎯", (catchesOf(e.totals) / total) / 0.45, "if it spawns, it's yours", [C.teal, C.yellow]],
+    ["The Collector", "🎯", (catchesOf(e.totals) / total) / 0.45, "if it spawns, you find it", [C.teal, C.yellow]],
     ["The Spin Doctor", "🌀", share("Spins") / 0.35, "every stop on the map, spun", [C.blue, C.teal]],
   ];
   cands.sort((a, b) => b[2] - a[2]);
@@ -2436,15 +3768,17 @@ function storySlides(year) {
       s.push({ kicker: "DAY ONE", big: fmtDate(parseTS(dayKeys[0])), label: `${fmt(daysSince)} days ago, your log begins`, grad: 1 });
     }
   }
-  if (total) s.push({ kicker: yr ? `YOUR ${yr}` : "SINCE THEN", num: total, label: yr ? `actions logged in ${yr}` : "actions in the game's log — every spin, catch, raid and battle the game wrote down", grad: 2 });
-  const catches = catchesOf(kinds);
-  if (catches) s.push({ kicker: "GOTTA CATCH 'EM ALL", num: catches, label: `Pokémon caught${yr ? ` in ${yr}` : " in the logs — map, incense, lure and GO Plus catches combined"}`, grad: 3 });
+  if (total) s.push({ kicker: yr ? `YOUR ${yr}` : "SINCE THEN", num: total, label: yr ? `actions logged in ${yr}` : "actions in the game's log — every spin, encounter, raid and battle the game wrote down", grad: 2 });
+  // encounters, not catches — see catchesOf
+  const met = catchesOf(kinds);
+  if (met) s.push({ kicker: "WILD ENCOUNTERS", num: met, label: `Pokémon encountered${yr ? ` in ${yr}` : " in the logs — on the map, from incense and lures, and through GO Plus"}`, grad: 3 });
   let bigDay = null, bigN = 0;
   for (const d of dayKeys) if (e.dayCounts[d] > bigN) { bigN = e.dayCounts[d]; bigDay = d; }
   if (bigDay) s.push({ kicker: yr ? `${yr}'S BIGGEST DAY` : "YOUR BIGGEST DAY", num: bigN, label: `actions on ${fmtDate(parseTS(bigDay))}${eventFor(bigDay) ? " — " + eventFor(bigDay) : ""}`, grad: 4 });
   if (!yr) {
-    // busiest slot in the VIEWER'S clock — "your hour" should feel like their life, not UTC
-    const local = gridShift(e.hourweek, -new Date().getTimezoneOffset() / 60);
+    // busiest slot in the VIEWER'S clock — "your hour" should feel like their life, not UTC —
+    // each moment on its own local hour, so winter and summer agree across a clock change
+    const local = e.hourweekLocal;
     let bd = 0, bh = 0, bn = 0;
     for (let d = 0; d < 7; d++) for (let h = 0; h < 24; h++) if (local[d][h] > bn) { bn = local[d][h]; bd = d; bh = h; }
     if (bn) s.push({ kicker: "YOUR HOUR", big: `${DAY_FULL[bd]}s, ${hourLabel(bh)}`, label: "when you play the most, in your local time", grad: 5 });
@@ -2485,7 +3819,7 @@ function storySlides(year) {
 function storyIcon(k) {
   k = String(k || "").toUpperCase();
   if (/DAY ONE|YEAR IN DAYS/.test(k)) return "calendar";
-  if (/CATCH/.test(k)) return "sparkles";
+  if (/CATCH|ENCOUNTER/.test(k)) return "sparkles";
   if (/BIGGEST DAY/.test(k)) return "award";
   if (/HOUR/.test(k)) return "clock";
   if (/WORLD/.test(k)) return "globe";
@@ -2704,17 +4038,30 @@ function storyMode(year) {
   try { ov.querySelector(".story-x").focus(); } catch (e) {}
 }
 
+/* The calendar day `days` after today on this device's clock, and a Date as an
+ * iCalendar all-day value (YYYYMMDD) read on that same clock. The reminders
+ * used the UTC date, which is already tomorrow on an evening west of Greenwich
+ * and still yesterday just after midnight east of it, so they landed a day out. */
+function daysFromToday(days, now = new Date()) {
+  const d = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  d.setDate(d.getDate() + days);
+  return d;
+}
+const icsDay = (d) => String(d.getFullYear()) + String(d.getMonth() + 1).padStart(2, "0") + String(d.getDate()).padStart(2, "0");
+
 /* A tiny on-device .ics download — no calendar service, no request. Same
- * pattern as the landing page's export reminder. */
-function downloadICS(summary, date, filename) {
-  const ymd = date.toISOString().slice(0, 10).replace(/-/g, "");
+ * pattern as the landing page's export reminder. `description` is iCalendar
+ * text: a comma in it is written "\\,". `date` is read as a day on this
+ * device's calendar, the one the page shows it on. */
+function downloadICS(summary, date, filename, description) {
+  const ymd = icsDay(date);
   const stamp = new Date().toISOString().replace(/[-:]/g, "").slice(0, 15) + "Z";
   const ics = [
     "BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//POGO Metrics//EN",
     "BEGIN:VEVENT", "UID:" + stamp + "@pogo-metrics",
     "DTSTAMP:" + stamp, "DTSTART;VALUE=DATE:" + ymd,
     "SUMMARY:" + summary,
-    "DESCRIPTION:Projected from your recent pace by POGO Metrics. Request a fresh export and rebuild to see how close you are: https://pogo-metrics.netlify.app/",
+    "DESCRIPTION:" + (description || "Projected from your recent pace by POGO Metrics. Request a fresh export and rebuild to see how close you are: https://pogo-metrics.netlify.app/"),
     "URL:https://pogo-metrics.netlify.app/", "END:VEVENT", "END:VCALENDAR",
   ].join("\r\n");
   const url = URL.createObjectURL(new Blob([ics], { type: "text/calendar" }));
@@ -2724,31 +4071,35 @@ function downloadICS(summary, date, filename) {
   setTimeout(() => URL.revokeObjectURL(url), 4000);
 }
 
-/* ── shared canvas delivery: native share sheet on phones, download anchor
-   everywhere else. AbortError means the user closed the sheet on purpose —
-   don't then shove a download at them. ── */
-function deliverCanvas(cv, filename, title, after) {
-  cv.toBlob(async (blob) => {
-    const finish = () => { if (after) after(); };
-    if (blob && navigator.canShare) {
-      try {
-        const file = new File([blob], filename, { type: "image/png" });
-        if (navigator.canShare({ files: [file] })) {
-          await navigator.share({ files: [file], title });
-          finish();
-          return;
-        }
-      } catch (err) {
-        if (err && err.name === "AbortError") { finish(); return; }
+/* ── shared file delivery: native share sheet where the browser can share the
+   file, download anchor everywhere else. AbortError means the user closed the
+   sheet on purpose — don't then shove a download at them. The share cards and
+   the compare file both go out through here. ── */
+async function deliverFile(blob, filename, title, after) {
+  const finish = () => { if (after) after(); };
+  if (navigator.canShare) {
+    try {
+      const file = new File([blob], filename, { type: blob.type });
+      if (navigator.canShare({ files: [file] })) {
+        await navigator.share({ files: [file], title });
+        finish();
+        return;
       }
+    } catch (err) {
+      if (err && err.name === "AbortError") { finish(); return; }
     }
-    if (!blob) { alert("Could not generate image on this browser."); finish(); return; }
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url; a.download = filename;
-    document.body.appendChild(a); a.click(); a.remove();
-    setTimeout(() => URL.revokeObjectURL(url), 1000);
-    finish();
+  }
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url; a.download = filename;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 4000);
+  finish();
+}
+function deliverCanvas(cv, filename, title, after) {
+  cv.toBlob((blob) => {
+    if (!blob) { alert("Could not generate image on this browser."); if (after) after(); return; }
+    deliverFile(blob, filename, title, after);
   }, "image/png");
 }
 
@@ -2777,8 +4128,13 @@ function renderStatCard(sl, pair, after) {
   ctx.letterSpacing = "9px";
   ctx.fillText(sl.kicker.toUpperCase(), W / 2, 660);
   ctx.letterSpacing = "0px";
+  // Slide text is HTML — escaped names, the odd <b> — but fillText prints
+  // characters: drop the tags and turn the entities back into what they stand
+  // for, or a name with "&" or an apostrophe reads "&amp;" / "&#39;" here.
+  const plain = (h) => String(h == null ? "" : h).replace(/<[^>]*>/g, "")
+    .replace(/&(lt|gt|quot|#39|amp);/g, (m, k) => ({ lt: "<", gt: ">", quot: '"', "#39": "'", amp: "&" }[k]));
   // the big thing — number or phrase, shrunk until it fits
-  const bigText = sl.num != null ? fmt(sl.num) : String(sl.big).replace(/<[^>]*>/g, "");
+  const bigText = sl.num != null ? fmt(sl.num) : plain(sl.big);
   let size = sl.num != null ? 190 : 120;
   do {
     ctx.font = `800 ${size}px ${sl.num != null ? "'JetBrains Mono', monospace" : "'Outfit', sans-serif"}`;
@@ -2790,7 +4146,7 @@ function renderStatCard(sl, pair, after) {
   ctx.fillText(bigText, W / 2, 900);
   // label, wrapped
   ctx.fillStyle = C.dim; ctx.font = "500 34px 'Outfit', sans-serif";
-  const words = String(sl.label).replace(/<[^>]*>/g, "").split(/\s+/);
+  const words = plain(sl.label).split(/\s+/);
   let line = "", y = 990;
   for (const w of words) {
     const trial = line ? line + " " + w : w;
@@ -2898,7 +4254,7 @@ async function downloadPoster(btn) {
   const total = Object.values(e.totals).reduce((a, b) => a + b, 0);
   const km = Object.values(STATE.fitness.daily).reduce((a, d) => a + (d.meters || 0), 0) / 1000;
   const tiles = [
-    [fmt(total), "logged actions"], [fmt(catchesOf(e.totals)), "Pokémon caught"],
+    [fmt(total), "logged actions"], [fmt(catchesOf(e.totals)), "Pokémon encountered"],
     [fmt(e.totals["Spins"] || 0), "PokéStop spins"], [fmt(e.days.size), "days played"],
     [fmt(longestStreak(dayKeys)), "longest streak"],
     km > 1 ? [fmt(Math.round(km)) + " km", "on foot"] : [fmt(e.totals["Raids"] || 0), "raid lobbies"],
@@ -2978,10 +4334,10 @@ function downloadJourneyCard(btn) {
     titleFont: years.length > 1 ? "800 96px 'Outfit', sans-serif" : null,
     file: "pogo-metrics-journey.png",
     partial: false, c1: C.teal, c2: C.yellow,
-    events: fmt(total), badges,
+    events: fmt(total), badges, there: festBadges(),
     peakLabel: monthTotals[0] ? `${fmtMonth(monthTotals[0][0])} was the biggest month of all` : "",
     stats: [
-      [fmt(catchesOf(e.totals)), "Pokémon caught"], [fmt(e.totals["Spins"] || 0), "PokéStop spins"],
+      [fmt(catchesOf(e.totals)), "Pokémon encountered"], [fmt(e.totals["Spins"] || 0), "PokéStop spins"],
       [fmt(e.totals["Raids"] || 0), "raid lobbies"], [fmt(e.raidRemote), "remote raids"],
       [fmt(e.days.size), "days played"], [fmt(streak), "longest streak"],
       ...(STATE.friends.rows.length ? [[fmt(STATE.friends.rows.length), "friends made"]] : []),
@@ -2993,13 +4349,50 @@ function downloadJourneyCard(btn) {
   }, btn);
 }
 
-/* ── stats export: a curated JSON summary, with location data deliberately left out ── */
-function downloadStatsJSON() {
+/* ── the two numbers files ──
+ * The COMPARE file is the one the report offers to send a friend: the trainer
+ * name, action totals, actions per month and per day, and the friend count —
+ * exactly what parseCompare reads, and nothing more. It keeps the shape the
+ * full file always had (profile.username, friends.total), so a friend on an
+ * older build of this site can still read it.
+ * The FULL stats file is the player's own record: profile, real-money
+ * spending, devices, daily steps and the hour-of-week grid. Location data is
+ * left out of both. The full file is named pogo-metrics-personal-stats.json,
+ * which the file router does not take for a compare file. */
+function compareFileData() {
   const e = STATE.ev;
-  const out = {
+  return {
+    generated: new Date().toISOString(),
+    source: "POGO Metrics — a compare file, made in the browser from a Pokémon GO export",
+    note: "For comparing with a friend. It holds a trainer name, action totals, actions per month and per day, and a friend count. Nothing else: no locations, no spending, no devices, no steps, no profile.",
+    profile: { username: (STATE.profile && STATE.profile.username) || "" },
+    totalsByAction: e.totals,
+    monthly: e.byMonth,
+    dayCounts: e.dayCounts,
+    friends: { total: STATE.friends.rows.length },
+  };
+}
+/* The compare file goes out through the share sheet where the browser can
+ * share a file, and downloads everywhere else. The name has to start with
+ * pogo-metrics-stats: that is how the friend's copy of this site knows it. */
+function shareCompareFile() {
+  const who = String((STATE.profile && STATE.profile.username) || "").replace(/[^A-Za-z0-9_-]/g, "").slice(0, 24);
+  const blob = new Blob([JSON.stringify(compareFileData(), null, 2)], { type: "application/json" });
+  deliverFile(blob, `pogo-metrics-stats-${who || "compare"}.json`, "My POGO Metrics compare file");
+}
+function downloadStatsJSON() {
+  const url = URL.createObjectURL(new Blob([JSON.stringify(statsFileData(), null, 2)], { type: "application/json" }));
+  const a = document.createElement("a");
+  a.href = url; a.download = "pogo-metrics-personal-stats.json";
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 4000);
+}
+function statsFileData() {
+  const e = STATE.ev, H = installHistory();
+  return {
     generated: new Date().toISOString(),
     source: "POGO Metrics — parsed locally in your browser from your official Pokémon GO export",
-    note: "Location data is deliberately NOT included in this export: no GPS trail, no activity or stop coordinates, and no city or travel history. Those stay in the browser.",
+    note: "Your personal stats file — for your own records, not for sharing: it includes your profile, real-money spending, devices and daily steps. To compare with a friend, send the compare file instead. Location data is deliberately NOT included: no GPS trail, no activity or stop coordinates, and no city or travel history. Those stay in the browser.",
     profile: STATE.profile,
     totalsByAction: e.totals,
     monthly: e.byMonth,
@@ -3012,18 +4405,18 @@ function downloadStatsJSON() {
     photos: { total: STATE.photos.total, monthly: STATE.photos.monthly },
     // cities/places/countries are location history — excluded to keep the note above true
     sessions: { total: STATE.sessions.total, monthly: STATE.sessions.monthly, devices: STATE.sessions.devices },
-    installs: STATE.installs,
+    // the history both install files add up to, not the per-install table behind it —
+    // and the first install either file names, as the report shows it: App_Installs.csv
+    // alone can start a year or more late
+    installs: { count: STATE.installs.count, first: (H && H.first) || STATE.installs.first, devices: STATE.installs.devices, history: H },
+    referrals: STATE.referrals,
     supportTickets: STATE.support.tickets,
     liveEvents: STATE.liveEvents.length,
     wayfarer: STATE.wayfarer,
-    // counts and months only — the Campfire parser keeps no text, names or coordinates
-    campfire: STATE.campfire,
+    // counts and months only — the Campfire parser keeps no text, names or coordinates.
+    // Its quarter-hour message tally only feeds the chattiest-hour line, so it stays here.
+    campfire: STATE.campfire && { ...STATE.campfire, msgSlotUTC: undefined },
   };
-  const url = URL.createObjectURL(new Blob([JSON.stringify(out, null, 2)], { type: "application/json" }));
-  const a = document.createElement("a");
-  a.href = url; a.download = "pogo-metrics-stats.json";
-  document.body.appendChild(a); a.click(); a.remove();
-  setTimeout(() => URL.revokeObjectURL(url), 4000);
 }
 
 /* ── trainer card (Gameplay.txt) ── */
@@ -3032,27 +4425,30 @@ function renderTrainer() {
   if (!p) return;
   const km = p.distanceWalkedKm || 0;
   const evT = STATE.ev.totals;
-  const caught = catchesOf(evT);
+  const met = catchesOf(evT);   // encounters — see catchesOf
   const stats = [
     [esc(String(p.level || "—")), "Trainer level"],
     [fmt(p.totalXp || 0), "Total XP"],
     [fmt(round(km)) + " km", "Distance walked", "≈ " + (km / 40075 * 100).toFixed(0) + "% around Earth"],
-    ...(caught ? [[fmt(caught), "Pokémon caught", "map · incense · lure · GO Plus logs"]] : []),
+    ...(met ? [[fmt(met), "Pokémon encountered", "map · incense · lure · GO Plus logs"]] : []),
     ...(evT["Spins"] ? [[fmt(evT["Spins"]), "PokéStop spins"]] : []),
     [fmt(p.stardust || 0), "Stardust"],
     [fmt(p.eggsHatched || 0), "Eggs hatched"],
     [fmt(p.pokecoin || 0), "PokéCoins on hand"],
     /* Niantic's own "You have N items" counts event-pass points and crafting
-     * resources as items — <number> against a real bag of <number> on the
-     * reference export. The bag chapter has split those out since it landed,
+     * resources as items — on the bundled sample, 327,752 against an actual bag
+     * of 17,022. The bag chapter has split those out since it landed,
      * but this card went on printing the raw figure, so the same page showed
-     * two "items in bag" numbers 17x apart. Prefer the real one; fall back only
-     * when there is no parseable item list to count (parseBag bails on some
-     * profiles, so STATE.bag genuinely can be absent). */
+     * two "items in bag" numbers more than ten times apart. Prefer the real one;
+     * fall back only when there is no parseable item list to count (parseBag
+     * bails on some profiles, so STATE.bag genuinely can be absent). */
     STATE.bag
       ? [fmt(STATE.bag.bagTotal), "Items in bag", fmt(STATE.bag.distinct) + " different kinds"]
       : [fmt(p.totalItems || 0), "Items in bag", "as counted by the game"],
     [fmt(p.medalCount || STATE.medals.length || 0), "Medals earned"],
+    // Referral Connections: how many joined with your code — counted, never named
+    ...(STATE.referrals ? [[fmt(STATE.referrals.total), "Trainers you referred",
+      STATE.referrals.friends ? `${fmt(STATE.referrals.friends)} still on your friend list` : "joined the game with your code"]] : []),
   ];
   let inner = statGrid(stats);
 
@@ -3092,14 +4488,15 @@ function renderTrainer() {
   }
 
   /* This card mixes two clocks. Level, XP, distance, stardust, eggs and medals
-   * are lifetime figures straight from Gameplay.txt; catches and spins are
+   * are lifetime figures straight from Gameplay.txt; encounters and spins are
    * counted from Player_Journey, which the export only keeps about three years of.
    * Both are right for their source, and calling the whole card "lifetime" made
    * the second pair look wrong. Name the split instead of hiding it. */
-  const windowed = (caught ? 1 : 0) + (evT["Spins"] ? 1 : 0);
+  const windowed = (met ? 1 : 0) + (evT["Spins"] ? 1 : 0);
   const subtitle = `Your trainer card${p.startYear ? `, playing since ${p.startYear}` : ""}${p.buddy ? ` · buddy ${esc(p.buddy)}` : ""}.`
-    + (windowed ? ` Level, XP, distance and medals are lifetime totals; catches and spins are counted from your event logs, which reach back about three years.` : "");
-  return moduleHTML("🎮", (p.username ? esc(p.username) : "Your trainer") + " at a glance", subtitle, inner, "trainer-card");
+    + (windowed ? ` Level, XP, distance and medals are lifetime totals; encounters and spins are counted from your event logs, which reach back about three years.` : "");
+  // moduleHTML escapes the title — pass the name raw, or "&" shows as "&amp;"
+  return moduleHTML("🎮", (p.username || "Your trainer") + " at a glance", subtitle, inner, "trainer-card");
 }
 
 /* ── activity (Player_Journey) ── */
@@ -3120,7 +4517,7 @@ function renderActivity() {
 
   // Aim for a tidy 8-card grid (2 rows of 4) to match the trainer card.
   const stats = [
-    [fmt(total), "Logged actions", "spins, catches, raids, berries, battles",
+    [fmt(total), "Logged actions", "spins, encounters, raids, berries, battles",
       months.map((mk) => Object.values(e.byMonth[mk] || {}).reduce((a, b) => a + b, 0))],
     [fmt(activeDays), "Active days", "days with at least one action",
       months.map((mk) => Object.keys(e.dayCounts).filter((d) => d.startsWith(mk)).length)],
@@ -3139,30 +4536,36 @@ function renderActivity() {
 
   // Visualizations lead the chapter; the data cards sit below them, after a divider.
   const cMonthly = uid(), cDonut = uid(), cClock = uid();
-  const tzOff = -new Date().getTimezoneOffset() / 60;
-  const tzLbl = "UTC" + (tzOff >= 0 ? "+" : "") + (Math.round(tzOff * 10) / 10);
+  /* "Your time" puts each moment on the hour the viewer's clock showed at that
+   * moment: every timestamp is bucketed by its own local hour, daylight saving
+   * included. It used to shift the UTC grid by TODAY's offset, which set half
+   * of every year an hour off in any zone that changes its clocks. */
+  const localDiffers = e.hourweekLocal.some((row, d) => row.some((n, h) => n !== e.hourweek[d][h]));
+  const zone = (() => { try { return (Intl.DateTimeFormat().resolvedOptions().timeZone || "").split("/").pop().replace(/_/g, " "); } catch (err) { return ""; } })();
   let inner = `<div>${chartWrap(cMonthly, "tall")}</div>`;
   inner += `<div class="split" style="margin-top:16px">
     <div>${chartWrap(cDonut)}</div>
     <div>${chartWrap(cClock)}</div>
   </div>`;
-  /* Niantic logs a catch in four separate files depending on how you met the
-   * Pokémon, so the breakdown above splits your catches across four wedges and
-   * never shows the one number a player actually wants. Everything here already
-   * adds them up (catchesOf) — this just says so on the page instead of leaving
-   * you to sum the chart by eye. */
-  const catchParts = ["GO Plus catches", "Encounters", "Incense", "Lures"].filter((k) => e.totals[k]);
-  if (catchParts.length > 1) {
-    inner += `<div class="hw-caption"><b>${fmt(catchesOf(e.totals))} Pokémon caught in total.</b>
-      Niantic files a catch by how you found it, so the breakdown above splits them across
-      ${catchParts.map((k) => `${esc(k.toLowerCase())} (${fmt(e.totals[k])})`).join(", ")} —
-      every chapter here counts the sum.</div>`;
+  /* The game files an encounter in one of four logs depending on how you met
+   * the Pokémon, so the breakdown above splits them across four wedges and never
+   * shows the total. Everything here adds them up (catchesOf) and says so — as
+   * ENCOUNTERS: the map, incense and lure logs record that you met a Pokémon,
+   * never whether you caught it. */
+  const ENC_PARTS = { "GO Plus catches": "GO Plus catches", "Encounters": "map encounters", "Incense": "incense encounters", "Lures": "lure encounters" };
+  const encParts = Object.keys(ENC_PARTS).filter((k) => e.totals[k]);
+  if (encParts.length > 1) {
+    inner += `<div class="hw-caption"><b>${fmt(catchesOf(e.totals))} Pokémon encountered in total.</b>
+      The game files an encounter by how you found the Pokémon, so the breakdown above splits them across
+      ${encParts.map((k) => `${esc(ENC_PARTS[k])} (${fmt(e.totals[k])})`).join(", ")}.
+      The map, incense and lure logs say you met a Pokémon, not whether you caught it — so every chapter
+      here counts encounters, not catches.</div>`;
   }
   inner += `<div style="margin-top:22px">
     <h4 class="mod-h4">When you play — hour of week</h4>
-    ${tzOff !== 0 ? `<div class="yoy-metrics" style="margin:0 0 10px" id="tz-${cMonthly}">
-      <button class="yoy-chip active" type="button" aria-pressed="true" data-off="${tzOff}">Your time (${tzLbl})</button>
-      <button class="yoy-chip" type="button" aria-pressed="false" data-off="0">Game time (UTC)</button>
+    ${localDiffers ? `<div class="yoy-metrics" style="margin:0 0 10px" id="tz-${cMonthly}">
+      <button class="yoy-chip active" type="button" aria-pressed="true" data-grid="local">Your time${zone ? ` (${esc(zone)})` : ""}</button>
+      <button class="yoy-chip" type="button" aria-pressed="false" data-grid="utc">Game time (UTC)</button>
     </div>` : ""}
     <div id="hw-${cMonthly}"></div>
   </div>`;
@@ -3207,8 +4610,8 @@ function renderActivity() {
 
     // hour grid + 24h play clock, re-rendered together when the timezone chip flips
     let clockChart = null;
-    const renderPlayTime = (off) => {
-      const grid = gridShift(e.hourweek, off);
+    const renderPlayTime = (local) => {
+      const grid = local ? e.hourweekLocal : e.hourweek;
       renderHourWeek($("hw-" + cMonthly), grid);
       const byHour = Array.from({ length: 24 }, (_, h) => grid.reduce((a, day) => a + day[h], 0));
       if (clockChart) { const i = CHARTS.indexOf(clockChart); if (i >= 0) CHARTS.splice(i, 1); clockChart.destroy(); }
@@ -3230,13 +4633,13 @@ function renderActivity() {
         },
       });
     };
-    renderPlayTime(tzOff); // default to the viewer's clock — UTC is the expert option
+    renderPlayTime(true); // default to the viewer's clock — UTC is the expert option
     const tzHost = $("tz-" + cMonthly);
     if (tzHost) {
       const tzChips = [...tzHost.querySelectorAll(".yoy-chip")];
       tzChips.forEach((b) => b.addEventListener("click", () => {
         tzChips.forEach((x) => { x.classList.toggle("active", x === b); x.setAttribute("aria-pressed", String(x === b)); });
-        renderPlayTime(+b.dataset.off);
+        renderPlayTime(b.dataset.grid === "local");
       }));
     }
 
@@ -3254,24 +4657,47 @@ function renderActivity() {
     renderCalendar($("cal-" + cMonthly), calYears[0], e.dayCounts);
   });
 
-  return moduleHTML("🗺️", "Your adventure log", `Every spin, catch, raid and battle the game logged — ${fmt(total)} actions across ${fmt(e.days.size)} days.`, inner);
+  return moduleHTML("🗺️", "Your adventure log", `Every spin, encounter, raid and battle the game logged — ${fmt(total)} actions across ${fmt(e.days.size)} days.`, inner);
 }
 
-/* ── friend comparison: parse the app's OWN stats export (downloadStatsJSON)
-   back in. The exchanged file is deliberately location-free — its note field
-   documents the omission — so the comparison inherits the privacy story. ── */
+/* ── friend comparison: read a compare file (compareFileData) back in — or the
+   full stats file older builds offered for the same job, which has the same
+   fields and more. Only the trainer name, action totals, months, days and
+   friend count are read, and each is cut down to what it should be: a short
+   name, non-negative counts, and month and day keys that are real dates. A
+   friend's file is somebody else's text. ── */
 function parseCompare(text) {
   try {
     const j = JSON.parse(text);
     // only accept what this site itself wrote — the source line is the handshake
-    if (!j || !/POGO Metrics/i.test(j.source || "") || !j.totalsByAction) return;
+    if (!j || typeof j !== "object" || !/POGO Metrics/i.test(j.source || "") || !j.totalsByAction) return;
+    const count = (v) => { const n = +v; return Number.isFinite(n) && n >= 0 ? n : null; };
+    const counts = (o) => {
+      const out = {};
+      if (o && typeof o === "object") for (const k of Object.keys(o)) {
+        const n = count(o[k]);
+        if (n != null && k !== "__proto__") out[k] = n;
+      }
+      return out;
+    };
+    const MONTH = /^20\d\d-(0[1-9]|1[0-2])$/, DAY = /^20\d\d-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$/;
+    const monthly = {}, dayCounts = {};
+    if (j.monthly && typeof j.monthly === "object") for (const m of Object.keys(j.monthly)) {
+      if (MONTH.test(m) && j.monthly[m] && typeof j.monthly[m] === "object") monthly[m] = counts(j.monthly[m]);
+    }
+    if (j.dayCounts && typeof j.dayCounts === "object") for (const d of Object.keys(j.dayCounts)) {
+      const n = count(j.dayCounts[d]);
+      if (DAY.test(d) && n != null) dayCounts[d] = n;
+    }
+    const name = j.profile && typeof j.profile.username === "string" ? j.profile.username.trim().slice(0, 40) : "";
+    const friends = j.friends && typeof j.friends === "object" ? count(j.friends.total) : null;
     STATE.compare = {
-      who: (j.profile && j.profile.username) || "Your friend",
-      totals: j.totalsByAction || {},
-      monthly: j.monthly || {},
-      dayCounts: j.dayCounts || {},
-      friends: j.friends && j.friends.total,
-      generated: j.generated,
+      who: name || "Your friend",
+      totals: counts(j.totalsByAction),
+      monthly,
+      dayCounts,
+      friends: friends == null ? undefined : friends,
+      generated: typeof j.generated === "string" ? j.generated.slice(0, 40) : undefined,
     };
     STATE.loaded.push("compare");
   } catch (e) { /* not our JSON — ignore */ }
@@ -3284,15 +4710,17 @@ function renderCompare() {
   const mineTotal = Object.values(mine).reduce((a, b) => a + b, 0);
   const theirsTotal = Object.values(cmp.totals).reduce((a, b) => a + b, 0);
   if (!mineTotal && !theirsTotal) return;
+  // Both names stay raw here: statGrid and moduleHTML escape labels and titles
+  // themselves, and escaping first as well turned "&" into "&amp;" on the page.
   const me = (STATE.profile && STATE.profile.username) || "You";
-  const them = esc(cmp.who);
+  const them = cmp.who;
   const myDays = Object.keys(STATE.ev.dayCounts).length;
   const theirDays = Object.keys(cmp.dayCounts).length;
   const myStreak = longestStreak(Object.keys(STATE.ev.dayCounts));
   const theirStreak = longestStreak(Object.keys(cmp.dayCounts));
 
   const stats = [
-    [fmt(mineTotal), `${esc(me)} — logged actions`, ""],
+    [fmt(mineTotal), `${me} — logged actions`, ""],
     [fmt(theirsTotal), `${them} — logged actions`, ""],
     [`${fmt(myDays)} vs ${fmt(theirDays)}`, "Days played", "you vs them"],
     [`${fmt(myStreak)} vs ${fmt(theirStreak)}`, "Longest streak", "you vs them"],
@@ -3343,9 +4771,9 @@ function renderCompare() {
     });
   });
 
-  return moduleHTML("🤝", `${esc(me)} vs ${them}`,
-    `Two journeys, side by side — built from a stats file exported by this site (no locations inside, nothing uploaded). `
-    + `Want your own to send back? Hit <b>${window.ICON ? window.ICON("receipt") : ""} My numbers</b> in the toolbar.`,
+  return moduleHTML("🤝", `${me} vs ${them}`,
+    `Two journeys, side by side — built from a compare file made by this site (names, counts and dates only; nothing uploaded). `
+    + `Want to send yours back? Open <b>${window.ICON ? window.ICON("receipt") : ""} My numbers</b> in the toolbar and send your compare file.`,
     inner, "versus-friend");
 }
 
@@ -3409,7 +4837,7 @@ function renderRecords() {
     const eta = rate > 0.05 ? new Date(Date.now() + (toGo / rate) * 86400000) : null;
     mile.push({ label, current, target, toGo, eta });
   };
-  addMile("Pokémon caught", catchesOf(e.totals), rateOf((k) => catchesOf(k)));
+  addMile("Pokémon encountered", catchesOf(e.totals), rateOf((k) => catchesOf(k)));
   addMile("PokéStop spins", e.totals["Spins"] || 0, rateOf((k) => k["Spins"] || 0));
   addMile("Raids", e.totals["Raids"] || 0, rateOf((k) => k["Raids"] || 0));
   addMile("Logged actions", total, rateOf((k) => Object.values(k).reduce((a, b) => a + b, 0)));
@@ -3450,7 +4878,7 @@ function renderRecords() {
   });
 
   return moduleHTML("🏅", "Your record book",
-    `Your personal bests. An <b>action</b> is any single thing the game logged — a spin, a catch, a raid, a berry, a gym battle — so ${fmt(total)} actions is the sum of everything you did.`,
+    `Your personal bests. An <b>action</b> is any single thing the game logged — a spin, an encounter, a raid, a berry, a gym battle — so ${fmt(total)} actions is the sum of everything you did.`,
     inner, "record-book");
 }
 
@@ -3664,6 +5092,7 @@ function renderRecentLog() {
   if (R.spins.PokeStop + R.spins.Gym) {
     stats.push([(R.items / (R.spins.PokeStop + R.spins.Gym)).toFixed(1), "Items per spin", "what the stops actually gave you"]);
   }
+  if (R.gifts) stats.push([fmt(R.gifts), "Gifts from friends", `${fmt(R.giftItems)} item${R.giftItems === 1 ? "" : "s"} inside`]);
   if (R.hatched.length) stats.push([fmt(R.hatched.length), "Eggs hatched", "in this window"]);
   if (R.research) stats.push([fmt(R.research), "Research tasks done"]);
   if (R.buddyCandy) stats.push([fmt(R.buddyCandy), "Buddy candy found"]);
@@ -3684,7 +5113,8 @@ function renderRecentLog() {
 
   inner += `<div class="hw-caption">This log is the short rolling window the export attaches to <code>Gameplay.txt</code> — usually the
     last few hours you played, not your whole history. It is also the only place in the entire export where individual
-    Pokémon are named and their CP recorded${best ? `, which is how we know ${esc(best.name)} at CP ${fmt(best.cp)} was the best thing you caught that day` : ""}.</div>`;
+    Pokémon are named and their CP recorded${best ? `, which is how we know ${esc(best.name)} at CP ${fmt(best.cp)} was the best thing you caught that day` : ""}.${
+    R.gifts ? ` Since August 2026 it also names the friend behind each gift you open; those lines are counted as gifts here, and the names are never kept.` : ""}</div>`;
 
   const when = R.first ? fmtDate(R.first) : "";
   return moduleHTML("🔍", "Your last day on the map",
@@ -3707,7 +5137,8 @@ function renderPhotos() {
     [best ? fmt(best[1]) : "—", "Busiest month", best ? fmtMonth(best[0]) : ""],
     [bestDay ? fmt(bestDay[1]) : "—", "Most in one day",
       bestDay ? fmtDate(parseTS(bestDay[0])) + (bestDayEvent ? " · " + bestDayEvent : "") : ""],
-    [P.first ? fmtDate(P.first) : "—", "Oldest photo kept", "the start of the export's window"],
+    // photos don't roll off an export the way the GPS trail does, so this is no window's edge
+    [P.first ? fmtDate(P.first) : "—", "Oldest photo on record"],
   ];
   let inner = statGrid(stats);
 
@@ -3740,9 +5171,15 @@ function renderCampfire() {
   const cf = STATE.campfire;
   if (!cf) return;
   const pct = (a, b) => (b ? Math.round((a / b) * 100) : 0);
+  const hoursLabel = (h) => (h === 1 ? "an hour" : `${+h.toFixed(1)} hours`);
   const stats = [];
   if (cf.checkins || cf.rsvps) stats.push([fmt(cf.checkins), "Meetups you showed up for", cf.rsvps ? `of ${fmt(cf.rsvps)} you RSVP'd to — a ${pct(cf.checkins, cf.rsvps)}% show-up rate` : ""]);
-  if (cf.hosted) stats.push([fmt(cf.hosted), "Meetups you hosted", `drawing ${fmt(cf.hostedRsvps)} RSVPs and ${fmt(cf.hostedCheckins)} check-ins`]);
+  // Event End Time: how long the meetups you checked into ran, and how many turned up
+  if (cf.meetupHours && cf.meetupHours.length) stats.push([fmt(Math.round(cf.hoursOut)) + " h", "Hours at meetups", `a typical one ran ${hoursLabel(medianOf(cf.meetupHours))}`]);
+  const rsvpd = cf.crowdRsvp && cf.crowdRsvp.length ? Math.round(medianOf(cf.crowdRsvp)) : 0;
+  if (cf.crowd && cf.crowd.length) stats.push([fmt(Math.round(medianOf(cf.crowd))), "Typical turnout", `trainers checked in at a typical meetup you joined${rsvpd ? `, and ${fmt(rsvpd)} RSVP'd` : ""} · biggest ${fmt(Math.max(...cf.crowd))}`]);
+  else if (rsvpd) stats.push([fmt(rsvpd), "Typical RSVPs", `trainers RSVP'd to a typical meetup you joined · biggest ${fmt(Math.max(...cf.crowdRsvp))}`]);
+  if (cf.hosted) stats.push([fmt(cf.hosted), "Meetups you hosted", `drawing ${fmt(cf.hostedRsvps)} RSVPs and ${fmt(cf.hostedCheckins)} check-ins${cf.hostedHours ? ` over ${fmt(Math.round(cf.hostedHours))} hours` : ""}`]);
   if (cf.messages) stats.push([fmt(cf.messages), "Messages to your clubs", cf.msgFirst ? `since ${fmtDate(cf.msgFirst)}` : ""]);
   if (cf.friends) {
     const top = Object.entries(cf.friendSources).sort((a, b) => b[1] - a[1])[0];
@@ -3788,13 +5225,17 @@ function renderCampfire() {
   if (cf.posts) bits.push([fmt(cf.posts), "map posts"]);
   if (cf.comments) bits.push([fmt(cf.comments), "comments"]);
   if (cf.checkinDays) bits.push([fmt(cf.checkinDays), "different days out at a meetup"]);
-  // chattiest hour, in the viewer's clock — "your hour" should feel like their life, not UTC
+  /* Chattiest hour, in the viewer's clock. Each message lands in its OWN local
+   * hour — the offset in force on the day it was sent — where this used to
+   * shift every message by today's offset: under daylight saving, half a year
+   * of evenings then sat an hour off. */
   let hourLine = "";
   if (cf.messages) {
-    const off = Math.round(-new Date().getTimezoneOffset() / 60);
+    const local = Array(24).fill(0);
+    for (const k in cf.msgSlotUTC) local[slotDate(k).getHours()] += cf.msgSlotUTC[k];
     let bh = 0, bn = -1;
-    for (let h = 0; h < 24; h++) if (cf.msgHours[h] > bn) { bn = cf.msgHours[h]; bh = h; }
-    hourLine = `Your chattiest hour is <b>${hourLabel((((bh + off) % 24) + 24) % 24)}</b>, in your local time.`;
+    for (let h = 0; h < 24; h++) if (local[h] > bn) { bn = local[h]; bh = h; }
+    hourLine = `Your chattiest hour is <b>${hourLabel(bh)}</b>, in your local time.`;
   }
   const asked = cf.friendsYouAsked + cf.friendsTheyAsked;
   const askLine = asked ? `On Campfire you sent the friend request <b>${pct(cf.friendsYouAsked, asked)}%</b> of the time. ` : "";
@@ -3805,7 +5246,8 @@ function renderCampfire() {
     </div>
   </div>`;
   inner += `<div class="hw-caption">Campfire's export is mostly words — every message, comment and post you wrote — plus the coordinates of every meetup you joined.
-    This chapter keeps only counts and dates: message text, club and event names, meetup locations and the IP address in that file are dropped as it is read, and never shown.</div>`;
+    This chapter keeps only counts and dates: message text, club and event names, meetup locations and the IP address in that file are dropped as it is read, and never shown.${
+    cf.meetupHours && cf.meetupHours.length ? ` Meetup hours use each listing's start and end, up to ${CF_MAX_HOURS} hours apiece, so a weekend-long listing doesn't count as sixty.` : ""}</div>`;
   const sub = cf.checkins
     ? `${fmt(cf.checkins)} meetups attended${cf.hosted ? `, ${fmt(cf.hosted)} hosted` : ""}${cf.messages ? `, ${fmt(cf.messages)} messages to your clubs` : ""}.`
     : cf.messages ? `${fmt(cf.messages)} messages to your clubs${cf.friends ? ` and ${fmt(cf.friends)} Campfire friends` : ""}.`
@@ -3834,22 +5276,6 @@ function longestStreakRange(isoDays) {
   }
   return best;
 }
-/* shift an hour-of-week grid by whole hours (UTC → viewer's clock).
- * The offset must stay SIGNED: normalising -7 to +17 gives the right hour but
- * the wrong weekday, because -7 moves an event back a day while +17 moves it
- * forward one. Keep the sign and let floor() decide the day. */
-function gridShift(grid, offsetHours) {
-  const off = Math.round(offsetHours) % 24;
-  if (!off) return grid;
-  const mod = (n, m) => ((n % m) + m) % m;
-  const out = Array.from({ length: 7 }, () => Array(24).fill(0));
-  for (let d = 0; d < 7; d++) for (let h = 0; h < 24; h++) {
-    const nh = h + off;
-    out[mod(d + Math.floor(nh / 24), 7)][mod(nh, 24)] += grid[d][h];
-  }
-  return out;
-}
-
 /* Count-up animation for stat values — the number is already in the DOM as
  * text; this just plays it in when it scrolls into view. Purely decorative,
  * so reduced-motion users simply see the final value. */
@@ -3941,7 +5367,16 @@ function attachHourWeekTip(host) {
     tip.style.left = px + "px";
     tip.style.top = py + "px";
   };
-  const fill = (cell) => { tip.innerHTML = `<b>${cell.dataset.info}</b><span>${cell.dataset.sub}</span>`; tip.classList.add("on"); };
+  // dataset hands back DECODED text (the cell's attributes were escaped), so it
+  // goes in as text — parsing it as HTML again would undo that escaping
+  const fill = (cell) => {
+    const b = document.createElement("b"), s = document.createElement("span");
+    b.textContent = cell.dataset.info || "";
+    s.textContent = cell.dataset.sub || "";
+    tip.textContent = "";
+    tip.append(b, s);
+    tip.classList.add("on");
+  };
   const show = (ev) => {
     const cell = ev.target.closest("[data-info]");
     if (!cell) { tip.classList.remove("on"); return; }
@@ -4068,7 +5503,24 @@ const YEAR_PAIRS = [
   [C.purple, C.pink], [C.teal, C.green], [C.orange, C.yellow],
 ];
 const yearColors = (y) => YEAR_PAIRS[(((+y - 2022) % YEAR_PAIRS.length) + YEAR_PAIRS.length) % YEAR_PAIRS.length];
+/* Every Pokémon the event logs say you met: GO Plus catches plus map, incense
+ * and lure encounters. The name predates a closer look — none of the three
+ * encounter files records whether the Pokémon was caught — so every label on
+ * this sum says "encountered", never "caught". */
 const catchesOf = (k) => (k["GO Plus catches"] || 0) + (k["Encounters"] || 0) + (k["Incense"] || 0) + (k["Lures"] || 0);
+/* A year card's tiles: one list for the page card and its PNG, so the two can't drift. */
+function yearCardStats(w) {
+  return [
+    [fmt(catchesOf(w.kinds)), "Pokémon encountered"],
+    [fmt(w.kinds["Spins"] || 0), "PokéStop spins"],
+    [fmt(w.kinds["Raids"] || 0), "raid lobbies"],
+    [fmt(w.remoteRaids), "remote raids"],
+    [fmt(w.activeDays), "days played"],
+    [fmt(w.streak), "longest streak"],
+    ...(w.coinsBought ? [[fmt(w.coinsBought), "PokéCoins bought"]] : []),
+    ...(w.friendsAdded ? [[fmt(w.friendsAdded), "friends made"]] : []),
+  ];
+}
 
 function buildYearData() {
   const e = STATE.ev;
@@ -4131,13 +5583,13 @@ function renderYearOverYear() {
     award("Most social", "🤝", (w) => w.friendsAdded),
     award("Whale year", "🐳", (w) => w.coinsBought),
     award("Most consistent", "🔥", (w) => w.streak),
-    award("Most caught", "🎯", (w) => catchesOf(w.kinds)),
+    award("Most encounters", "🎯", (w) => catchesOf(w.kinds)),
   ].filter(Boolean);
   const badgesFor = (y) => awards.filter((a) => a.year === y).map((a) => a.text);
 
   // versus chart + metric chips
   const METRICS = [
-    ["Catches", (w) => catchesOf(w.kinds)],
+    ["Pokémon encountered", (w) => catchesOf(w.kinds)],
     ["Spins", (w) => w.kinds["Spins"] || 0],
     ["Raids", (w) => w.kinds["Raids"] || 0],
     ["Remote raids", (w) => w.remoteRaids],
@@ -4171,23 +5623,14 @@ function renderYearOverYear() {
   cardYears.forEach((y) => {
     const w = data[y];
     const [c1, c2] = yearColors(y);
-    const k = w.kinds;
     const partial = y === nowYear;
     const badges = badgesFor(y);
-    const cells = [
-      [fmt(catchesOf(k)), "Pokémon caught"],
-      [fmt(k["Spins"] || 0), "PokéStop spins"],
-      [fmt(k["Raids"] || 0), "raid lobbies"],
-      [fmt(w.remoteRaids), "remote raids"],
-      [fmt(w.activeDays), "days played"],
-      [fmt(w.streak), "longest streak"],
-    ];
-    if (w.coinsBought) cells.push([fmt(w.coinsBought), "PokéCoins bought"]);
-    if (w.friendsAdded) cells.push([fmt(w.friendsAdded), "friends made"]);
+    const there = festBadges(y);
+    const cells = yearCardStats(w);
     inner += `<div class="wrap-card" data-year="${y}" style="--wc1:${c1};--wc2:${c2}">
       <div class="wc-kicker">Pokémon GO · Metrics</div>
       <div class="wc-year">${y}${partial ? `<span class="wc-sofar">so far</span>` : ""}</div>
-      ${badges.length ? `<div class="wc-badges">${badges.map((b) => `<span class="wc-badge">${b}</span>`).join("")}</div>` : ""}
+      ${badges.length || there.length ? `<div class="wc-badges">${there.map((b) => `<span class="wc-badge wc-there">${esc(b)}</span>`).join("")}${badges.map((b) => `<span class="wc-badge">${b}</span>`).join("")}</div>` : ""}
       <div class="wc-big">${fmt(w.events)}</div>
       <div class="wc-big-l">logged actions${w.peakMonth ? ` · peaked ${fmtMonth(w.peakMonth)}` : ""}</div>
       <div class="wc-grid">${cells.slice(0, 8).map(([v, l]) => `<div class="wc-cell"><div class="v">${v}</div><div class="l">${esc(l)}</div></div>`).join("")}</div>
@@ -4241,15 +5684,9 @@ function renderYearOverYear() {
       const btn = cardEl.querySelector(".wc-dl");
       btn.addEventListener("click", () => downloadYearCard({
         year: y, partial: y === nowYear, c1, c2,
-        events: fmt(w.events), badges: badgesFor(y),
+        events: fmt(w.events), badges: badgesFor(y), there: festBadges(y),
         peakLabel: w.peakMonth ? `${fmtMonth(w.peakMonth)} was the biggest month` : "",
-        stats: [
-          [fmt(catchesOf(w.kinds)), "Pokémon caught"], [fmt(w.kinds["Spins"] || 0), "PokéStop spins"],
-          [fmt(w.kinds["Raids"] || 0), "raid lobbies"], [fmt(w.remoteRaids), "remote raids"],
-          [fmt(w.activeDays), "days played"], [fmt(w.streak), "longest streak"],
-          ...(w.coinsBought ? [[fmt(w.coinsBought), "PokéCoins bought"]] : []),
-          ...(w.friendsAdded ? [[fmt(w.friendsAdded), "friends made"]] : []),
-        ],
+        stats: yearCardStats(w),
         monthLabels: w.monthLabels, monthlyStacks: w.monthlyStacks, series: w.series,
       }, btn));
     });
@@ -4274,7 +5711,7 @@ function renderThenVsNow(years, data) {
 
   const METRICS = [
     ["Logged actions", (w) => w.events],
-    ["Pokémon caught", (w) => catchesOf(w.kinds)],
+    ["Pokémon encountered", (w) => catchesOf(w.kinds)],
     ["Spins", (w) => w.kinds["Spins"] || 0],
     ["Raids", (w) => w.kinds["Raids"] || 0],
     ["Active days", (w) => w.activeDays],
@@ -4287,7 +5724,7 @@ function renderThenVsNow(years, data) {
     const dir = b > a ? "up" : b < a ? "down" : "flat";
     const arrow = dir === "up" ? "▲" : dir === "down" ? "▼" : "＝";
     /* the % alone hides magnitude — +300% on 12→48 raids visually outranks
-     * +40% on 100k→140k catches; the paired bars restore the scale */
+     * +40% on 100k→140k encounters; the paired bars restore the scale */
     const m = Math.max(a, b, 1);
     return `<div class="tvn-row">
       <span class="tvn-l">${esc(label)}</span>
@@ -4347,14 +5784,61 @@ function roundRectPath(ctx, x, y, w, h, r) {
   ctx.closePath();
 }
 async function downloadYearCard(o, btn) {
-  const W = 1080, H = 1500, S = 2;
+  const W = 1080, S = 2;
   const cv = document.createElement("canvas");
-  cv.width = W * S; cv.height = H * S;
   const ctx = cv.getContext("2d");
-  ctx.scale(S, S);
   const orig = btn && btn.textContent;
   if (btn) { btn.textContent = "Rendering…"; btn.disabled = true; }
   try { await document.fonts.ready; } catch (e) { /* fonts may already be ready */ }
+
+  /* Measure first, draw second. The badges and the legend are laid out before
+   * the canvas is sized, so a card holding more than fits in 1080×1500 grows
+   * taller instead of dropping anything. Most cards never need to; a lifetime
+   * card with three festivals and five awards needs four rows of badges. */
+  // badges (wrap, centered) — "I was there" first, in the accent
+  const BADGE_FONT = "700 23px 'Outfit', sans-serif", PADX = 18, GAP = 12, BH = 46;
+  const badgeList = [...(o.there || []).map((t) => ({ t, there: true })), ...(o.badges || []).map((t) => ({ t }))];
+  const badgeRows = [];
+  if (badgeList.length) {
+    ctx.font = BADGE_FONT;
+    const maxW = W - 120;
+    let rw = 0;
+    badgeRows.push([]);
+    badgeList.forEach((b) => {
+      const it = { ...b, w: ctx.measureText(b.t).width + PADX * 2 };
+      if (rw + it.w + GAP > maxW && badgeRows[badgeRows.length - 1].length) { badgeRows.push([]); rw = 0; }
+      badgeRows[badgeRows.length - 1].push(it); rw += it.w + GAP;
+    });
+  }
+
+  /* Legend layout. The mini chart is a stacked bar per month in the series
+   * colours, and it shipped with no key at all — nine colours and nothing to
+   * say which was raids and which was berries. Wraps to as many rows as the
+   * series need. */
+  const LEG_SW = 15, LEG_GAP = 9, LEG_PAD = 28, LEG_LH = 31;
+  const legendRows = [];
+  if (o.series && o.series.length) {
+    ctx.font = "500 19px 'Outfit', sans-serif";
+    const maxW = W - 170;
+    let row = [], rw = 0;
+    o.series.forEach(([label, color]) => {
+      const w = LEG_SW + LEG_GAP + ctx.measureText(label).width + LEG_PAD;
+      if (rw + w > maxW && row.length) { legendRows.push(row); row = []; rw = 0; }
+      row.push({ label, color, w }); rw += w;
+    });
+    if (row.length) legendRows.push(row);
+  }
+  const legendH = legendRows.length ? legendRows.length * LEG_LH + 10 : 0;
+
+  // everything below the badges: the headline, chart, legend, then the tile grid
+  const gRows = Math.ceil(o.stats.length / 2);
+  const hy0 = Math.max(318 + badgeRows.length * (BH + 12) + 60, 470);
+  const gridEnd0 = hy0 + 250 + 96 + legendH + gRows * 124 - 20;
+  // 86: the footer's band. A card that has to grow also gets 24 px of air at each
+  // end, as a card that fits does, so its headline doesn't touch the badges.
+  const H = gridEnd0 + 86 <= 1500 ? 1500 : gridEnd0 + 86 + 48;
+  cv.width = W * S; cv.height = H * S;       // sizing resets the context; everything below sets its own state
+  ctx.scale(S, S);
 
   // background + colored glows
   ctx.fillStyle = C.bg; ctx.fillRect(0, 0, W, H);
@@ -4381,59 +5865,27 @@ async function downloadYearCard(o, btn) {
     ctx.fillText("so far", W / 2, 272);
   }
 
-  // badges (wrap, centered)
+  // badges — every one of them; the card was sized above to hold them all
   let by = 318;
-  if (o.badges && o.badges.length) {
-    ctx.font = "700 23px 'Outfit', sans-serif";
-    const PADX = 18, GAP = 12, BH = 46, maxW = W - 120;
-    const items = o.badges.map((t) => ({ t, w: ctx.measureText(t).width + PADX * 2 }));
-    const rows = [[]]; let rw = 0;
-    items.forEach((it) => {
-      if (rw + it.w + GAP > maxW && rows[rows.length - 1].length) { rows.push([]); rw = 0; }
-      rows[rows.length - 1].push(it); rw += it.w + GAP;
+  ctx.font = BADGE_FONT;
+  badgeRows.forEach((row) => {
+    const tot = row.reduce((a, it) => a + it.w, 0) + GAP * (row.length - 1);
+    let x = (W - tot) / 2;
+    row.forEach((it) => {
+      ctx.fillStyle = it.there ? C.yellow + "1f" : "rgba(255,255,255,.07)";
+      roundRectPath(ctx, x, by, it.w, BH, BH / 2); ctx.fill();
+      ctx.strokeStyle = it.there ? C.yellow + "99" : "rgba(255,255,255,.18)"; ctx.lineWidth = 1.5;
+      roundRectPath(ctx, x, by, it.w, BH, BH / 2); ctx.stroke();
+      ctx.fillStyle = "#e8eaf6"; ctx.textBaseline = "middle";
+      ctx.fillText(it.t, x + it.w / 2, by + BH / 2 + 1);
+      ctx.textBaseline = "alphabetic";
+      x += it.w + GAP;
     });
-    rows.forEach((row) => {
-      const tot = row.reduce((a, it) => a + it.w, 0) + GAP * (row.length - 1);
-      let x = (W - tot) / 2;
-      row.forEach((it) => {
-        ctx.fillStyle = "rgba(255,255,255,.07)";
-        roundRectPath(ctx, x, by, it.w, BH, BH / 2); ctx.fill();
-        ctx.strokeStyle = "rgba(255,255,255,.18)"; ctx.lineWidth = 1.5;
-        roundRectPath(ctx, x, by, it.w, BH, BH / 2); ctx.stroke();
-        ctx.fillStyle = "#e8eaf6"; ctx.textBaseline = "middle";
-        ctx.fillText(it.t, x + it.w / 2, by + BH / 2 + 1);
-        ctx.textBaseline = "alphabetic";
-        x += it.w + GAP;
-      });
-      by += BH + 12;
-    });
-  }
-
-  /* Legend layout, measured BEFORE the vertical centring below so the card can
-   * make room for it. The mini chart is a stacked bar per month in the series
-   * colours, and it shipped with no key at all — nine colours and nothing to
-   * say which was raids and which was berries. Wraps to as many rows as the
-   * series need. */
-  const LEG_SW = 15, LEG_GAP = 9, LEG_PAD = 28, LEG_LH = 31;
-  const legendRows = [];
-  if (o.series && o.series.length) {
-    ctx.font = "500 19px 'Outfit', sans-serif";
-    const maxW = W - 170;
-    let row = [], rw = 0;
-    o.series.forEach(([label, color]) => {
-      const w = LEG_SW + LEG_GAP + ctx.measureText(label).width + LEG_PAD;
-      if (rw + w > maxW && row.length) { legendRows.push(row); row = []; rw = 0; }
-      row.push({ label, color, w }); rw += w;
-    });
-    if (row.length) legendRows.push(row);
-  }
-  const legendH = legendRows.length ? legendRows.length * LEG_LH + 10 : 0;
+    by += BH + 12;
+  });
 
   // headline number — centre the remaining content between the badges and the
   // footer so short cards (no badges, fewer stat tiles) don't leave a dead gap
-  const gRows = Math.ceil(o.stats.length / 2);
-  const hy0 = Math.max(by + 60, 470);
-  const gridEnd0 = hy0 + 250 + 96 + legendH + gRows * 124 - 20;
   const off = Math.max(0, Math.floor((H - 86 - gridEnd0) / 2));
   const hy = hy0 + off;
   ctx.fillStyle = "#fff"; ctx.font = "700 92px 'JetBrains Mono', monospace";
@@ -4574,7 +6026,7 @@ function wireWorldRetry() {
   btn.onclick = async () => {
     btn.disabled = true; btn.textContent = "Loading…";
     try {
-      if (_webglOK()) await ensureScript("vendor/globe.gl.min.js");
+      if (_webglOK()) await ensureScript("vendor/globe.gl-2.46.2.min.js");
       else await ensureCSS("vendor/leaflet.css").then(() => ensureScript("vendor/leaflet.js")).then(() => ensureScript("vendor/leaflet-heat.js"));
     } catch (err) { console.warn(err); }
     const mod = btn.closest(".module");
@@ -4728,7 +6180,8 @@ function renderGlobe() {
         ${gToggle(P + "ly-borders", "#5a6db8", "Country lines", true)}
         ${gToggle(P + "ly-labels", "#dfe6ff", "Country names", true)}
         ${gToggle(P + "ly-rotate", C.blue, "Auto-rotate", !REDUCED_MOTION)}
-        <button id="${P}shot" class="gh-btn" type="button"><span aria-hidden="true">📷</span> Save image</button>
+        <button id="${P}shot" class="gh-btn" type="button" aria-describedby="${P}shot-note"><span aria-hidden="true">📷</span> Save image</button>
+        <p class="gh-note" id="${P}shot-note">The image shows where you play — look it over before you share it.</p>
       </details>
       <div id="${P}legend" class="globe-hud globe-legend"></div>
       <div id="${P}country" class="globe-hud globe-country" hidden></div>
@@ -4796,7 +6249,7 @@ function initGlobe({ P, points, maxCount, arcs, home, paths }) {
     /* 2560x1280, down from 4096x2048 — 351 KB instead of 715 KB, and the
      * biggest single asset on the site. Chosen by rendering all three at the
      * same locked camera and comparing: at 2048 the city lights visibly thin
-     * out (the LA basin, Vegas, nearby speckle goes soft), at 2560 nearly all
+     * out (the speckle around the LA basin and Vegas goes soft), at 2560 nearly all
      * of it survives. Re-encoding at 4096 was a dead end — the source is
      * already near its quality floor, and anything above q45 came out LARGER.
      * Resolution is in the filename because /vendor/* ships immutable. */
@@ -4858,21 +6311,55 @@ function initGlobe({ P, points, maxCount, arcs, home, paths }) {
   const controls = world.controls();
   controls.autoRotate = !REDUCED_MOTION; controls.autoRotateSpeed = 0.45;
   controls.minDistance = world.getGlobeRadius() * 1.18;
-  world.renderer().domElement.addEventListener("pointerdown", () => { controls.autoRotate = false; });
-  world.renderer().domElement.addEventListener("pointerup", () => { controls.autoRotate = $$("ly-rotate").checked; });
+  const canvas = world.renderer().domElement;
+  let gated = false; // true while the touch gate below keeps the globe's gestures off
+  let held = false;  // a finger or button is down on the globe and has stopped the spin
+  canvas.addEventListener("pointerdown", () => { if (!gated) { held = true; controls.autoRotate = false; } });
+  // pointercancel too: a swipe the browser takes over to scroll the page never
+  // sends a pointerup, and would have left the globe standing still
+  const letGo = () => { if (held) { held = false; controls.autoRotate = $$("ly-rotate").checked; } };
+  canvas.addEventListener("pointerup", letGo);
+  canvas.addEventListener("pointercancel", letGo);
 
   // On touch screens the globe would otherwise swallow every swipe — a scroll
   // trap on a long results page. Gate interaction behind one explicit tap.
   const stage = el.closest(".globe-stage");
-  let scrim = null;
+  let gate = null;
   if (coarse && stage) {
-    controls.enabled = false;
-    scrim = document.createElement("button");
+    const scrim = document.createElement("button");
     scrim.type = "button";
     scrim.className = "globe-scrim";
     scrim.textContent = "👆 Tap to explore the globe";
     stage.appendChild(scrim);
-    scrim.addEventListener("click", () => { controls.enabled = true; scrim.hidden = true; });
+    // …and a way back out. Exploring, the globe keeps every touch that lands on
+    // it, and a phone held sideways can show little else.
+    const done = document.createElement("button");
+    done.type = "button";
+    done.className = "globe-scrim globe-done";
+    done.textContent = "Done exploring";
+    stage.appendChild(done);
+    /* The gate switches off the gestures, not the controls. three-render-objects,
+     * which runs globe.gl's render loop, only steps enabled controls since
+     * 1.40.1, and only advances its frame clock when it does: with the controls
+     * disabled the auto-rotate froze behind the gate, and the first frame after
+     * the tap caught up on as much as a second of turning in one lurch. Left
+     * enabled with every gesture off, the loop turns the globe at its steady
+     * pace before the tap and after it. */
+    const allowed = { enableRotate: controls.enableRotate, enableZoom: controls.enableZoom, enablePan: controls.enablePan };
+    gate = (up) => {
+      gated = up;
+      for (const k in allowed) controls[k] = up ? false : allowed[k];
+      /* OrbitControls sets touch-action:none on the canvas when it connects,
+       * listening or not, so behind the gate a finger that happened to land on
+       * the globe still couldn't scroll the page. The page keeps the swipe
+       * until the player taps in, and gets it back when they leave. */
+      canvas.style.touchAction = up ? "auto" : "none";
+      scrim.hidden = !up;
+      done.hidden = up || !!document.fullscreenElement; // full screen has its own way out
+    };
+    scrim.addEventListener("click", () => gate(false));
+    done.addEventListener("click", () => gate(true));
+    gate(true);
   }
   // collapse the Layers panel by default where there's no room for it
   const layersEl = $$("layers");
@@ -4889,28 +6376,55 @@ function initGlobe({ P, points, maxCount, arcs, home, paths }) {
       };
       const onFs = () => {
         fsBtn.textContent = document.fullscreenElement ? "✕ Exit full screen" : "⛶ Full screen";
+        // full screen has no page to scroll, so the globe takes the touches
+        // while it lasts and hands them back to the page when it ends
+        if (gate) gate(document.fullscreenElement !== wrap);
         // let the fullscreen layout settle, then resize the WebGL canvas to it
-        setTimeout(() => { if (GLOBE === world && el.isConnected) world.width(el.clientWidth).height(el.clientHeight || 560); }, 80);
+        setTimeout(() => { if (GLOBE === world && el.isConnected) { world.width(el.clientWidth).height(el.clientHeight || 560); relabelSoon(); } }, 80);
       };
       document.addEventListener("fullscreenchange", onFs);
       GLOBE_CLEANUP.push(() => document.removeEventListener("fullscreenchange", onFs));
     }
   }
 
-
+  /* The render loop only moves its frame clock while it runs, so the first
+   * frame after a pause was stepped by the whole pause (capped at a second):
+   * auto-rotate turned the globe ~3° at once, and the controls' damping spread
+   * that into a surge that took a second to die down, every time the globe
+   * scrolled back into view. resumeAnimation() draws that first frame straight
+   * away, so auto-rotate is held off for it: the stale step turns nothing and
+   * the spin carries on at its steady pace. */
+  const resume = () => {
+    const spin = controls.autoRotate;
+    controls.autoRotate = false;
+    world.resumeAnimation();
+    controls.autoRotate = spin;
+  };
+  let inView = true;
   // don't burn GPU on a globe nobody is looking at
   if ("IntersectionObserver" in window) {
     const io = new IntersectionObserver(([en]) => {
       if (GLOBE !== world) return;
-      if (en.isIntersecting) world.resumeAnimation();
-      else {
+      inView = en.isIntersecting;
+      if (en.isIntersecting) {
+        resume();
+        if (labelStale) relabelSoon(); // the names were held while the stage had no size
+      } else {
         world.pauseAnimation();
-        if (scrim) { controls.enabled = false; scrim.hidden = false; } // re-arm the tap gate
+        if (gate) gate(true); // re-arm the tap gate, and give the page its swipe back
       }
     }, { threshold: 0.05 });
     io.observe(el);
     GLOBE_CLEANUP.push(() => io.disconnect());
   }
+  // a hidden tab gets no frames either — restart the loop the same way on return
+  const onVis = () => {
+    if (document.hidden || GLOBE !== world || !inView) return;
+    world.pauseAnimation();
+    resume();
+  };
+  document.addEventListener("visibilitychange", onVis);
+  GLOBE_CLEANUP.push(() => document.removeEventListener("visibilitychange", onVis));
 
   // stats
   const geoEvents = [...e.geo.values()].reduce((a, b) => a + b, 0);
@@ -4930,6 +6444,100 @@ function initGlobe({ P, points, maxCount, arcs, home, paths }) {
   let borderFeatures = [];
   let countryLabels = [];
   const countryRaids = {};
+
+  /* ── country names, built only where they can be read ──
+     three-globe 2.45 extrudes every label with a zero-size bevel (its fix for
+     three r175), which quadrupled the vertices: the 180 names came to 2.2
+     million, drawn every frame, and rebuilt in one main-thread task that took
+     1.2 s on a phone-speed CPU. From orbit most of them are a pixel or two
+     tall. So a name is only built once it is big enough to read — its height
+     on screen follows from its size, the camera's altitude and the stage's
+     height — and the set only steps at a few fixed altitudes, once a zoom
+     settles. Below the last step all 180 are built, so zoomed in none is
+     missing.
+     Any change to labelsData rebuilds every name in it, not just the new
+     ones, so a name once built is kept for the rest of the page view. One too
+     small to read at the current zoom, or every one while the names are
+     switched off, is hidden rather than torn down, and showing it again
+     builds nothing: each step's names are paid for the first time the camera
+     reaches it, and never again. Hidden, a name draws nothing and lets the
+     pointer through to its country. */
+  const LABEL_MIN_PX = 3;              // estimated text height worth drawing
+  const LABEL_STEPS = [1.6, 1.1, 0.7]; // camera altitudes, in globe radii, where the set changes
+  let labelStep = -1, labelTimer = null, labelAlt = 0;
+  let labelStale = false; // the names were last looked at while the stage had no size
+  const stepAt = (alt) => { const i = LABEL_STEPS.findIndex((a) => alt >= a); return i < 0 ? LABEL_STEPS.length : i; };
+  // hold the current step until the camera is 6% past its edge, so a zoom that
+  // stops on a boundary can't flip the set back and forth
+  const wantStep = (alt) => (labelStep >= stepAt(alt * 1.06) && labelStep <= stepAt(alt / 1.06) ? labelStep : stepAt(alt));
+  const cameraAlt = () => world.camera().position.length() / world.getGlobeRadius() - 1;
+  // the names big enough to read at a step, on a stage h CSS px tall
+  const readableAt = (step, h) => {
+    if (step >= LABEL_STEPS.length) return countryLabels;
+    // CSS px that one degree of label size spans, one globe radius from the camera
+    const pxPerDeg = (Math.PI / 180) * h / (2 * Math.tan((world.camera().fov * Math.PI) / 360));
+    return countryLabels.filter((d) => (d.size * pxPerDeg) / LABEL_STEPS[step] >= LABEL_MIN_PX);
+  };
+  // names shown again grow back into place over a second, the way new ones do
+  const growing = new Map(); // label object → when it started to grow
+  let growFrame = 0;
+  const grow = (t) => {
+    growFrame = 0;
+    if (GLOBE !== world) return growing.clear();
+    growing.forEach((t0, o) => {
+      const k = Math.max(0, Math.min(1, (t - t0) / 1000));
+      o.scale.setScalar(Math.max(1e-6, k < 0.5 ? 2 * k * k : 1 - 2 * (1 - k) * (1 - k))); // quadratic in-out, as three-globe eases them
+      if (k === 1) growing.delete(o);
+    });
+    if (growing.size) growFrame = requestAnimationFrame(grow);
+  };
+  // a hidden name mustn't catch the hover or the click meant for the country under it
+  world.pointerEventsFilter((obj) => obj.__globeObjType !== "label" || obj.visible);
+  const relabel = () => {
+    if (GLOBE !== world || !el.isConnected) return;
+    // A stage with no height is hidden (reader mode on another chapter, say).
+    // Nothing on it can be judged readable, so every name stays as it is until
+    // it shows again, rather than all of them going and growing back each time.
+    if (!el.clientHeight) { labelStale = true; return; }
+    labelStale = false;
+    labelStep = wantStep(cameraAlt());
+    const want = new Set($$("ly-labels").checked ? readableAt(labelStep, el.clientHeight) : []);
+    const have = new Set(world.labelsData());
+    if (countryLabels.some((d) => want.has(d) && !have.has(d))) world.labelsData(countryLabels.filter((d) => want.has(d) || have.has(d)));
+    // Show the readable names already built and hide the rest. A name shown
+    // again grows in; one still growing in from its build carries on as it was.
+    const t0 = performance.now();
+    let built = 0;
+    world.scene().traverse((o) => {
+      if (o.__globeObjType !== "label" || !o.__data) return;
+      built++;
+      const show = want.has(o.__data);
+      if (show === o.visible) return;
+      o.visible = show;
+      if (!show) { if (growing.delete(o)) o.scale.setScalar(1); }
+      else if (!REDUCED_MOTION && o.scale.x >= 1) growing.set(o, t0);
+    });
+    if (growing.size && !growFrame) growFrame = requestAnimationFrame(grow);
+    // new names are built on globe.gl's next update, shown: look again once
+    // they're there, in case the set or the switch has changed since
+    if (built < world.labelsData().length) relabelSoon();
+  };
+  const relabelSoon = () => { clearTimeout(labelTimer); labelTimer = setTimeout(() => { labelTimer = null; relabel(); }, 250); };
+  // every camera move comes through here, auto-rotate's included, so it stays cheap
+  controls.addEventListener("change", () => {
+    if (GLOBE !== world || !countryLabels.length) return;
+    const box = $$("ly-labels");
+    if (!box || !box.checked) return;
+    const alt = cameraAlt();
+    const zooming = Math.abs(alt - labelAlt) > alt * 1e-3;
+    labelAlt = alt;
+    // while the zoom is still moving, keep pushing the rebuild back. A pending
+    // one is never cancelled here: relabel() rebuilds only if the set really
+    // changed, and a resize may have queued one that auto-rotate must not undo.
+    if (wantStep(alt) !== labelStep && (zooming || !labelTimer)) relabelSoon();
+  });
+  GLOBE_CLEANUP.push(() => clearTimeout(labelTimer));
+
   Promise.all([
     fetch("vendor/geo/countries.geo.json").then((r) => r.json()),
     fetch("vendor/geo/us-states.geo.json").then((r) => r.json()).catch(() => ({ features: [] })),
@@ -4988,10 +6596,15 @@ function initGlobe({ P, points, maxCount, arcs, home, paths }) {
     // always-on country name labels, centred on each country's centroid
     // (text geometry auto-centres with the default "bottom" dot orientation;
     // a low altitude keeps the label sitting on the country, not floating off it)
-    world.labelsData($$("ly-labels").checked ? countryLabels : [])
-      .labelLat("lat").labelLng("lng").labelText((d) => d.name)
+    world.labelLat("lat").labelLng("lng").labelText((d) => d.name)
       .labelSize((d) => d.size).labelDotRadius(0).labelIncludeDot(false)
-      .labelColor((d) => d.color).labelResolution(2).labelAltitude(0.006);
+      .labelColor((d) => d.color).labelAltitude(0.006)
+      // one segment per glyph curve: at the sizes these names draw it can't be
+      // told from two, and it is 40% fewer vertices to build and to draw
+      .labelResolution(1)
+      // names that come into reach as the camera closes in grow into place
+      .labelsTransitionDuration(REDUCED_MOTION ? 0 : 1000);
+    relabel();
 
     // below-globe: remote-raid empire + epic hauls
     const empire = Object.entries(countryRaids).filter(([n]) => n !== "Open water").sort((a, b) => b[1].raids - a[1].raids);
@@ -5051,7 +6664,7 @@ function initGlobe({ P, points, maxCount, arcs, home, paths }) {
   $$("ly-arcs").onchange = (ev) => { refresh(); $$("arc-ctl").classList.toggle("disabled", !ev.target.checked); };
   $$("ly-trail").onchange = refresh;
   $$("ly-borders").onchange = (ev) => world.polygonsData(ev.target.checked ? borderFeatures : []);
-  $$("ly-labels").onchange = (ev) => world.labelsData(ev.target.checked ? countryLabels : []);
+  $$("ly-labels").onchange = relabel;
   $$("ly-rotate").onchange = (ev) => { controls.autoRotate = ev.target.checked; };
   $$("shot").onclick = () => screenshotGlobe(world, $$("shot"));
   if (!arcs.length) $$("arc-ctl").classList.add("disabled");
@@ -5077,7 +6690,12 @@ function initGlobe({ P, points, maxCount, arcs, home, paths }) {
     spanEl.textContent = `${fmtMonth(months[0])} → ${fmtMonth(months[months.length - 1])}`;
     let timer = null, ticker = null, playing = false, rotateWas = null;
     const dwell = Math.max(260, Math.min(700, 26000 / months.length));
-    const monthEvent = (m) => { const d = Object.keys(GO_EVENTS).find((k) => k.startsWith(m)); return d ? GO_EVENTS[d] : null; };
+    // every festival that month, global or attended in person — the same rule as eventFor
+    const monthEvent = (m) => {
+      const days = [...Object.keys(GO_EVENTS), ...Object.values(e.there).flatMap((s) => Object.keys(s.days))].filter((k) => k.startsWith(m)).sort();
+      const names = [...new Set(days.map(eventFor).filter(Boolean).flatMap((n) => n.split(" · ")))];
+      return names.length ? names.join(" · ") : null;
+    };
     const setTicker = () => {
       if (cur === null) { if (ticker) { ticker.remove(); ticker = null; } return; }
       if (!ticker) { ticker = document.createElement("div"); ticker.className = "globe-ticker"; stage.appendChild(ticker); }
@@ -5160,7 +6778,8 @@ function initGlobe({ P, points, maxCount, arcs, home, paths }) {
     GLOBE_CLEANUP.push(() => { clearTimeout(timer); if (ticker) ticker.remove(); });
   }
 
-  const onResize = () => { if (GLOBE === world && el.isConnected) world.width(el.clientWidth).height(el.clientHeight || 560); };
+  // a taller stage draws every name bigger, so which ones can be read changes with it
+  const onResize = () => { if (GLOBE === world && el.isConnected) { world.width(el.clientWidth).height(el.clientHeight || 560); relabelSoon(); } };
   window.addEventListener("resize", onResize);
   GLOBE_CLEANUP.push(() => window.removeEventListener("resize", onResize));
 }
@@ -5266,14 +6885,27 @@ function nearestCountry(features, lng, lat, maxDeg) {
   }
   return bestD <= maxDeg ? best : null;
 }
-/* download the current globe frame as a PNG (canvas has preserveDrawingBuffer) */
+/* download the current globe frame as a PNG (canvas has preserveDrawingBuffer).
+ * The pulsing ring marks home — the densest spot of play — so it is hidden for
+ * the capture and shown again once the image is made. Hidden, not removed:
+ * changing ringsData only takes effect on globe.gl's next update, so the ring
+ * could still be in the frame; hiding its objects is immediate. (three-globe
+ * tags each ring group __globeObjType "ring" — safe to lean on, because a
+ * vendor file is never replaced in place.) The image still shows where the
+ * player plays, which the note beside the button says. */
 function screenshotGlobe(world, btn) {
   const r = world.renderer && world.renderer();
   if (!r) return;
+  const rings = [];
+  try {
+    world.scene().traverse((o) => { if (o.__globeObjType === "ring" && o.visible) { o.visible = false; rings.push(o); } });
+  } catch (e) { /* no scene to walk — capture as is */ }
+  const showRings = () => rings.forEach((o) => { o.visible = true; });
   try { if (world.scene && world.camera) r.render(world.scene(), world.camera()); } catch (e) { /* keep retained buffer */ }
   const orig = btn && btn.textContent;
   if (btn) { btn.textContent = "Saving…"; btn.disabled = true; }
   r.domElement.toBlob((blob) => {
+    showRings();
     if (btn) { btn.textContent = orig; btn.disabled = false; }
     if (!blob) { alert("Couldn't capture the globe on this browser."); return; }
     const url = URL.createObjectURL(blob);
@@ -5309,8 +6941,9 @@ function renderSocial() {
      * `removed` was already excluded from it. Report the churn on its own. */
     const stats = [
       [fmt(F.rows.length), "Current friends", "everyone on your list today"],
-      [longest + " yr", "Longest friendship", dated[0] ? esc(dated[0].name) : ""],
-      [topSrc ? prettySource(topSrc[0]) : "—", "Top way you connect"],
+      // statGrid escapes the label and sub-line itself; the VALUE is raw HTML
+      [longest + " yr", "Longest friendship", dated[0] ? dated[0].name : ""],
+      [topSrc ? esc(prettySource(topSrc[0])) : "—", "Top way you connect"],
     ];
     if (removed) stats.push([fmt(removed), "Friendships ended", "in the export's recent window — already excluded above"]);
     inner += statGrid(stats);
@@ -5401,11 +7034,44 @@ function renderSocial() {
   if (STATE.invites.sent) funnel.push([fmt(STATE.invites.sent), "invites sent"]);
   if (STATE.invites.accepted) funnel.push([fmt(STATE.invites.accepted), "accepted"]);
   if (STATE.invites.declined) funnel.push([fmt(STATE.invites.declined), "declined"]);
+  if (STATE.invites.failed) funnel.push([fmt(STATE.invites.failed), "didn't go through"]);
   if (STATE.party.sent + STATE.party.received) funnel.push([fmt(STATE.party.sent + STATE.party.received), "Party Play invites"]);
   if (funnel.length) inner += `<h4 class="mod-h4">Recent invite activity <span class="muted" style="font-weight:400">(the export keeps ~4 months)</span></h4>${calloutRow(funnel)}`;
+  inner += inviteTiming();
 
   if (!sub) sub = "Your recent friend-request and Party Play activity.";
   return moduleHTML("🤝", "Your social world", sub, inner);
+}
+/* When the invites happen. RecentInviteActions stamps every friend invite you
+ * sent, accepted or declined, and the Party Play files stamp every party
+ * invitation. Both are tallied per quarter hour (see slotKey) and placed here
+ * on YOUR weekday, with the offset in force at each moment. */
+function inviteTiming() {
+  const week = (slots) => { const d = Array(7).fill(0); for (const k in slots) d[(slotDate(k).getDay() + 6) % 7] += slots[k]; return d; };
+  const f = week(STATE.invites.slots), p = week(STATE.party.slots);
+  const both = f.map((v, i) => v + p[i]);
+  if (both.reduce((a, b) => a + b, 0) < 2) return "";
+  const best = both.indexOf(Math.max(...both));
+  const months = {};
+  for (const src of [STATE.invites.monthly, STATE.party.monthly]) for (const [m, n] of Object.entries(src)) months[m] = (months[m] || 0) + n;
+  const top = Object.entries(months).sort((a, b) => b[1] - a[1] || (a[0] < b[0] ? 1 : -1))[0];
+  const sets = [];
+  if (f.some(Boolean)) sets.push({ label: "Friend invites", backgroundColor: C.teal, stack: "w", data: f });
+  if (p.some(Boolean)) sets.push({ label: "Party invitations", backgroundColor: C.purple, stack: "w", data: p });
+  const cId = uid();
+  later(() => newChart(cId, {
+    type: "bar",
+    data: { labels: DAYS, datasets: sets },
+    options: {
+      interaction: { mode: "index", intersect: false },
+      plugins: { legend: { display: sets.length > 1 }, title: { display: true, text: "Invites by weekday, in your local time" } },
+      scales: { x: { stacked: true, grid: { display: false } }, y: { stacked: true, beginAtZero: true, ticks: { precision: 0 }, title: { display: true, text: "invites" } } },
+    },
+  }));
+  return `<h4 class="mod-h4">When your invites happen</h4>
+    <div class="mod-sub" style="margin-bottom:10px">Most of them land on a <b>${DAY_FULL[best]}</b>${top ? `, and the busiest month in the window was <b>${fmtMonth(top[0])}</b>, with ${fmt(top[1])}` : ""}.
+      Only the action, its time and its result are read — never the other trainer.</div>
+    <div>${chartWrap(cId, "short")}</div>`;
 }
 function prettySource(s) {
   const map = { QR_CODE: "QR code", NEARBY: "Nearby", FRIEND_GRAPH: "Friend suggestion", FACEBOOK: "Facebook", CONTACT: "Contacts", UNKNOWN: "Unknown" };
@@ -5426,9 +7092,12 @@ function renderSpending() {
   // Headline whichever currency this player actually used most; the rest
   // still appear in the "Spending by currency" breakdown.
   const primary = curEntries[0];
-  const sym = primary ? (CUR_SYM[primary[0]] || primary[0] + " ") : "";
+  // parsePurchases only ever stores a three-letter code or "UNKNOWN", but this
+  // lands in raw HTML (a tile value and the subtitle), so escape it here too
+  const sym = primary ? esc(CUR_SYM[primary[0]] || primary[0] + " ") : "";
+  const curName = primary ? esc(primary[0]) : "";
   const stats = [
-    [primary ? sym + fmt(round(primary[1].native)) : "—", primary ? "Spent (" + primary[0] + ")" : "Real money"],
+    [primary ? sym + fmt(round(primary[1].native)) : "—", primary ? "Spent (" + primary[0] + ")" : "Real money"],   // statGrid escapes the label
     [fmt(S.coinsBought), "PokéCoins bought", S.purchases + " purchases"],
     [fmt(S.coinsSpent), "PokéCoins spent", S.spendEvents + " checkouts"],
     [fmt(Object.values(S.items).reduce((a, b) => a + b, 0)), "Items bought in shop"],
@@ -5500,7 +7169,7 @@ function renderSpending() {
     }
   }
 
-  return moduleHTML("💳", "Your spending story", `Every coin bought and spent${primary ? ` — ${sym}${fmt(round(primary[1].native))} in ${primary[0]} across ${fmt(primary[1].purchases)} purchase${primary[1].purchases === 1 ? "" : "s"}` : ""}.`, inner);
+  return moduleHTML("💳", "Your spending story", `Every coin bought and spent${primary ? ` — ${sym}${fmt(round(primary[1].native))} in ${curName} across ${fmt(primary[1].purchases)} purchase${primary[1].purchases === 1 ? "" : "s"}` : ""}.`, inner);
 }
 /* Niantic writes the payment processor's own name; players know the storefront. */
 function prettyVendor(v) {
@@ -5512,10 +7181,11 @@ function prettyVendor(v) {
  * mixing friendly names ("Master balls") with raw codes ("ITEM_XL_RARE_CANDY").
  *
  * That headline N is badly misleading and the trainer card has been printing it
- * as "Items in bag": on the reference export it reads <number>, but <number> of
- * those are event-pass POINTS and <number> are fusion/crafting resources. The
- * actual bag holds <number>. Points and resources are counted, but kept out of
- * the bag figure and labelled for what they are. */
+ * as "Items in bag": on the bundled sample it reads 327,752, but 276,450 of
+ * those are event-pass POINTS and 34,280 are fusion/crafting resources. The
+ * actual bag holds 17,022, and test-parsers.mjs holds the sample to all four.
+ * Points and resources are counted, but kept out of the bag figure and
+ * labelled for what they are. */
 const BAG_GROUPS = [
   ["Poké Balls", /ball/i, C.red],
   ["Berries", /berry|razz|nanab|pinap/i, C.green],
@@ -5626,8 +7296,9 @@ function renderFitness() {
   later(() => newChart(cId, {
     type: "bar",
     data: {
-      // real date labels, not raw ISO tails ("Aug 14", not "08-14")
-      labels: days.map((d) => { const t = parseTS(d); return t ? t.toLocaleDateString(undefined, { month: "short", day: "numeric" }) : d; }),
+      // real date labels, not raw ISO tails ("Aug 14", not "08-14"), read straight off the
+      // UTC day key — turning it back into a local date put every bar a day early west of UTC
+      labels: days.map((d) => MONTHS[+d.slice(5, 7) - 1] + " " + +d.slice(8, 10)),
       datasets: [{ label: "Steps", backgroundColor: C.teal, data: days.map((d) => D[d].steps) }],
     },
     options: { plugins: { legend: { display: false }, title: { display: true, text: "Daily steps (Adventure Sync window)" } }, scales: { x: { grid: { display: false }, ticks: { maxTicksLimit: 14 } }, y: { title: { display: true, text: "steps" } } } },
@@ -5641,17 +7312,24 @@ function renderLiveEvents() {
   if (!STATE.liveEvents.length) return;
   const evs = STATE.liveEvents.sort((a, b) => (b.date || 0) - (a.date || 0));
   const totalTickets = evs.reduce((a, e) => a + e.tickets, 0);
+  const addOns = evs.filter((e) => e.addOn).length;   // a yes or no per order — see parseLiveEvents
   const byCur = {};
   evs.forEach((e) => { if (e.currency) byCur[e.currency] = (byCur[e.currency] || 0) + e.paid; });
-  const spendStr = Object.entries(byCur).map(([c, v]) => (CUR_SYM[c] || c + " ") + fmt(round(v))).join(" · ");
-  let inner = statGrid([
-    [fmt(evs.length), "Ticketed events"],
-    [fmt(totalTickets), "Tickets bought"],
-    [spendStr || "—", "Spent on tickets"],
-  ]);
+  // a tile VALUE is raw HTML, and the code came from the file — escape it
+  const spendStr = Object.entries(byCur).map(([c, v]) => esc(CUR_SYM[c] || c + " ") + fmt(round(v))).join(" · ");
+  const tiles = [[fmt(evs.length), "Event orders"], [fmt(totalTickets), "Tickets bought"]];
+  // add-ons on a line of their own, rather than passing for a ticket
+  if (addOns) tiles.push([fmt(addOns), "Orders with an add-on", addOns === evs.length ? "every one of them" : `of ${fmt(evs.length)}`]);
+  tiles.push([spendStr || "—", "Spent on events"]);
+  let inner = statGrid(tiles);
   inner += `<h4 class="mod-h4">Events you bought into</h4>`;
-  inner += rankList(evs.slice(0, 12).map((e) => [e.name + (e.date ? " · " + e.date.getUTCFullYear() : ""), e.tickets]), (v) => v + " 🎟️");
-  return moduleHTML("🎟️", "Your live events", `Tickets to ${evs.length} real-world Pokémon GO event${evs.length > 1 ? "s" : ""}.`, inner);
+  // the add-on sits in the value column, which never truncates on a phone
+  inner += rankList(evs.slice(0, 12).map((e) => [e.name + (e.date ? " · " + e.date.getUTCFullYear() : ""), e.tickets, e.addOn]),
+    (v, name, it) => (it[2] ? (v ? `${v} 🎟️ + add-on` : "add-on only") : v + " 🎟️"));
+  if (addOns) inner += `<div class="hw-caption">An add-on is counted as a yes or a no for each order — what it was is never read.${
+    evs.some((e) => e.addOn && !e.tickets) ? " An order for add-ons alone counts no tickets." : ""}</div>`;
+  return moduleHTML("🎟️", "Your live events",
+    `${fmt(evs.length)} order${evs.length === 1 ? "" : "s"} for real-world Pokémon GO events${totalTickets ? `, ${fmt(totalTickets)} ticket${totalTickets === 1 ? "" : "s"} between them` : ""}.`, inner);
 }
 
 /* ── sessions / devices ── */
@@ -5663,6 +7341,7 @@ function renderSessions() {
   const devices = Object.entries(S.devices).sort((a, b) => b[1] - a[1]).slice(0, 6);
   const cities = Object.entries(S.cities).sort((a, b) => b[1] - a[1]).slice(0, 8);
   const countries = Object.entries(S.countries).sort((a, b) => b[1] - a[1]);
+  const H = installHistory();
   let inner = "";
   if (S.total || I.count) {
     inner += statGrid([
@@ -5671,7 +7350,11 @@ function renderSessions() {
       countries.length
         ? [fmt(countries.length), "Countries", countries.length === 1 ? countryName(countries[0][0]) : "you've opened the game in"]
         : [fmt(Object.keys(S.cities).length), "Cities seen"],
-      [I.count ? (I.first ? I.first.getUTCFullYear() : fmt(I.count)) : "—", I.first ? "First install" : "Installs"],
+      /* The earliest install EITHER file names. App_Installs.csv alone put it a
+       * year late on the reference account: it lists 11 installs from 2022 on,
+       * while the session log's Install_time reaches back to 2021. */
+      H ? [H.first.getUTCFullYear(), "First install", `${fmt(H.total)} install${H.total === 1 ? "" : "s"} on record`]
+        : [I.count ? fmt(I.count) : "—", "Installs"],
     ]);
   }
   const months = monthSpan(Object.keys(S.monthly));
@@ -5688,6 +7371,8 @@ function renderSessions() {
     ${devices.length ? `<div><h4 class="mod-h4">Devices you played on</h4>${rankList(devices)}</div>` : "<div></div>"}
     ${cities.length ? `<div><h4 class="mod-h4">Where you logged in</h4>${rankList(cities)}</div>` : "<div></div>"}
   </div>`;
+  inner += renderDeviceEras();
+  inner += renderInstallHistory(H);
   /* Country is the one piece of geography that needs no GPS file at all, so
    * this survives even when someone uploads nothing but their session log. */
   if (countries.length > 1) {
@@ -5702,6 +7387,84 @@ function renderSessions() {
     ? `${fmt(S.total)} app sessions across your devices and cities. (We never read the IPs or ad-IDs in these files.)`
     : `What the game's technical records say about you. (We never read the IPs or ad-IDs in these files.)`;
   return moduleHTML("📱", "Behind the screen", sub, inner);
+}
+
+/* ── device eras ──
+ * The device you played on most, month by month, with a new era each time that
+ * changes. A month is the unit, so a phone borrowed for a weekend starts no era
+ * and one that took over for a month does. Versions are public release numbers,
+ * shown sparingly: how many, and the first and latest app build. */
+function deviceEras() {
+  const S = STATE.sessions, eras = [];
+  for (const m of Object.keys(S.eraMonths).sort()) {
+    const counts = Object.entries(S.eraMonths[m]);
+    if (!counts.length) continue;
+    const top = counts.reduce((a, b) => (b[1] > a[1] ? b : a));
+    const n = counts.reduce((a, [, v]) => a + v, 0);
+    const last = eras[eras.length - 1];
+    if (last && last.dev === top[0]) { last.to = m; last.n += n; }
+    else eras.push({ dev: top[0], from: m, to: m, n, ...(S.deviceKind[top[0]] || {}) });
+  }
+  return eras;
+}
+function renderDeviceEras() {
+  const S = STATE.sessions;
+  const eras = deviceEras();
+  const apps = Object.keys(S.apps).sort(versionCmp), oses = Object.keys(S.oses);
+  if (eras.length < 2 && apps.length < 2) return "";
+  const crossings = eras.reduce((n, e, i) => n + (i && e.platform && eras[i - 1].platform && e.platform !== eras[i - 1].platform ? 1 : 0), 0);
+  const bits = [];
+  if (eras.length > 1) bits.push(`Your main device changed <b>${fmt(eras.length - 1)}</b> time${eras.length === 2 ? "" : "s"}${
+    crossings ? `, crossing between platforms ${crossings === 1 ? "once" : `<b>${fmt(crossings)}</b> times`}` : ""}.`);
+  if (apps.length > 1) bits.push(`You went through <b>${fmt(apps.length)}</b> versions of the app, from ${esc(apps[0])} to ${esc(apps[apps.length - 1])}${
+    oses.length > 1 ? `, on <b>${fmt(oses.length)}</b> different OS versions` : ""}.`);
+  const SHOW = 10;
+  let out = `<hr class="mod-divider"><h4 class="mod-h4">Your device eras</h4>
+    <div class="mod-sub" style="margin-bottom:10px">${bits.join(" ")}</div>`;
+  if (eras.length > 1) {
+    if (eras.length > SHOW) out += `<div class="hw-caption">The latest ${SHOW} of ${fmt(eras.length)} eras.</div>`;
+    out += `<ol class="era-list">${eras.slice(-SHOW).map((e) => `<li>
+      <span class="era-dev">${esc(e.dev)}${e.platform || e.kind ? `<small>${esc([e.platform, e.kind].filter(Boolean).join(" · "))}</small>` : ""}</span>
+      <span class="era-when">${fmtMonth(e.from)}${e.to !== e.from ? " – " + fmtMonth(e.to) : ""}</span>
+      <span class="era-n">${fmt(e.n)} session${e.n === 1 ? "" : "s"}</span></li>`).join("")}</ol>`;
+  }
+  out += `<div class="hw-caption">An era is a run of months in which one device carried most of your sessions. Device, platform and
+    version come from the session log itself — none of its identifiers are read.</div>`;
+  return out;
+}
+
+/* ── install history ──
+ * Both files, one list: every install App_Installs.csv names plus every install
+ * a session in App_Sessions.csv came from, each counted once. The first install
+ * on a device model is a new device; another on a model already seen is a reinstall. */
+function installHistory() {
+  const t = STATE.installs.times;
+  const list = Object.keys(t).map(Number).filter(Number.isFinite).sort((a, b) => a - b);
+  if (!list.length) return null;
+  const byYear = {}, models = new Set();
+  let reinstalls = 0;
+  for (const k of list) {
+    const y = new Date(k).getUTCFullYear();
+    byYear[y] = (byYear[y] || 0) + 1;
+    const dev = t[k];
+    if (!dev) continue;
+    if (models.has(dev)) reinstalls++; else models.add(dev);
+  }
+  return { total: list.length, first: new Date(list[0]), last: new Date(list[list.length - 1]), byYear, reinstalls, newDevices: models.size };
+}
+function renderInstallHistory(H) {
+  if (!H || H.total < 2) return "";
+  const I = STATE.installs;
+  const years = Object.keys(H.byYear).sort();
+  const split = H.newDevices + H.reinstalls
+    ? ` — the first on each of ${fmt(H.newDevices)} device model${H.newDevices === 1 ? "" : "s"}, and <b>${fmt(H.reinstalls)}</b> reinstall${H.reinstalls === 1 ? "" : "s"} on a model you'd installed on before` : "";
+  const note = I.count && I.count < H.total
+    ? `<code>App_Installs.csv</code> lists ${fmt(I.count)} of them${I.last ? `, the newest from ${fmtMonth(monthKey(I.last))}` : ""}.
+      The session log names the rest: every session records the install it came from.` : "";
+  return `<hr class="mod-divider"><h4 class="mod-h4">Your install history</h4>
+    <div class="mod-sub" style="margin-bottom:10px">You've installed the game <b>${fmt(H.total)}</b> times since ${fmtMonth(monthKey(H.first))}${split}.</div>
+    ${calloutRow(years.map((y) => [fmt(H.byYear[y]), `in ${y}`]))}
+    ${note ? `<div class="hw-caption">${note}</div>` : ""}`;
 }
 
 /* ── support tickets ──
@@ -5779,15 +7542,53 @@ function renderWayfarer() {
   if (W.analyzed != null) stats.push([fmt(W.analyzed), "Nominations you reviewed", "candidates you voted on"]);
   if (W.created != null) stats.push([fmt(W.created), "Stops you helped create", "reviews that became real places"]);
   if (W.rejected != null) stats.push([fmt(W.rejected), "Candidates you rejected"]);
-  // Deliberately last and named for what it is: a rolling log Niantic still
-  // holds, not a lifetime nomination count.
-  if (W.logged) stats.push([fmt(W.logged), "Submissions on record", "in the export's current window"]);
+  // The logs go after the lifetime totals, named for what they are: records the
+  // export still holds, not lifetime counts. The submission log is your reviews.
+  if (W.assigned) stats.push([fmt(W.assigned), "Candidates shown to you", "in the log the export still holds"]);
+  if (W.logged) stats.push([fmt(W.logged), "Reviews you sent in", "in the log the export still holds"]);
+  if (W.skipped) stats.push([fmt(W.skipped), "Candidates you skipped"]);
+  if (W.upgrades) stats.push([fmt(W.upgrades), "Review upgrades used"]);
   if (!stats.length) return;
+  let inner = statGrid(stats);
+  const rated = Object.entries(W.ratings || {}).filter(([, r]) => r && r.n > 0);
+  if (rated.length) {
+    const flags = [W.oneStar ? `${fmt(W.oneStar)} one-star` : "", W.duplicates ? `${fmt(W.duplicates)} marked as a duplicate` : ""].filter(Boolean);
+    const scored = Math.max(...rated.map(([, r]) => r.n));   // a review can be sent in with no stars at all
+    inner += `<h4 class="mod-h4">How you rate</h4>
+      <div class="mod-sub" style="margin-bottom:10px">Your average stars in each category, across the ${fmt(scored)} review${scored === 1 ? "" : "s"} you scored${
+        W.logged > scored ? ` (of ${fmt(W.logged)} sent in)` : ""}${flags.length ? ` — ${flags.join(", ")}` : ""}.</div>
+      ${rankList(rated.map(([label, r]) => [label, r.sum / r.n]), (v) => v.toFixed(1) + " ★")}`;
+  }
+  const am = W.assignedMonthly || {}, rm = W.reviewedMonthly || {};
+  const months = monthSpan([...Object.keys(am), ...Object.keys(rm)]);
+  if (months.length > 1) {
+    const cId = uid();
+    inner += `<div style="margin-top:16px">${chartWrap(cId, "short")}</div>`;
+    later(() => newChart(cId, {
+      type: "bar",
+      data: {
+        labels: months.map(fmtMonth),
+        datasets: [
+          { label: "Shown to you", backgroundColor: alpha(C.teal, 0.35), data: months.map((m) => am[m] || 0) },
+          { label: "Reviewed", backgroundColor: C.teal, data: months.map((m) => rm[m] || 0) },
+        ],
+      },
+      options: {
+        interaction: { mode: "index", intersect: false },
+        plugins: { title: { display: true, text: "Your review activity, month by month" } },
+        scales: { x: { grid: { display: false } }, y: { beginAtZero: true, ticks: { precision: 0 }, title: { display: true, text: "candidates" } } },
+      },
+    }));
+  } else if (months.length === 1) {
+    inner += `<div class="mod-sub" style="margin-top:12px">All of the review activity on record falls in <b>${fmtMonth(months[0])}</b>.</div>`;
+  }
+  if (W.assigned || rated.length) inner += `<div class="hw-caption">Read here: counts, dates and the stars you gave. Never read: the candidates themselves,
+    your comments on them, any location, your email, or your home and bonus locations.</div>`;
   const hit = W.analyzed && W.created ? Math.round((W.created / W.analyzed) * 100) : null;
   return moduleHTML("🧭", "Your map-making",
     `How much you've given back to the map every trainer plays on.${
       hit != null ? ` <b>${hit}%</b> of the candidates you reviewed went on to become real PokéStops.` : ""}`,
-    statGrid(stats));
+    inner);
 }
 
 /* ───────────────────────────── wiring ───────────────────────────── */
@@ -5859,6 +7660,7 @@ document.addEventListener("DOMContentLoaded", () => {
     $("clear-btn").addEventListener("click", () => {
       document.title = title0;
       RAW = []; DATA_GEN++; SAMPLE_DATA = false;
+      hideUnlock();
       renderDetected();
       clearError();
       teardown();
@@ -5881,15 +7683,19 @@ document.addEventListener("DOMContentLoaded", () => {
       const h = dz.querySelector("h2, h3");
       if (h) h.textContent = "Add your export files";
       const p = dz.querySelector("p");
-      if (p) p.innerHTML = "Pick files from the unzipped export — one like <code>FriendList.tsv</code>, or all of them";
+      if (p) p.innerHTML = "Pick the ZIP from support, or files from the unzipped export — one like <code>FriendList.tsv</code>";
     }
-    // iPhones can't unzip the password-protected ZIP support sends at all — say so up
-    // front, in the dropzone, not only after a failed attempt.
+    // The iPhone's Files app can't open the password-protected ZIP support
+    // sends, but this page can — say so up front, in the dropzone. Where this
+    // browser can't either, the way out is still a computer.
     if (isIOS) {
       const hint = dz.querySelector(".dz-hint");
-      if (hint) hint.innerHTML = '.tsv · .csv · .txt · .json — read locally, never uploaded<br>'
-        + 'Heads up: the iPhone Files app can\'t open the password-protected ZIP support sends — '
-        + '<a href="index.html#request">unzip it on a computer first →</a>';
+      if (hint) hint.innerHTML = ZIP_AES_OK
+        ? '.zip · .tsv · .csv · .txt · .json — read locally, never uploaded<br>'
+          + 'Got the password-protected ZIP from support? Pick it here and type its password — no unzipping needed.'
+        : '.tsv · .csv · .txt · .json — read locally, never uploaded<br>'
+          + 'Heads up: the iPhone Files app can\'t open the password-protected ZIP support sends — '
+          + '<a href="index.html#request">unzip it on a computer first →</a>';
     }
   }
 

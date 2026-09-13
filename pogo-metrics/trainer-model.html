@@ -3,6 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self'; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'" />
   <title>The Trainer Model — POGO Metrics</title>
   <meta name="description" content="One real Pokémon GO friends list, plotted under two level caps: 390 trainers in the 2025 cap-50 game and 493 in today's cap-80 game — and where you'd land." />
   <meta name="theme-color" content="#0a0d1c">
@@ -27,9 +28,9 @@
   <link rel="manifest" href="site.webmanifest">
   <link rel="preload" href="vendor/fonts/c8e7a734b1.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="preload" href="vendor/fonts/1cd702cd25.woff2" as="font" type="font/woff2" crossorigin>
-  <link rel="stylesheet" href="vendor/fonts/fonts.css" />
-  <link rel="stylesheet" href="css/style.css?v=20260905a" />
-  <link rel="stylesheet" href="css/trainer-model.css?v=20260905a" />
+  <link rel="stylesheet" href="vendor/fonts/fonts.css" integrity="sha384-XsThnuujXnxIcolWKS1fn5wPHxJxxNWorJO2kELS0VcCWTP9sQwdWCyyWYuKw+Xw" />
+  <link rel="stylesheet" href="css/style.css?v=20260912a" />
+  <link rel="stylesheet" href="css/trainer-model.css?v=20260912a" />
 </head>
 <body>
   <nav id="topnav" data-active="model"></nav>
@@ -515,7 +516,7 @@
   <footer>
     <p>
       <b>POGO Metrics</b> is an independent fan project, not affiliated with, endorsed by, or
-      sponsored by Niantic, Scopely, or The Pokémon Company. Pokémon and Pokémon GO are trademarks
+      sponsored by Scopely Explore, Inc. (formerly Niantic, Inc.), Scopely, or The Pokémon Company. Pokémon and Pokémon GO are trademarks
       of their respective owners.
     </p>
     <p>
@@ -534,10 +535,10 @@
     </p>
   </footer>
 
-  <script defer src="js/nav.js?v=20260905a"></script>
+  <script defer src="js/nav.js?v=20260912a"></script>
   <!-- Chart.js loads up front here (unlike metrics.html's on-demand injection):
        this page is nothing but charts, and the file is already precached. -->
-  <script defer src="vendor/chart.umd.min.js"></script>
-  <script defer src="js/trainer-model.js?v=20260905a"></script>
+  <script defer src="vendor/chart-4.5.1.umd.min.js" integrity="sha384-jb8JQMbMoBUzgWatfe6COACi2ljcDdZQ2OxczGA3bGNeWe+6DChMTBJemed7ZnvJ"></script>
+  <script defer src="js/trainer-model.js?v=20260912a"></script>
 </body>
 </html>

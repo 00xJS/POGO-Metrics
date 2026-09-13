@@ -10,22 +10,66 @@
 # injected one — can fetch, XHR, WebSocket or beacon parsed export data
 # off-origin. Say it that precisely: connect-src governs those APIs, not
 # navigation, and this is a claim people are invited to check.
+#
+# script-src is 'self' and nothing else: no page carries an inline <script>, an
+# on* attribute or a javascript: URL (demo.html's flag is js/demo-page.js, the
+# landing page's drop redirect and .ics reminder live in js/landing.js), so an
+# injected <script> or handler has nothing to ride on. style-src keeps
+# 'unsafe-inline' — the pages and the report use style attributes throughout.
+#
+# Every HTML page repeats this policy in a <meta http-equiv> tag, so a copy
+# served from anywhere else — static-server.mjs, a mirror, a file opened from a
+# download — stays under it. Keep the two in step. (frame-ancestors is the one
+# directive a meta tag cannot carry; X-Frame-Options covers that below.)
 [[headers]]
   for = "/*"
   [headers.values]
-    Content-Security-Policy = "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self'; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'"
+    Content-Security-Policy = "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self'; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'"
     X-Content-Type-Options = "nosniff"
     X-Frame-Options = "DENY"
     Referrer-Policy = "no-referrer"
+    # Nothing here needs a camera, a microphone, a location fix, a payment
+    # sheet or USB. Full screen stays on for this origin: the globe uses it.
+    Permissions-Policy = "camera=(), microphone=(), geolocation=(), payment=(), usb=(), fullscreen=(self)"
+    Cross-Origin-Opener-Policy = "same-origin"
+
+# ── who may embed what ─────────────────────────────────────────────────────
+# Cross-Origin-Resource-Policy is set folder by folder, never on /*. Netlify
+# applies every rule whose path matches, so a header set on /* and again on a
+# narrower path reaches that path twice, and how the two values combine is not
+# something to rely on. Each path gets CORP from exactly one rule: same-origin
+# on the site's own asset folders (/js/*, /css/* here; /vendor/*, /data/* and
+# /sample-export/* in their blocks below), so no other site can load the app's
+# scripts, styles, libraries or data into its pages, and cross-origin on the
+# share images. The same holds for every other header in this file: no path
+# gets one header from two rules. Keep it that way, and keep static-server.mjs
+# in step.
+[[headers]]
+  for = "/js/*"
+  [headers.values]
+    Cross-Origin-Resource-Policy = "same-origin"
+
+[[headers]]
+  for = "/css/*"
+  [headers.values]
+    Cross-Origin-Resource-Policy = "same-origin"
+
+# The share-card images are the one thing other sites are meant to embed: link
+# previews in chat apps and social posts load them from here.
+[[headers]]
+  for = "/og-image*.png"
+  [headers.values]
+    Cross-Origin-Resource-Policy = "cross-origin"
 
 # ── caching ────────────────────────────────────────────────────────────────
-# vendor/ holds pinned library builds and textures, so repeat visitors skip ~3MB
-# of revalidation round-trips. HTML/js/css stay on Netlify's revalidating default
-# and use ?v= query busting.
+# vendor/ holds pinned library builds, fonts, textures and map outlines, so
+# repeat visitors skip ~3.5MB of revalidation round-trips. HTML/js/css stay on
+# Netlify's revalidating default and use ?v= query busting.
 #
 # THE RULE THIS DEPENDS ON: never overwrite a file inside vendor/ — an upgrade
-# must land under a new filename. Only the woff2 files are content-hashed, so
-# nothing enforces this but the reader of this comment. Break it and there is no
+# must land under a new filename (globe.gl-2.46.2.min.js, chart-4.5.1.umd.min.js).
+# The library names carry their version and the woff2 files are content-hashed,
+# but nothing enforces the rule except the reader of this comment. Break it and there is no
 # recovery: a year of `immutable` pins the old bytes in the browser's HTTP
 # cache, and sw.js serves /vendor/ cache-first, so even bumping the service
 # worker VERSION doesn't help — the new cache misses, fetches, and is handed the
@@ -34,6 +78,7 @@
   for = "/vendor/*"
   [headers.values]
     Cache-Control = "public, max-age=31536000, immutable"
+    Cross-Origin-Resource-Policy = "same-origin"
 
 # The sample export. Crawlers must be able to FETCH these (demo.html builds
 # itself from them, and robots.txt used to block that, so the indexed live
@@ -50,6 +95,7 @@
   [headers.values]
     Cache-Control = "public, max-age=3600"
     X-Robots-Tag = "noindex"
+    Cross-Origin-Resource-Policy = "same-origin"
 
 # The Trainer Model cohort data — same reasoning and same pattern as the sample
 # export above (and /data/ likewise shares no name with any page):
@@ -60,6 +106,7 @@
   [headers.values]
     Cache-Control = "public, max-age=3600"
     X-Robots-Tag = "noindex"
+    Cross-Origin-Resource-Policy = "same-origin"
 
 # Everything else that lives in the publish folder without being part of the
 # site: the share-card render sources, the repo README, the local dev server and

@@ -3,6 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self'; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'" />
   <title>POGO Metrics — visualize your Pokémon GO journey</title>
   <meta name="description" content="Turn your official Pokémon GO data export into a beautiful, private, digestible story of your trainer journey. Everything runs in your browser — nothing is uploaded." />
   <meta name="theme-color" content="#0a0d1c">
@@ -27,8 +28,8 @@
   <link rel="manifest" href="site.webmanifest">
   <link rel="preload" href="vendor/fonts/c8e7a734b1.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="preload" href="vendor/fonts/1cd702cd25.woff2" as="font" type="font/woff2" crossorigin>
-  <link rel="stylesheet" href="vendor/fonts/fonts.css" />
-  <link rel="stylesheet" href="css/style.css?v=20260905a" />
+  <link rel="stylesheet" href="vendor/fonts/fonts.css" integrity="sha384-XsThnuujXnxIcolWKS1fn5wPHxJxxNWorJO2kELS0VcCWTP9sQwdWCyyWYuKw+Xw" />
+  <link rel="stylesheet" href="css/style.css?v=20260912a" />
 </head>
 <body>
   <nav id="topnav" data-active="home"></nav>
@@ -71,7 +72,7 @@
           <div class="hp-avatar" aria-hidden="true">A</div>
           <div class="hp-id">
             <div class="hp-name">AshDemo’s journey</div>
-            <div class="hp-meta">Level 80 · since 2017 · 831 days played</div>
+            <div class="hp-meta">Level 80 · since 2017 · 875 days played</div>
           </div>
           <span class="hp-count" aria-hidden="true">3 / 14</span>
         </div>
@@ -79,19 +80,19 @@
           <div class="hp-prog" id="hp-prog" aria-hidden="true"></div>
           <div class="hp-slide">
             <div class="hp-kicker">SINCE THEN</div>
-            <div class="hp-big mono">13,905</div>
-            <div class="hp-label">actions in the game's log — every spin, catch, raid and battle</div>
+            <div class="hp-big mono">14,175</div>
+            <div class="hp-label">actions in the game's log — every spin, encounter, raid and battle</div>
           </div>
         </div>
         <div class="hp-spark">
           <svg id="hp-spark" viewBox="0 0 300 48" preserveAspectRatio="none" aria-hidden="true"></svg>
-          <div class="hp-spark-l"><span>Jun ’23</span><span>Actions per month</span><span>Jun ’26</span></div>
+          <div class="hp-spark-l"><span>Oct ’23</span><span>Actions per month</span><span>Aug ’26</span></div>
         </div>
         <div class="hp-tiles" id="hp-tiles">
-          <div><b>5,679</b><span>caught</span></div>
-          <div><b>2,766</b><span>raids</span></div>
-          <div><b>412</b><span>friends</span></div>
-          <div><b>1,247</b><span>places</span></div>
+          <div><b>5,586</b><span>encounters</span></div>
+          <div><b>2,615</b><span>raids</span></div>
+          <div><b>489</b><span>friends</span></div>
+          <div><b>1,020</b><span>places</span></div>
         </div>
       </div>
     </div>
@@ -118,7 +119,7 @@
           <span class="step-ic" data-icon="upload" aria-hidden="true"></span>
           <span class="n">STEP 2</span>
           <h3>Drop in your files</h3>
-          <p>Unzip the download and drag in the whole folder — the <code>Player_Journey.zip</code> inside it is opened for you — or just the one file you're curious about, like <code>FriendList.tsv</code>. Add one, some, or all of them.</p>
+          <p>Drop in the ZIP you downloaded and type its password — it's opened right in your browser, the <code>Player_Journey.zip</code> inside it too. Or drag in the unzipped folder, or just the one file you're curious about, like <code>FriendList.tsv</code>. Add one, some, or all of them.</p>
         </div>
         <div class="step">
           <span class="step-ic" data-icon="play" aria-hidden="true"></span>
@@ -176,19 +177,21 @@
               <div class="ph-pass">password ••••••••</div>
               <div class="ph-btn">Download</div>
             </div>
-            <figcaption><b>4 · Then you wait</b>Support replies with a download link (valid 7 days) and a <b>password</b> to open the file — a day under Niantic, about a month for our first Scopely-era request.</figcaption>
+            <figcaption><b>4 · Then you wait</b>Support replies with a download link (valid 7 days) and a <b>password</b> to open the file — a day under Niantic, about a month for our first Scopely-era request. The privacy policy's stated target is <b>30 days</b>.</figcaption>
           </figure>
         </div>
         <div class="walk-note">
-          <span class="wn-ic" data-icon="folder" aria-hidden="true"></span>
+          <span class="wn-ic" data-icon="lock" aria-hidden="true"></span>
           <div>
-            <b>Unzip it — this is the step that trips people up.</b> The download is a password-protected
-            ZIP, and the password is in the message. <b>On a computer:</b> double-click it and type the
-            password — Windows and macOS both handle this. <b>On an iPhone or iPad:</b> the Files app <i>cannot</i>
-            open a password-protected ZIP, so email or AirDrop the file to a computer, or install a ZIP app that
-            supports passwords. Inside you'll find <code>.tsv</code>, <code>.csv</code>, <code>.txt</code> and
-            <code>.json</code> files — exactly what this site reads — plus a second archive, <code>Player_Journey.zip</code>,
-            which has no password: leave it be, it's opened for you when you drop the folder. Since the Scopely handover the
+            <b>Open it right here — no unzipping needed.</b> The download is a password-protected ZIP, and the
+            password is in the message. Drop the ZIP on <a href="metrics.html">the upload page</a> and type the
+            password: the file is opened in your browser, the <code>Player_Journey.zip</code> inside it too, and the
+            password never leaves your device. That works on an iPhone or iPad as well, where the Files app <i>cannot</i>
+            open a password-protected ZIP. <b>Rather unzip it yourself?</b> The tools built into your computer may not
+            manage it: macOS's own unzip tools refuse this kind of password, and Windows' built-in extractor has
+            historically lacked it too. Use <b>Keka</b> or <b>The Unarchiver</b> on a Mac, or <b>7-Zip</b> on Windows, then drop
+            the whole folder — its <code>.tsv</code>, <code>.csv</code>, <code>.txt</code> and <code>.json</code> files
+            are exactly what this site reads. Since the Scopely handover the
             folder carries a long random ID instead of “Pokemon GO Data”, which is normal. Then hit <a href="metrics.html">Visualize my journey</a>.
           </div>
         </div>
@@ -200,7 +203,8 @@
           </div>
           <div class="notice">
             <b>Just sent your request?</b> The wait has run from a day (Niantic, June 2026) to about four weeks
-            (Scopely, August 2026) — and the download link expires 7 days after it lands. <button type="button" class="linkish" id="ics-reminder"><span aria-hidden="true" data-icon="calendar"></span> Download a
+            (Scopely Explore, August 2026), and the privacy policy's stated target is <b>30 days</b> — so don't
+            give up in week three. The download link expires 7 days after it lands. <button type="button" class="linkish" id="ics-reminder"><span aria-hidden="true" data-icon="calendar"></span> Download a
             calendar reminder</button> to check back, and bookmark this page now so your story is one
             tap away.
           </div>
@@ -250,13 +254,14 @@
           <span class="era-ic" data-icon="rotate" aria-hidden="true"></span>
           <div>
             <div class="ml">Before / after</div>
-            <h3>Niantic → Scopely: what changed in the export</h3>
-            <p>Scopely took over Pokémon GO in 2025. We diffed a June 2026 export (Niantic) against an August 2026 one (Scopely) — every file, every column header, every timestamp format — so you don't have to wonder whether yours will work here.</p>
+            <h3>Niantic → Scopely Explore: what changed in the export</h3>
+            <p>Scopely took over Pokémon GO in 2025 and in July 2026 renamed the team that runs it Scopely Explore; the privacy policy in effect since August 20, 2026 is in the name of Scopely Explore, Inc. (formerly Niantic, Inc.). We diffed a June 2026 export (Niantic) against an August 2026 one (Scopely Explore) — every file, every column header, every timestamp format — so you don't have to wonder whether yours will work here.</p>
           </div>
         </div>
         <div class="era-scroll"><table class="era-table">
-          <thead><tr><th>What</th><th>Under Niantic · Jun 2026</th><th>Under Scopely · Aug 2026</th><th>Verdict</th></tr></thead>
+          <thead><tr><th>What</th><th>Under Niantic · Jun 2026</th><th>Under Scopely Explore · Aug 2026</th><th>Verdict</th></tr></thead>
           <tbody>
+            <tr><td>Company</td><td>Niantic, Inc.</td><td>Scopely Explore, Inc. (formerly Niantic, Inc.), under a privacy policy in effect since August 20, 2026</td><td><span class="era-v diff">Renamed</span></td></tr>
             <tr><td>Files</td><td>22 files, plus a 21-file <code>Player_Journey.zip</code></td><td>The same 22, the same 21</td><td><span class="era-v same">Unchanged</span></td></tr>
             <tr><td>Column headers</td><td>Every raw column, as catalogued above</td><td>Identical — some still say “Niantic”, e.g. <code>Date of first Niantic friendship start</code></td><td><span class="era-v same">Unchanged</span></td></tr>
             <tr><td>Timestamps</td><td>UTC, in three formats</td><td>The same three formats</td><td><span class="era-v same">Unchanged</span></td></tr>
@@ -264,7 +269,7 @@
             <tr><td>Positions in the journey files</td><td>Precise in the 15-month “1” files; blurred to a few km in the 3-year “2” files</td><td>The same split — checked against the GPS trail in both</td><td><span class="era-v same">Unchanged</span></td></tr>
             <tr><td>In-game request</td><td>Help → Chat with us → My account → Request my data</td><td>The same screens, the same automated replies</td><td><span class="era-v same">Unchanged</span></td></tr>
             <tr><td>Folder name</td><td><code>Pokemon GO Data</code></td><td>A long random ID, e.g. <code>3f9a1c2e-…</code></td><td><span class="era-v diff">Cosmetic</span></td></tr>
-            <tr><td>Turnaround</td><td>About a day</td><td>About four weeks, for our one request so far</td><td><span class="era-v diff">Slower</span></td></tr>
+            <tr><td>Turnaround</td><td>About a day</td><td>About four weeks, for our one request so far — the privacy policy's stated target is 30 days</td><td><span class="era-v diff">Slower</span></td></tr>
             <tr><td>Campfire</td><td>Not in the export</td><td>Still not — but the Campfire app now has its own export, and this site reads it</td><td><span class="era-v new">New chapter</span></td></tr>
           </tbody>
         </table></div>
@@ -330,7 +335,7 @@
   <footer>
     <p>
       <b>POGO Metrics</b> is an independent fan project, not affiliated with, endorsed by, or
-      sponsored by Niantic, Scopely, or The Pokémon Company. Pokémon and Pokémon GO are trademarks
+      sponsored by Scopely Explore, Inc. (formerly Niantic, Inc.), Scopely, or The Pokémon Company. Pokémon and Pokémon GO are trademarks
       of their respective owners.
     </p>
     <p>Your export is read and charted entirely on your device, and never leaves it.</p>
@@ -344,44 +349,9 @@
     </p>
   </footer>
 
-  <script defer src="js/nav.js?v=20260905a"></script>
-  <script defer src="js/catalog.js?v=20260905a"></script>
-  <script defer src="js/catalog-ui.js?v=20260905a"></script>
-  <script defer src="js/landing.js?v=20260905a"></script>
-  <script>
-    // "Check for my Pokémon GO export" — a 7-days-from-now reminder, generated on
-    // the device as a plain .ics download. No calendar service, no request.
-    document.addEventListener("DOMContentLoaded", () => {
-      // The hero says "drop the files here" — a literal drop on THIS page must
-      // not navigate the tab to the raw file. Files can't survive navigation,
-      // so hand the visitor to the page that actually reads them.
-      document.addEventListener("dragover", (e) => e.preventDefault());
-      document.addEventListener("drop", (e) => {
-        e.preventDefault();
-        if (e.dataTransfer && [...(e.dataTransfer.types || [])].includes("Files"))
-          location.href = "metrics.html";
-      });
-      const a = document.getElementById("ics-reminder");
-      if (!a) return;
-      a.addEventListener("click", () => {
-        const d = new Date(Date.now() + 7 * 86400000);
-        const ymd = d.toISOString().slice(0, 10).replace(/-/g, "");
-        const stamp = new Date().toISOString().replace(/[-:]/g, "").slice(0, 15) + "Z";
-        const ics = [
-          "BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//POGO Metrics//EN",
-          "BEGIN:VEVENT", "UID:" + stamp + "@pogo-metrics",
-          "DTSTAMP:" + stamp, "DTSTART;VALUE=DATE:" + ymd,
-          "SUMMARY:Check for your Pokémon GO data export",
-          "DESCRIPTION:Support's reply has taken anywhere from a day to a month — and the download link expires 7 days after it lands. Grab the ZIP\\, then visualize it at https://pogo-metrics.netlify.app/",
-          "URL:https://pogo-metrics.netlify.app/", "END:VEVENT", "END:VCALENDAR",
-        ].join("\r\n");
-        const url = URL.createObjectURL(new Blob([ics], { type: "text/calendar" }));
-        const dl = document.createElement("a");
-        dl.href = url; dl.download = "pogo-metrics-reminder.ics";
-        document.body.appendChild(dl); dl.click(); dl.remove();
-        setTimeout(() => URL.revokeObjectURL(url), 4000);
-      });
-    });
-  </script>
+  <script defer src="js/nav.js?v=20260912a"></script>
+  <script defer src="js/catalog.js?v=20260912a"></script>
+  <script defer src="js/catalog-ui.js?v=20260912a"></script>
+  <script defer src="js/landing.js?v=20260912a"></script>
 </body>
 </html>

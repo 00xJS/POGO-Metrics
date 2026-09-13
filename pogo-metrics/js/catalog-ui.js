@@ -13,7 +13,9 @@
   if (!root || !window.CATALOG) return;
 
   const C = window.CATALOG;
-  const esc = (s) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  // quotes included — several of these land inside data-* attribute values
+  const esc = (s) => String(s).replace(/[&<>"']/g, (c) =>
+    ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
   const slug = (s) => String(s).replace(/[^a-z0-9]+/gi, "-").toLowerCase();
 
   const ORDER = [
@@ -289,6 +291,10 @@
     if (!p.length && !location.hash.startsWith("#datasets&")) return;
     history.replaceState(null, "", "#datasets" + (p.length ? "&" + p.join("&") : ""));
   }
+  /* A hand-edited or truncated link can carry a broken %-escape, and
+   * decodeURIComponent throws on one — which would stop the deck from reading
+   * the rest of the hash. Skip that one value instead. */
+  const decode = (s) => { try { return decodeURIComponent(s); } catch (e) { return null; } };
   function readHash() {
     const h = location.hash.replace(/^#/, "");
     if (!h.startsWith("datasets")) return;
@@ -297,9 +303,9 @@
       if (!v) return;
       if (k === "sens") v.split(",").forEach((x) => state.sens.add(x));
       if (k === "do") v.split(",").forEach((x) => state.doing.add(x));
-      if (k === "group") v.split(",").forEach((x) => state.group.add(decodeURIComponent(x)));
+      if (k === "group") v.split(",").forEach((x) => { const g = decode(x); if (g != null) state.group.add(g); });
       if (k === "gps") state.gps = true;
-      if (k === "q") state.q = decodeURIComponent(v).toLowerCase();
+      if (k === "q") { const q = decode(v); if (q != null) state.q = q.toLowerCase(); }
       if (k === "sort") state.sort = v;
       if (k === "d") state.density = v;
     });

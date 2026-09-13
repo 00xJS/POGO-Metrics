@@ -3,6 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self'; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'" />
   <title>Live Example — POGO Metrics</title>
   <meta name="description" content="A live example of POGO Metrics, built from a fully anonymized sample Pokémon GO export — see exactly what your own data would look like before you upload anything." />
   <meta name="theme-color" content="#0a0d1c">
@@ -14,7 +15,7 @@
   <meta property="og:image" content="https://pogo-metrics.netlify.app/og-image-demo.png">
   <meta property="og:image:width" content="1200">
   <meta property="og:image:height" content="630">
-  <meta property="og:image:alt" content="A POGO Metrics sample dashboard: 13,905 logged actions, 831 days played, 308 PokéStops visited, 50 platinum medals.">
+  <meta property="og:image:alt" content="A POGO Metrics sample dashboard: 14,175 logged actions, 875 days played, 310 PokéStops visited, 51 platinum medals.">
   <meta name="twitter:card" content="summary_large_image">
   <meta name="twitter:title" content="Live Example — POGO Metrics">
   <meta name="twitter:description" content="See a real POGO Metrics dashboard, built from a fully anonymized sample export — exactly what your own data would look like, before you upload anything.">
@@ -27,8 +28,8 @@
   <link rel="manifest" href="site.webmanifest">
   <link rel="preload" href="vendor/fonts/c8e7a734b1.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="preload" href="vendor/fonts/1cd702cd25.woff2" as="font" type="font/woff2" crossorigin>
-  <link rel="stylesheet" href="vendor/fonts/fonts.css" />
-  <link rel="stylesheet" href="css/style.css?v=20260905a" />
+  <link rel="stylesheet" href="vendor/fonts/fonts.css" integrity="sha384-XsThnuujXnxIcolWKS1fn5wPHxJxxNWorJO2kELS0VcCWTP9sQwdWCyyWYuKw+Xw" />
+  <link rel="stylesheet" href="css/style.css?v=20260912a" />
 </head>
 <body>
   <nav id="topnav" data-active="demo"></nav>
@@ -75,7 +76,7 @@
   <footer>
     <p>
       <b>POGO Metrics</b> is an independent fan project, not affiliated with, endorsed by, or
-      sponsored by Niantic, Scopely, or The Pokémon Company. Pokémon and Pokémon GO are trademarks
+      sponsored by Scopely Explore, Inc. (formerly Niantic, Inc.), Scopely, or The Pokémon Company. Pokémon and Pokémon GO are trademarks
       of their respective owners.
     </p>
     <p>The data on this page is a synthetic sample. Your own export is read entirely on your device, and never leaves it.</p>
@@ -89,11 +90,12 @@
     </p>
   </footer>
 
-  <script>window.DEMO_PAGE = true;</script>
+  <!-- sets window.DEMO_PAGE; deferred scripts run in order, so it lands before app.js -->
+  <script defer src="js/demo-page.js?v=20260912a"></script>
   <!-- heavy chart/map/globe libraries load on demand once the sample data is parsed -->
-  <script defer src="js/nav.js?v=20260905a"></script>
-  <script defer src="js/catalog.js?v=20260905a"></script>
-  <script defer src="js/pokedex.js?v=20260905a"></script>
-  <script defer src="js/app.js?v=20260905a"></script>
+  <script defer src="js/nav.js?v=20260912a"></script>
+  <script defer src="js/catalog.js?v=20260912a"></script>
+  <script defer src="js/pokedex.js?v=20260912a"></script>
+  <script defer src="js/app.js?v=20260912a"></script>
 </body>
 </html>

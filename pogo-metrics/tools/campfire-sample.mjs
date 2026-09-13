@@ -13,7 +13,13 @@
  * multi-line messages), a plausible story, and no one's data.
  *
  * The IP-address section is written with its header and no rows: a fake IP
- * would trip the scrubber's leak check, and the app never reads it anyway. */
+ * would trip the scrubber's leak check, and the app never reads it anyway.
+ *
+ * The scrubber sweeps this file too, against every real value in the export it
+ * is scrubbing, so the vocabulary here stays plainly fictional: Pokémon-world
+ * towns for places, meetup coordinates out at sea. Changing a word or a
+ * constant is safe; changing how many times rnd() is called is not — it moves
+ * every count the parser tests assert. */
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -45,11 +51,15 @@ export function campfireSample(codename = "AshDemo", seed = 20260812) {
   const ADJ = ["Swift", "Brave", "Lucky", "Cosmic", "Solar", "Shadow", "Crystal", "Turbo", "Mystic", "Golden", "Frost", "Thunder", "Ember", "Lunar", "Radiant", "Iron", "Wild", "Nova", "Comet", "Pixel"];
   const NOUN = ["Raptor", "Falcon", "Voyager", "Ranger", "Hunter", "Phoenix", "Tracker", "Maverick", "Nomad", "Pioneer", "Scout", "Striker", "Wanderer", "Sage", "Ace", "Drifter", "Rook", "Sprout", "Glider", "Quill"];
   const fake = () => pick(ADJ) + pick(NOUN) + int(100, 999);
-  const CLUBS = ["Rivertown Raiders", "Brookfield Trainers", "Brightport GO Club", "Maplefield Night Raids", "Stonehaven Community Day Crew"];
-  const VENUES = ["Rivertown Park", "the Brookfield fountain", "Brightport Pier", "Maplefield Library", "Stonehaven Square", "the Harbor gym", "Union Plaza"];
+  /* Places are Pokémon-world towns, never real-sounding ones: an invented name
+   * that sounds like a real town usually is one somewhere, and the scrubber
+   * refuses to publish a file holding any word from the session log it is
+   * scrubbing. Every list here is checked against that ledger on each run. */
+  const CLUBS = ["Pallet Raiders", "Viridian Trainers", "Pewter GO Club", "Cerulean Night Raids", "Vermilion Community Day Crew"];
+  const VENUES = ["Pallet Park", "the Viridian fountain", "Cerulean Pier", "Pewter Library", "Celadon Square", "the Vermilion harbor gym", "Saffron Plaza"];
   const KINDS = [
     ["Raid Hour", 0.34, ["Palkia", "Dialga", "Groudon", "Kyogre", "Rayquaza", "Zacian", "Genesect", "Deoxys", "Tapu Bulu", "Origin Dialga", "Shadow Kyogre"]],
-    ["Community Day", 0.14, ["Bulbasaur", "Machop", "Larvitar", "Gible", "Rowlet", "Chikorita", "Ralts"]],
+    ["Community Day", 0.14, ["Squirtle", "Charmander", "Dratini", "Beldum", "Swablu", "Mudkip", "Treecko"]],
     ["Spotlight Hour", 0.12, ["Wooloo", "Dewpider", "Wobbuffet", "Machop", "Eevee"]],
     ["Raid Day", 0.1, ["Rayquaza", "Mega Latios", "Shadow Lugia"]],
     ["Max Battle Day", 0.08, ["Gigantamax Lapras", "Dynamax Beldum", "Gigantamax Toxtricity"]],
@@ -61,7 +71,11 @@ export function campfireSample(codename = "AshDemo", seed = 20260812) {
   ];
   const kind = () => { let r = rnd(); for (const k of KINDS) { r -= k[1]; if (r <= 0) return k; } return KINDS[0]; };
   const title = (k) => `${pick(k[2])} ${k[0]} at ${pick(VENUES)}`.replace(/^(\d{4}) GO Fest/, "GO Fest $1 meetup");
-  const LA = () => `${(34.0522 + (rnd() - 0.5) * 0.3).toFixed(6)},${(-118.2437 + (rnd() - 0.5) * 0.36).toFixed(6)}`;
+  /* Meetup coordinates sit in open Pacific water, ~100 km off the California
+   * coast. The app never reads them (the Campfire parser keeps counts and dates
+   * only); they exist so the file has the real one's shape. A spot at sea can't
+   * land on anyone's real haunts by coincidence, which a city centre can. */
+  const LA = () => `${(32.8 + (rnd() - 0.5) * 0.3).toFixed(6)},${(-120.3 + (rnd() - 0.5) * 0.36).toFixed(6)}`;
 
   const WORDS = "raid lobby spot up we are at the gym starting in five bring your remotes gg thanks everyone great turnout who is coming tonight see you there code is in the pinned post parking is behind the library shiny check nice catch heading over now lucky trades after the hour anyone need a partner for the max battle weather boost is on wow that one fled".split(" ");
   const sentence = (n) => { const w = []; for (let i = 0; i < n; i++) w.push(pick(WORDS)); const s = w.join(" "); return s.charAt(0).toUpperCase() + s.slice(1) + pick([".", "!", "", " 👍", " 🔥"]); };
@@ -104,13 +118,13 @@ export function campfireSample(codename = "AshDemo", seed = 20260812) {
   section("User Last Recorded Ip Address", ["Ip Address", "Time Last Recorded"]);   // deliberately no rows
 
   section("User Posts", ["Post Id", "Post Body", "URL"]);
-  for (let i = 0; i < 30; i++) out.push(csv([id(), pick(["", "", "📍", "Raid here", "Spotlight spot", "Lure on"]), `/map?lat=34.05&lng=-118.24&mapObjId=${uuid()}&action=selectMapObject`]));
+  for (let i = 0; i < 30; i++) out.push(csv([id(), pick(["", "", "📍", "Raid here", "Spotlight spot", "Lure on"]), `/map?lat=32.80&lng=-120.30&mapObjId=${uuid()}&action=selectMapObject`]));
 
   return { name: `${codename}_20260812_120000.csv`, text: out.join("\n") + "\n" };
 }
 
 /* run directly: write into sample-export/ and register in its manifest */
-if (import.meta.url === pathToFileURL(process.argv[1]).href) {
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   const HERE = path.dirname(fileURLToPath(import.meta.url));
   const OUT = path.join(HERE, "..", "sample-export");
   const { name, text } = campfireSample(process.argv[2] || "AshDemo");

@@ -10,8 +10,49 @@
 (function () {
   const REDUCED = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
   const fmt = (n) => Number(n).toLocaleString();
-  const esc = (s) => String(s == null ? "" : s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  const esc = (s) => String(s == null ? "" : s).replace(/[&<>"']/g, (c) =>
+    ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
   const $ = (id) => document.getElementById(id);
+
+  /* These two lived in an inline <script> in index.html until the CSP dropped
+   * 'unsafe-inline' for scripts. This file is deferred, so the DOM is already
+   * parsed when it runs — the same moment the old DOMContentLoaded handler saw. */
+
+  /* ── a file dropped on this page ──
+   * The hero says "drop the files here" — a literal drop on THIS page must not
+   * navigate the tab to the raw file. Files can't survive navigation, so hand
+   * the visitor to the page that actually reads them. */
+  document.addEventListener("dragover", (e) => e.preventDefault());
+  document.addEventListener("drop", (e) => {
+    e.preventDefault();
+    if (e.dataTransfer && [...(e.dataTransfer.types || [])].includes("Files"))
+      location.href = "metrics.html";
+  });
+
+  /* ── "Check for my Pokémon GO export" — a 7-days-from-now reminder, generated
+   * on the device as a plain .ics download. No calendar service, no request. ── */
+  const icsBtn = $("ics-reminder");
+  if (icsBtn) icsBtn.addEventListener("click", () => {
+    // seven days on from today on this device's calendar. The UTC date is
+    // already tomorrow on an evening west of Greenwich, and was a day out.
+    const d = new Date();
+    d.setDate(d.getDate() + 7);
+    const ymd = String(d.getFullYear()) + String(d.getMonth() + 1).padStart(2, "0") + String(d.getDate()).padStart(2, "0");
+    const stamp = new Date().toISOString().replace(/[-:]/g, "").slice(0, 15) + "Z";
+    const ics = [
+      "BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//POGO Metrics//EN",
+      "BEGIN:VEVENT", "UID:" + stamp + "@pogo-metrics",
+      "DTSTAMP:" + stamp, "DTSTART;VALUE=DATE:" + ymd,
+      "SUMMARY:Check for your Pokémon GO data export",
+      "DESCRIPTION:Support's reply has taken anywhere from a day to a month (the privacy policy's stated target is 30 days) — and the download link expires 7 days after it lands. Grab the ZIP\\, then visualize it at https://pogo-metrics.netlify.app/",
+      "URL:https://pogo-metrics.netlify.app/", "END:VEVENT", "END:VCALENDAR",
+    ].join("\r\n");
+    const url = URL.createObjectURL(new Blob([ics], { type: "text/calendar" }));
+    const dl = document.createElement("a");
+    dl.href = url; dl.download = "pogo-metrics-reminder.ics";
+    document.body.appendChild(dl); dl.click(); dl.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 4000);
+  });
 
   /* ── section sub-nav: fixed under the site nav once the hero has scrolled away ── */
   const SECTIONS = [
@@ -150,9 +191,10 @@
     const av = box.querySelector(".hp-avatar");
     if (av && p.username) av.textContent = p.username.charAt(0).toUpperCase();
     const t = d.totals || {};
-    const caught = (t["GO Plus catches"] || 0) + (t["Encounters"] || 0) + (t["Incense"] || 0) + (t["Lures"] || 0);
+    // the report's own sum (catchesOf in app.js): encounters, since the map, incense and lure logs never record a catch
+    const met = (t["GO Plus catches"] || 0) + (t["Encounters"] || 0) + (t["Incense"] || 0) + (t["Lures"] || 0);
     const tiles = $("hp-tiles");
-    if (tiles) tiles.innerHTML = [[caught, "caught"], [t["Raids"] || 0, "raids"], [d.friends || 0, "friends"], [d.places || 0, "places"]]
+    if (tiles) tiles.innerHTML = [[met, "encounters"], [t["Raids"] || 0, "raids"], [d.friends || 0, "friends"], [d.places || 0, "places"]]
       .map(([v, l]) => `<div><b>${fmt(v)}</b><span>${l}</span></div>`).join("");
     if (d.monthly) {
       sparkline(d.monthly);
