@@ -530,10 +530,10 @@ function clearError() { const el = $("upload-error"); if (el) el.style.display =
  * The download support sends is a password-protected ZIP, and inside it sits a
  * second archive, Player_Journey.zip — the activity logs behind the biggest
  * chapters. Unzipping it by hand was the step the guide never quite got people
- * through, and the tools that ship with the OS don't help: macOS's `unzip`
- * skips every entry ("unsupported compression method 99") and `ditto` gives
- * up ("Unknown compression type"), and Windows' built-in extractor has
- * historically lacked this kind of password too. So both archives open here.
+ * through. On a Mac, a double-click in Finder asks for the password and opens
+ * it; only the command-line `unzip` and `ditto` refuse it (they skip the AES
+ * entries). Windows' own extractor is untested here, so the advice names
+ * 7-Zip there. Both archives open here regardless, on phones too.
  * A small central-directory reader walks the entries; the browser's native
  * DecompressionStream inflates them; the password lock (WinZip AES) is checked
  * and undone with WebCrypto plus the few dozen lines of AES below. No library,
@@ -548,7 +548,7 @@ const ZIP_OK = typeof DecompressionStream === "function";
  * (https, or localhost while developing). A page opened some other way keeps
  * the "unzip it with a tool first" explainer. */
 const ZIP_AES_OK = ZIP_OK && typeof crypto === "object" && !!crypto && !!crypto.subtle;
-const ZIP_TOOLS = "Keka or The Unarchiver on a Mac, or 7-Zip on Windows";
+const ZIP_TOOLS = "a double-click on a Mac or 7-Zip on Windows";
 
 /* An archive is a list of claims about sizes and offsets, and a hostile one
  * lies: a 66 KB file whose entries all pointed at one deflate stream expanded

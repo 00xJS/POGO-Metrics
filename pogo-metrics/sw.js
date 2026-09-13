@@ -7,22 +7,22 @@
  *     cached copy when offline
  *   • vendor/ (pinned libs, textures, fonts, geojson) → cache-first
  * Bump VERSION on any release to sweep old caches. */
-const VERSION = "pogo-metrics-v20260912a";
+const VERSION = "pogo-metrics-v20260913a";
 const CORE = [
   "/", "favicon.ico", "index.html", "metrics.html", "demo.html", "trainer-model.html", "404.html",
   // Every page links the web manifest, so offline a missing copy is an error on
   // each, and once it loads the browser fetches the icon it names (57 KB).
   "site.webmanifest", "icon-192.png",
-  "css/style.css?v=20260912a", "css/trainer-model.css?v=20260912a",
-  "js/nav.js?v=20260912a", "js/catalog.js?v=20260912a", "js/catalog-ui.js?v=20260912a",
-  "js/pokedex.js?v=20260912a", "js/app.js?v=20260912a", "js/trainer-model.js?v=20260912a",
+  "css/style.css?v=20260913a", "css/trainer-model.css?v=20260913a",
+  "js/nav.js?v=20260913a", "js/catalog.js?v=20260913a", "js/catalog-ui.js?v=20260913a",
+  "js/pokedex.js?v=20260913a", "js/app.js?v=20260913a", "js/trainer-model.js?v=20260913a",
   // The Live Example's page flag. Without it an offline demo.html never sets
   // DEMO_PAGE, so it never loads the sample.
-  "js/demo-page.js?v=20260912a",
+  "js/demo-page.js?v=20260913a",
   // The landing's live preview and section sub-nav, and the compact sample
   // summary the preview is built from — an installed app opened offline gets
   // the same hero, not the static fallback slide.
-  "js/landing.js?v=20260912a", "data/sample-preview.json",
+  "js/landing.js?v=20260913a", "data/sample-preview.json",
   // The Trainer Model page draws entirely from these two files, so an installed
   // app opened offline still gets the full research layer.
   "data/trainer-model/trainers.json", "data/trainer-model/era2.json",

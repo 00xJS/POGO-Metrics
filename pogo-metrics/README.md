@@ -93,8 +93,8 @@ friends-list cohort behind the Trainer Model page.)
   header is trusted: `ZIP_LIMITS` allows 80 MB per entry, and 200 entries and 256 MB inflated
   (counted as it streams) per dropped archive, shared with any archive opened from inside it, so
   one drop can't add more than 200 files however it's nested. Entries that share or overlap bytes
-  are refused, as is ZIP64. A ZipCrypto archive gets a plain "not supported" message that names Keka, The Unarchiver
-  and 7-Zip.
+  are refused, as is ZIP64. A ZipCrypto archive gets a plain "not supported" message that suggests a double-click on a
+  Mac or 7-Zip on Windows.
 
   In-person GO Fests earn a badge. `GO_FESTS` in `app.js` is the one list of festivals, each with
   its first and last days and, for an in-person one, a city-sized box and its UTC offset; to add a

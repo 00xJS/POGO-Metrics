@@ -166,8 +166,8 @@ Request my data → Continue.** You'll get a download link and a password by ema
 under Niantic, about four weeks for our first request since Scopely took over the game. Drop the
 downloaded ZIP on the upload page and type its password: the ZIP is opened in your browser, the
 `Player_Journey.zip` inside it too, and the password never leaves your device and isn't stored. If
-you'd rather unzip it yourself, Keka or The Unarchiver (Mac) and 7-Zip (Windows) open it; then drop
-the whole folder in.
+you'd rather unzip it yourself, double-click it on a Mac and type the password when Finder asks, or
+use 7-Zip on Windows; then drop the whole folder in.
 
 **Niantic → Scopely Explore.** Scopely acquired Niantic's games business in 2025 and in July 2026
 renamed the team Scopely Explore; the privacy policy in effect since August 20, 2026 is in the name

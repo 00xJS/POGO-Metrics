@@ -1360,12 +1360,13 @@ const aesTests = [];
   warned.length = 0;
   await run("ingest([__f])");
   aesTests.push(["a ZipCrypto archive is recognised as unsupported", run("zipLock(__zzc)") === "unsupported"]);
-  aesTests.push(["…and the explainer names it and suggests a tool", warned.some((w) => /ZipCrypto/.test(w) && /7-Zip/.test(w) && /Keka/.test(w))]);
+  aesTests.push(["…and the explainer names it and suggests a tool", warned.some((w) => /ZipCrypto/.test(w) && /7-Zip/.test(w) && /double-click on a Mac/.test(w))]);
   // with no password panel to show, a locked download is explained rather than dropped
   warned.length = 0;
   aesCtx.__f = fixture("aes256.zip");
   await run("ingest([__f])");
   aesTests.push(["a locked download with nowhere to ask for its password is explained", warned.some((w) => /password-protected/.test(w) && /7-Zip/.test(w))]);
+  aesTests.push(["no explainer sends Mac users to extra software", !warned.some((w) => /Keka|Unarchiver/.test(w))]);
 
   // Files an operating system writes into a folder by itself pass in silence. A
   // Mac export folder carries a .DS_Store, and every drop of one got an assertive
@@ -1407,7 +1408,7 @@ const aesTests = [];
     await run("ingest([__f])");
     const opened = run("RAW.filter((r) => /^x\\d_\\d+\\.csv$/.test(r.name)).length");
     aesTests.push(["one dropped archive and the archives inside it share the 200 entries (3 + 90 + 90 open; the third 90 does not)",
-      opened === 180 && warned.some((w) => /in2\.zip/.test(w) && /200 entries/.test(w) && /Keka/.test(w)) && !warned.some((w) => /in[01]\.zip/.test(w))]);
+      opened === 180 && warned.some((w) => /in2\.zip/.test(w) && /200 entries/.test(w) && /double-click on a Mac/.test(w)) && !warned.some((w) => /in[01]\.zip/.test(w))]);
     aesTests.push(["…and each archive dropped on its own still gets its own 200",
       run("(() => { const b = zipBudget(); return b.entries === ZIP_LIMITS.entries && b.left === ZIP_LIMITS.total; })()")]);
     run("RAW = []; DATA_GEN++");
